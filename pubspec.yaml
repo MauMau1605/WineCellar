@@ -1,0 +1,79 @@
+name: wine_cellar
+description: "Application de gestion de cave à vin avec assistant IA"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management & DI
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Database (SQLite ORM)
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # HTTP client
+  dio: ^5.7.0
+
+  # AI - OpenAI
+  dart_openai: ^5.1.0
+
+  # UI
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  google_fonts: ^6.2.1
+
+  # Data export
+  csv: ^6.0.0
+
+  # Secure storage for API keys
+  flutter_secure_storage: ^9.2.4
+
+  # Image picking (future photo feature)
+  image_picker: ^1.1.2
+
+  # Logging
+  logger: ^2.5.0
+
+  # JSON serialization
+  json_annotation: ^4.9.0
+
+  # UUID generation
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.14
+  drift_dev: ^2.22.1
+  riverpod_generator: ^2.6.3
+  json_serializable: ^6.9.3
+  custom_lint: ^0.7.5
+  riverpod_lint: ^2.6.3
+
+flutter:
+  uses-material-design: true
+  generate: true
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

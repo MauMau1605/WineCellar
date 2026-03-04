@@ -1,0 +1,67 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+*.swo
+*.tmp
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+*.lcov
+
+# Generated code (rebuild with: dart run build_runner build)
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# Generated l10n (rebuilt automatically from .arb files)
+lib/l10n/app_localizations.dart
+lib/l10n/app_localizations_*.dart
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ===== SECURITY =====
+# NEVER commit API keys or secrets
+*.env
+.env.*
+secrets.json
+api_keys.json
+*.jks
+*.keystore
+**/android/key.properties
