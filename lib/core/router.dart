@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_list_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_detail_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_edit_screen.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
 import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
@@ -26,6 +27,15 @@ final GoRouter appRouter = GoRouter(
                 final id = int.parse(state.pathParameters['id']!);
                 return WineDetailScreen(wineId: id);
               },
+              routes: [
+                GoRoute(
+                  path: 'edit',
+                  builder: (context, state) {
+                    final id = int.parse(state.pathParameters['id']!);
+                    return WineEditScreen(wineId: id);
+                  },
+                ),
+              ],
             ),
           ],
         ),

@@ -245,7 +245,49 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
   Future<void> _updateQuantity(WineEntity wine, int newQty) async {
     if (wine.id == null) return;
-    await ref.read(wineRepositoryProvider).updateQuantity(wine.id!, newQty);
+
+    if (newQty <= 0) {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Derni\u00e8re bouteille !'),
+          content: Text(
+            'La quantit\u00e9 de "${wine.displayName}" va passer \u00e0 0.\n'
+            'Que souhaitez-vous faire ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: const Text('Annuler'),
+            ),
+            OutlinedButton(
+              onPressed: () => Navigator.of(ctx).pop('zero'),
+              child: const Text('Garder \u00e0 0'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop('delete'),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted || action == null || action == 'cancel') return;
+
+      if (action == 'delete') {
+        await ref.read(wineRepositoryProvider).deleteWine(wine.id!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('"${wine.displayName}" supprim\u00e9')),
+          );
+        }
+        return;
+      }
+      // action == 'zero'
+    }
+
+    await ref.read(wineRepositoryProvider).updateQuantity(wine.id!, newQty < 0 ? 0 : newQty);
   }
 
   Future<void> _handleMenuAction(BuildContext context, String action) async {

@@ -21,6 +21,7 @@ class WineEntity {
   final int? rating;
   final String? photoPath;
   final String? aiDescription;
+  final String? location;
   final String? notes;
   final List<int> foodCategoryIds;
   final DateTime? createdAt;
@@ -45,6 +46,7 @@ class WineEntity {
     this.rating,
     this.photoPath,
     this.aiDescription,
+    this.location,
     this.notes,
     this.foodCategoryIds = const [],
     this.createdAt,
@@ -104,6 +106,7 @@ class WineEntity {
     int? rating,
     String? photoPath,
     String? aiDescription,
+    String? location,
     String? notes,
     List<int>? foodCategoryIds,
     DateTime? createdAt,
@@ -128,6 +131,7 @@ class WineEntity {
       rating: rating ?? this.rating,
       photoPath: photoPath ?? this.photoPath,
       aiDescription: aiDescription ?? this.aiDescription,
+      location: location ?? this.location,
       notes: notes ?? this.notes,
       foodCategoryIds: foodCategoryIds ?? this.foodCategoryIds,
       createdAt: createdAt ?? this.createdAt,
@@ -155,6 +159,7 @@ class WineEntity {
       'tastingNotes': tastingNotes,
       'rating': rating,
       'aiDescription': aiDescription,
+      'location': location,
       'notes': notes,
       'foodCategoryIds': foodCategoryIds,
     };
@@ -188,6 +193,7 @@ class WineEntity {
       tastingNotes: json['tastingNotes'] as String?,
       rating: json['rating'] as int?,
       aiDescription: json['aiDescription'] as String?,
+      location: json['location'] as String?,
       notes: json['notes'] as String?,
       foodCategoryIds: (json['foodCategoryIds'] as List<dynamic>?)
               ?.map((e) => e as int)

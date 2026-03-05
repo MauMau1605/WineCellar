@@ -48,4 +48,33 @@ Règles :
 - Si l'utilisateur décrit plusieurs vins, fais un résumé bref (1-2 lignes par vin) avant le JSON pour ne pas perdre de tokens
 - Si l'utilisateur corrige une information, mets à jour le JSON complet avec la correction
 ''';
+
+  /// Build a search message with cellar context for food pairing recommendations.
+  /// The search instructions override the system prompt's JSON extraction behavior.
+  static String buildCellarSearchMessage({
+    required String userQuestion,
+    required String cellarSummary,
+  }) {
+    return '''
+[MODE ACCORD METS-VIN — RECHERCHE DANS MA CAVE]
+IMPORTANT : dans ce message, tu dois IGNORER l'instruction de retourner un bloc JSON.
+Ne retourne PAS de bloc JSON. Réponds uniquement en texte.
+
+L'utilisateur cherche le meilleur vin de SA CAVE pour accompagner un repas.
+
+CONTENU ACTUEL DE LA CAVE (bouteilles disponibles) :
+$cellarSummary
+
+CONSIGNES :
+1. Recommande UNIQUEMENT des vins PRÉSENTS dans la cave ci-dessus
+2. PRIORITÉ aux vins dont "À boire jusqu'à" est le plus proche de l'année actuelle (dates courtes, à consommer en premier)
+3. Propose 1 à 3 vins, classés du plus recommandé au moins recommandé
+4. Pour chaque vin recommandé : explique l'accord mets-vin et mentionne l'urgence de consommation si la fenêtre de dégustation se termine bientôt
+5. Si aucun vin de la cave ne convient parfaitement, recommande le meilleur compromis disponible et suggère quel type de vin acheter
+6. Réponds en français, avec un ton convivial de sommelier
+7. NE RETOURNE PAS de bloc ```json
+
+QUESTION DE L'UTILISATEUR : $userQuestion
+''';
+  }
 }

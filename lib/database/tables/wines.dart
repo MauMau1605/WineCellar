@@ -21,6 +21,7 @@ class Wines extends Table {
   IntColumn get rating => integer().nullable()(); // 0-5
   TextColumn get photoPath => text().nullable()();
   TextColumn get aiDescription => text().nullable()();
+  TextColumn get location => text().nullable()(); // e.g. 'Cave maison', 'Garage'
   TextColumn get notes => text().nullable()(); // free-form user notes
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)();

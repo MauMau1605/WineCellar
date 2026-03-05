@@ -35,11 +35,9 @@ class AppDatabase extends _$AppDatabase {
         await _seedFoodCategories();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Future migrations go here
-        // Example for version 2:
-        // if (from < 2) {
-        //   await m.addColumn(wines, wines.newColumn);
-        // }
+        if (from < 2) {
+          await m.addColumn(wines, wines.location);
+        }
       },
     );
   }

@@ -98,6 +98,12 @@ class WineRepositoryImpl implements WineRepository {
   }
 
   @override
+  Future<List<WineEntity>> getAllWines() async {
+    final wines = await _wineDao.getAllWines();
+    return wines.map(_mapToEntity).toList();
+  }
+
+  @override
   Future<int> getWineCount() => _wineDao.getWineCount();
 
   @override
@@ -126,6 +132,7 @@ class WineRepositoryImpl implements WineRepository {
         'Nom', 'Appellation', 'Producteur', 'Région', 'Pays', 'Couleur',
         'Millésime', 'Cépages', 'Quantité', 'Prix achat',
         'Boire à partir de', 'Boire jusqu\'à', 'Notes', 'Note (/5)',
+        'Localisation',
       ],
       // Data rows
       ...entities.map((w) => [
@@ -143,6 +150,7 @@ class WineRepositoryImpl implements WineRepository {
             w.drinkUntilYear?.toString() ?? '',
             w.tastingNotes ?? '',
             w.rating?.toString() ?? '',
+            w.location ?? '',
           ]),
     ];
 
@@ -189,6 +197,7 @@ class WineRepositoryImpl implements WineRepository {
       rating: dbWine.rating,
       photoPath: dbWine.photoPath,
       aiDescription: dbWine.aiDescription,
+      location: dbWine.location,
       notes: dbWine.notes,
       createdAt: dbWine.createdAt,
       updatedAt: dbWine.updatedAt,
@@ -214,6 +223,7 @@ class WineRepositoryImpl implements WineRepository {
       rating: Value(entity.rating),
       photoPath: Value(entity.photoPath),
       aiDescription: Value(entity.aiDescription),
+      location: Value(entity.location),
       notes: Value(entity.notes),
     );
   }

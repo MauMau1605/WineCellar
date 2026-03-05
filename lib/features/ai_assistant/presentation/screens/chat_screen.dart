@@ -13,6 +13,7 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
+import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 
 /// AI Chat screen for adding wines via natural language
 class ChatScreen extends ConsumerStatefulWidget {
@@ -29,11 +30,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   static List<ChatMessage> _sessionMessages = [];
   static List<WineAiResponse> _sessionWineDataList = [];
+  static bool _sessionSearchMode = false;
 
   final List<ChatMessage> _messages = [];
   List<WineAiResponse> _currentWineDataList = [];
   final Set<int> _addedWineIndices = {};
   bool _isLoading = false;
+  bool _searchMode = false;
   final _chatLogger = ChatLogger();
 
   @override
@@ -48,6 +51,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _messages.addAll(_sessionMessages);
     _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
+    _searchMode = _sessionSearchMode;
   }
 
   @override
@@ -95,6 +99,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
 
+          // Mode selector
+          _buildModeSelector(),
+
           // Chat messages
           Expanded(
             child: ListView.builder(
@@ -103,17 +110,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _messages.length && _isLoading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        SizedBox(width: 12),
-                        Text('L\'IA analyse votre vin...'),
+                        const SizedBox(width: 12),
+                        Text(_searchMode
+                            ? 'L\'IA cherche dans votre cave...'
+                            : 'L\'IA analyse votre vin...'),
                       ],
                     ),
                   );
@@ -164,7 +173,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: TextField(
                       controller: _textController,
                       decoration: InputDecoration(
-                        hintText: 'Décrivez votre vin...',
+                        hintText: _searchMode
+                            ? 'Décrivez votre repas...'
+                            : 'Décrivez votre vin...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                         ),
@@ -228,11 +239,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Remove the last message (current one) from history since it's the userMessage
     if (history.isNotEmpty) history.removeLast();
 
+    // Build the actual message to send to the AI
+    String messageToSend = text;
+    if (_searchMode) {
+      final wines = await ref.read(wineRepositoryProvider).getAllWines();
+      final cellarSummary = _buildCellarSummary(wines);
+      messageToSend = AiPrompts.buildCellarSearchMessage(
+        userQuestion: text,
+        cellarSummary: cellarSummary,
+      );
+    }
+
     // Call AI service
     _chatLogger.logUserMessage(text);
 
     final result = await aiService.analyzeWine(
-      userMessage: text,
+      userMessage: messageToSend,
       conversationHistory: history,
     );
 
@@ -398,6 +420,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages.clear();
       _currentWineDataList = [];
       _addedWineIndices.clear();
+      _searchMode = false;
       _messages.add(_buildWelcomeMessage());
     });
     _cacheConversationState();
@@ -447,6 +470,109 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _cacheConversationState() {
     _sessionMessages = List<ChatMessage>.from(_messages);
     _sessionWineDataList = List<WineAiResponse>.from(_currentWineDataList);
+    _sessionSearchMode = _searchMode;
+  }
+
+  // ---- Mode selector & cellar search helpers ----
+
+  Widget _buildModeSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(
+            value: false,
+            label: Text('Ajouter un vin'),
+            icon: Icon(Icons.wine_bar, size: 18),
+          ),
+          ButtonSegment(
+            value: true,
+            label: Text('Accord mets-vin'),
+            icon: Icon(Icons.restaurant, size: 18),
+          ),
+        ],
+        selected: {_searchMode},
+        onSelectionChanged: (selected) => _onModeChanged(selected.first),
+      ),
+    );
+  }
+
+  void _onModeChanged(bool searchMode) {
+    if (_searchMode == searchMode) return;
+
+    // Reset AI session on mode switch for clean context
+    final aiService = ref.read(aiServiceProvider);
+    if (aiService is GeminiService) {
+      aiService.resetChat();
+    } else if (aiService is MistralService) {
+      aiService.resetChat();
+    }
+
+    setState(() {
+      _searchMode = searchMode;
+      _currentWineDataList = [];
+      _addedWineIndices.clear();
+      _messages.add(ChatMessage(
+        id: _uuid.v4(),
+        content: searchMode
+            ? '🔍 **Mode accord mets-vin activé**\n'
+              'Décrivez votre repas et je chercherai le meilleur vin '
+              'dans votre cave. Les vins à boire prochainement seront '
+              'privilégiés.\n\n'
+              'Exemples :\n'
+              '• "Je prépare un gigot d\'agneau"\n'
+              '• "Plateau de fromages ce soir"\n'
+              '• "Sushi et cuisine japonaise"'
+            : '🍷 **Mode ajout de vin activé**\n'
+              'Décrivez-moi les vins que vous souhaitez ajouter à '
+              'votre cave.',
+        role: ChatRole.assistant,
+        timestamp: DateTime.now(),
+      ));
+    });
+    _cacheConversationState();
+    _scrollToBottom();
+  }
+
+  String _buildCellarSummary(List<WineEntity> wines) {
+    final available = wines.where((w) => w.quantity > 0).toList();
+    if (available.isEmpty) return '(Cave vide — aucune bouteille disponible)';
+
+    // Sort by drinkUntilYear ascending (urgent first)
+    available.sort((a, b) {
+      final aYear = a.drinkUntilYear ?? 9999;
+      final bYear = b.drinkUntilYear ?? 9999;
+      return aYear.compareTo(bYear);
+    });
+
+    final currentYear = DateTime.now().year;
+    final buffer = StringBuffer();
+    buffer.writeln(
+        '${available.length} vin(s) disponible(s) (année actuelle : $currentYear) :');
+    buffer.writeln();
+
+    for (final w in available) {
+      buffer.write('• ${w.displayName}');
+      buffer.write(' | ${w.color.emoji} ${w.color.label}');
+      if (w.appellation != null) buffer.write(' | ${w.appellation}');
+      if (w.region != null) buffer.write(', ${w.region}');
+      buffer.writeln();
+      if (w.grapeVarieties.isNotEmpty) {
+        buffer.writeln('  Cépages : ${w.grapeVarieties.join(", ")}');
+      }
+      buffer.write('  Quantité : ${w.quantity}');
+      if (w.drinkFromYear != null || w.drinkUntilYear != null) {
+        buffer.write(
+            ' | À boire : ${w.drinkFromYear ?? "?"} → ${w.drinkUntilYear ?? "?"}');
+      }
+      buffer.writeln();
+      if (w.tastingNotes != null && w.tastingNotes!.isNotEmpty) {
+        buffer.writeln('  Notes : ${w.tastingNotes}');
+      }
+      buffer.writeln();
+    }
+
+    return buffer.toString();
   }
 
   void _scrollToBottom() {

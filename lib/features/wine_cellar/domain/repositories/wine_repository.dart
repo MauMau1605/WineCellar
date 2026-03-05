@@ -25,6 +25,9 @@ abstract class WineRepository {
   /// Update the quantity of a wine
   Future<void> updateQuantity(int wineId, int quantity);
 
+  /// Get all wines as a list (one-shot, non-reactive)
+  Future<List<WineEntity>> getAllWines();
+
   /// Get total wine count
   Future<int> getWineCount();
 
