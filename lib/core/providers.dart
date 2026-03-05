@@ -10,6 +10,8 @@ import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_reposi
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/food_category_repository.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/openai_service.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_service.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/ollama_service.dart';
 
 // ============ Database ============
@@ -79,6 +81,24 @@ final openAiApiKeyProvider =
   );
 });
 
+/// Gemini API key
+final geminiApiKeyProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyGeminiApiKey,
+  );
+});
+
+/// Mistral API key
+final mistralApiKeyProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyMistralApiKey,
+  );
+});
+
 /// Ollama URL
 final ollamaUrlProvider =
     StateNotifierProvider<SecureStringNotifier, String?>((ref) {
@@ -126,6 +146,8 @@ class SecureStringNotifier extends StateNotifier<String?> {
 final aiServiceProvider = Provider<AiService?>((ref) {
   final provider = ref.watch(aiProviderSettingProvider);
   final apiKey = ref.watch(openAiApiKeyProvider);
+  final geminiApiKey = ref.watch(geminiApiKeyProvider);
+  final mistralApiKey = ref.watch(mistralApiKeyProvider);
   final ollamaUrl = ref.watch(ollamaUrlProvider);
   final model = ref.watch(selectedModelProvider);
 
@@ -136,6 +158,18 @@ final aiServiceProvider = Provider<AiService?>((ref) {
         apiKey: apiKey,
         model: model ?? AppConstants.defaultOpenAiModel,
       );
+    case AiProvider.gemini:
+      if (geminiApiKey == null || geminiApiKey.isEmpty) return null;
+      return GeminiService(
+        apiKey: geminiApiKey,
+        model: _sanitizeGeminiModel(model),
+      );
+    case AiProvider.mistral:
+      if (mistralApiKey == null || mistralApiKey.isEmpty) return null;
+      return MistralService(
+        apiKey: mistralApiKey,
+        model: model ?? AppConstants.defaultMistralModel,
+      );
     case AiProvider.ollama:
       return OllamaService(
         baseUrl: ollamaUrl ?? AppConstants.defaultOllamaUrl,
@@ -143,3 +177,14 @@ final aiServiceProvider = Provider<AiService?>((ref) {
       );
   }
 });
+
+String _sanitizeGeminiModel(String? storedModel) {
+  final candidate = (storedModel ?? '').trim();
+
+  // Legacy model kept from previous versions: invalid in current Gemini API
+  if (candidate.isEmpty || candidate == 'gemini-1.5-flash') {
+    return AppConstants.defaultGeminiModel;
+  }
+
+  return candidate;
+}

@@ -54,11 +54,11 @@ class OllamaService implements AiService {
       final textResponse =
           response.data['message']?['content'] as String? ?? '';
 
-      final wineData = _extractWineData(textResponse);
+      final wineDataList = _extractWineData(textResponse);
 
       return AiChatResult(
         textResponse: _cleanTextResponse(textResponse),
-        wineData: wineData,
+        wineDataList: wineDataList,
       );
     } on DioException catch (e) {
       _logger.e('Ollama API error', error: e);
@@ -89,29 +89,41 @@ class OllamaService implements AiService {
     }
   }
 
-  WineAiResponse? _extractWineData(String response) {
+  List<WineAiResponse> _extractWineData(String response) {
     try {
       final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
       final match = jsonRegex.firstMatch(response);
 
       if (match != null) {
         final jsonStr = match.group(1)!;
-        final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-        return WineAiResponse.fromJson(json);
+        return _parseWineJson(jsonStr);
       }
 
-      final rawJsonRegex = RegExp(r'\{[\s\S]*"name"[\s\S]*\}');
+      final rawJsonRegex = RegExp(r'\{[\s\S]*"(?:wines|name)"[\s\S]*\}');
       final rawMatch = rawJsonRegex.firstMatch(response);
       if (rawMatch != null) {
-        final json = jsonDecode(rawMatch.group(0)!) as Map<String, dynamic>;
-        return WineAiResponse.fromJson(json);
+        return _parseWineJson(rawMatch.group(0)!);
       }
 
-      return null;
+      return [];
     } catch (e) {
       _logger.w('Failed to parse wine data from Ollama response', error: e);
-      return null;
+      return [];
     }
+  }
+
+  List<WineAiResponse> _parseWineJson(String jsonStr) {
+    final decoded = jsonDecode(jsonStr);
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('wines') && decoded['wines'] is List) {
+        return (decoded['wines'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map((e) => WineAiResponse.fromJson(e))
+            .toList();
+      }
+      return [WineAiResponse.fromJson(decoded)];
+    }
+    return [];
   }
 
   String _cleanTextResponse(String response) {

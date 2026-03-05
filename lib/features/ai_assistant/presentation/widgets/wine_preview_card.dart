@@ -104,18 +104,29 @@ class WinePreviewCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (onEdit != null)
+                  if (onConfirm == null)
+                    Chip(
+                      avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                      label: const Text('Ajouté'),
+                      backgroundColor: Colors.green.withValues(alpha: 0.15),
+                      labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (onConfirm != null && onEdit != null)
                     OutlinedButton.icon(
                       onPressed: onEdit,
                       icon: const Icon(Icons.edit, size: 18),
                       label: const Text('Modifier'),
                     ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: onConfirm,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Ajouter à la cave'),
-                  ),
+                  if (onConfirm != null) ...[
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: onConfirm,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Ajouter à la cave'),
+                    ),
+                  ],
                 ],
               )
             else

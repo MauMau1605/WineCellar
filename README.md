@@ -100,4 +100,3 @@ lib/
 | Base de données | Drift (SQLite) |
 | IA | OpenAI / Ollama |
 | Sécurité | flutter_secure_storage |
->>>>>>> 0c2cf02 (First building version)

@@ -14,7 +14,7 @@ class OpenAiService implements AiService {
 
   OpenAiService({
     required this.apiKey,
-    this.model = 'gpt-4o-mini',
+    this.model = 'gpt-3.5-turbo',
   }) {
     OpenAI.apiKey = apiKey;
   }
@@ -78,11 +78,11 @@ class OpenAiService implements AiService {
           '';
 
       // Extract JSON from response
-      final wineData = _extractWineData(textResponse);
+      final wineDataList = _extractWineData(textResponse);
 
       return AiChatResult(
         textResponse: _cleanTextResponse(textResponse),
-        wineData: wineData,
+        wineDataList: wineDataList,
       );
     } catch (e) {
       _logger.e('OpenAI API error', error: e);
@@ -114,8 +114,8 @@ class OpenAiService implements AiService {
     }
   }
 
-  /// Extract JSON block from AI response text
-  WineAiResponse? _extractWineData(String response) {
+  /// Extract JSON block from AI response text (supports {"wines":[...]} array and single object)
+  List<WineAiResponse> _extractWineData(String response) {
     try {
       // Look for JSON block between ```json and ```
       final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
@@ -123,23 +123,36 @@ class OpenAiService implements AiService {
 
       if (match != null) {
         final jsonStr = match.group(1)!;
-        final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-        return WineAiResponse.fromJson(json);
+        return _parseWineJson(jsonStr);
       }
 
-      // Fallback: try to find raw JSON object
-      final rawJsonRegex = RegExp(r'\{[\s\S]*"name"[\s\S]*\}');
+      // Fallback: try to find raw JSON object/array
+      final rawJsonRegex = RegExp(r'\{[\s\S]*"(?:wines|name)"[\s\S]*\}');
       final rawMatch = rawJsonRegex.firstMatch(response);
       if (rawMatch != null) {
-        final json = jsonDecode(rawMatch.group(0)!) as Map<String, dynamic>;
-        return WineAiResponse.fromJson(json);
+        return _parseWineJson(rawMatch.group(0)!);
       }
 
-      return null;
+      return [];
     } catch (e) {
       _logger.w('Failed to parse wine data from AI response', error: e);
-      return null;
+      return [];
     }
+  }
+
+  /// Parse JSON string into list of WineAiResponse
+  List<WineAiResponse> _parseWineJson(String jsonStr) {
+    final decoded = jsonDecode(jsonStr);
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('wines') && decoded['wines'] is List) {
+        return (decoded['wines'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map((e) => WineAiResponse.fromJson(e))
+            .toList();
+      }
+      return [WineAiResponse.fromJson(decoded)];
+    }
+    return [];
   }
 
   /// Remove the JSON block from the display text

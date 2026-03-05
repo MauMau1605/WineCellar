@@ -15,6 +15,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _apiKeyController = TextEditingController();
+  final _geminiApiKeyController = TextEditingController();
+  final _mistralApiKeyController = TextEditingController();
   final _ollamaUrlController = TextEditingController();
   final _modelController = TextEditingController();
   bool _obscureApiKey = true;
@@ -32,11 +34,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
 
     final apiKey = ref.read(openAiApiKeyProvider);
+    final geminiApiKey = ref.read(geminiApiKeyProvider);
+    final mistralApiKey = ref.read(mistralApiKeyProvider);
     final ollamaUrl = ref.read(ollamaUrlProvider);
     final model = ref.read(selectedModelProvider);
 
     setState(() {
       _apiKeyController.text = apiKey ?? '';
+      _geminiApiKeyController.text = geminiApiKey ?? '';
+      _mistralApiKeyController.text = mistralApiKey ?? '';
       _ollamaUrlController.text =
           ollamaUrl ?? AppConstants.defaultOllamaUrl;
       _modelController.text = model ?? '';
@@ -46,6 +52,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _geminiApiKeyController.dispose();
+    _mistralApiKeyController.dispose();
     _ollamaUrlController.dispose();
     _modelController.dispose();
     super.dispose();
@@ -87,9 +95,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   return RadioListTile<AiProvider>(
                     title: Text(provider.label),
                     subtitle: Text(
-                      provider == AiProvider.openai
-                          ? 'GPT-4o-mini recommandé. Nécessite une clé API.'
-                          : 'Gratuit, fonctionne hors-ligne. Nécessite Ollama installé.',
+                      switch (provider) {
+                        AiProvider.openai => 'GPT-4o-mini recommandé. Nécessite une clé API.',
+                        AiProvider.gemini => 'Gemini 2.0 Flash gratuit. Nécessite une clé API Google.',
+                        AiProvider.mistral => 'Mistral Small performant. Nécessite une clé API Mistral.',
+                        AiProvider.ollama => 'Gratuit, fonctionne hors-ligne. Nécessite Ollama installé.',
+                      },
                     ),
                     value: provider,
                   );
@@ -142,6 +153,120 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         prefixIcon: Icon(Icons.smart_toy),
                         helperText:
                             'Recommandé : gpt-4o-mini (pas cher et efficace)',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          if (currentProvider == AiProvider.gemini) ...[
+            Text(
+              'Configuration Google Gemini',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _geminiApiKeyController,
+                      decoration: InputDecoration(
+                        labelText: 'Clé API Gemini',
+                        hintText: 'AIza...',
+                        prefixIcon: const Icon(Icons.key),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscureApiKey = !_obscureApiKey),
+                        ),
+                      ),
+                      obscureText: _obscureApiKey,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _modelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Modèle',
+                        hintText: 'gemini-2.5-flash-lite',
+                        prefixIcon: Icon(Icons.smart_toy),
+                        helperText:
+                            'Recommandé : gemini-2.5-flash-lite',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Obtenez votre clé gratuite sur aistudio.google.com',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          if (currentProvider == AiProvider.mistral) ...[
+            Text(
+              'Configuration Mistral AI',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _mistralApiKeyController,
+                      decoration: InputDecoration(
+                        labelText: 'Clé API Mistral',
+                        hintText: '',
+                        prefixIcon: const Icon(Icons.key),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscureApiKey = !_obscureApiKey),
+                        ),
+                      ),
+                      obscureText: _obscureApiKey,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _modelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Modèle',
+                        hintText: 'mistral-small-latest',
+                        prefixIcon: Icon(Icons.smart_toy),
+                        helperText:
+                            'Recommandé : mistral-small-latest (bon rapport qualité/prix)',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Obtenez votre clé sur console.mistral.ai',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
                       ),
                     ),
                   ],
@@ -250,15 +375,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         .read(openAiApiKeyProvider.notifier)
         .setValue(_apiKeyController.text.isNotEmpty ? _apiKeyController.text : null);
 
+    await ref
+        .read(geminiApiKeyProvider.notifier)
+        .setValue(_geminiApiKeyController.text.isNotEmpty ? _geminiApiKeyController.text : null);
+
+    await ref
+        .read(mistralApiKeyProvider.notifier)
+        .setValue(_mistralApiKeyController.text.isNotEmpty ? _mistralApiKeyController.text : null);
+
     await ref.read(ollamaUrlProvider.notifier).setValue(
           _ollamaUrlController.text.isNotEmpty
               ? _ollamaUrlController.text
               : null,
         );
 
-    final defaultModel = currentProvider == AiProvider.openai
-        ? AppConstants.defaultOpenAiModel
-        : AppConstants.defaultOllamaModel;
+    final defaultModel = switch (currentProvider) {
+      AiProvider.openai => AppConstants.defaultOpenAiModel,
+      AiProvider.gemini => AppConstants.defaultGeminiModel,
+      AiProvider.mistral => AppConstants.defaultMistralModel,
+      AiProvider.ollama => AppConstants.defaultOllamaModel,
+    };
     await ref.read(selectedModelProvider.notifier).setValue(
           _modelController.text.isNotEmpty ? _modelController.text : defaultModel,
         );

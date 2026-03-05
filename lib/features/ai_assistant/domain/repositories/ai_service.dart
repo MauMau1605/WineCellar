@@ -20,8 +20,8 @@ class AiChatResult {
   /// The AI's text response to display in chat
   final String textResponse;
 
-  /// Structured wine data extracted (null if no wine data found)
-  final WineAiResponse? wineData;
+  /// Structured wine data extracted (empty list if no wine data found)
+  final List<WineAiResponse> wineDataList;
 
   /// Whether an error occurred
   final bool isError;
@@ -31,7 +31,7 @@ class AiChatResult {
 
   const AiChatResult({
     required this.textResponse,
-    this.wineData,
+    this.wineDataList = const [],
     this.isError = false,
     this.errorMessage,
   });

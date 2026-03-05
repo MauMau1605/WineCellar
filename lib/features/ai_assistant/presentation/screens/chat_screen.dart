@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:wine_cellar/core/chat_logger.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_service.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
@@ -24,25 +27,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
 
+  static List<ChatMessage> _sessionMessages = [];
+  static List<WineAiResponse> _sessionWineDataList = [];
+
   final List<ChatMessage> _messages = [];
-  WineAiResponse? _currentWineData;
+  List<WineAiResponse> _currentWineDataList = [];
+  final Set<int> _addedWineIndices = {};
   bool _isLoading = false;
+  final _chatLogger = ChatLogger();
 
   @override
   void initState() {
     super.initState();
-    // Add welcome message
-    _messages.add(ChatMessage(
-      id: _uuid.v4(),
-      content:
-          'Bonjour ! 🍷 Décrivez-moi le vin que vous souhaitez ajouter à votre cave.\n\n'
-          'Par exemple :\n'
-          '• "J\'ai acheté un Château Margaux 2015, rouge, 3 bouteilles à 45€"\n'
-          '• "Un Chablis Premier Cru 2020"\n'
-          '• "Côtes du Rhône rouge 2019, Guigal"',
-      role: ChatRole.assistant,
-      timestamp: DateTime.now(),
-    ));
+    if (_sessionMessages.isEmpty) {
+      _chatLogger.startSession();
+      _messages.add(_buildWelcomeMessage());
+      _cacheConversationState();
+      return;
+    }
+
+    _messages.addAll(_sessionMessages);
+    _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
   }
 
   @override
@@ -61,12 +66,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: const Text('Assistant IA'),
         actions: [
-          if (_messages.length > 1)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Nouvelle conversation',
-              onPressed: _resetConversation,
-            ),
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Ouvrir le dossier des logs',
+            onPressed: _showLogsInfo,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Remettre l\'historique à zéro',
+            onPressed: _confirmResetConversation,
+          ),
         ],
       ),
       body: Column(
@@ -114,15 +123,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 return Column(
                   children: [
                     ChatBubble(message: message),
-                    // Show wine preview after the AI message that contains wine data
+                    // Show wine preview cards after the last AI message
                     if (message.role == ChatRole.assistant &&
-                        _currentWineData != null &&
+                        _currentWineDataList.isNotEmpty &&
                         index == _messages.length - 1)
-                      WinePreviewCard(
-                        wineData: _currentWineData!,
-                        onConfirm: () => _addWineToCellar(context),
-                        onEdit: null, // TODO: implement edit
-                      ),
+                      ..._buildWinePreviewCards(context),
                   ],
                 );
               },
@@ -224,10 +229,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (history.isNotEmpty) history.removeLast();
 
     // Call AI service
+    _chatLogger.logUserMessage(text);
+
     final result = await aiService.analyzeWine(
       userMessage: text,
       conversationHistory: history,
     );
+
+    // Log the AI response or error
+    if (result.isError) {
+      _chatLogger.logError(result.errorMessage ?? result.textResponse);
+    } else {
+      _chatLogger.logAiResponse(result.textResponse);
+    }
 
     setState(() {
       _isLoading = false;
@@ -238,15 +252,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         timestamp: DateTime.now(),
       ));
 
-      if (result.wineData != null) {
-        _currentWineData = result.wineData;
+      if (result.wineDataList.isNotEmpty) {
+        _currentWineDataList = result.wineDataList;
+        _addedWineIndices.clear();
       }
     });
+    _cacheConversationState();
     _scrollToBottom();
   }
 
-  Future<void> _addWineToCellar(BuildContext context) async {
-    if (_currentWineData == null || !_currentWineData!.isComplete) {
+  /// Build preview cards for all wines in the current list
+  List<Widget> _buildWinePreviewCards(BuildContext context) {
+    final cards = <Widget>[];
+    // "Add all" button when multiple complete wines
+    final completeWines = _currentWineDataList
+        .where((w) => w.isComplete)
+        .toList();
+    final allAdded = _addedWineIndices.length >= completeWines.length;
+    if (_currentWineDataList.length > 1 && completeWines.isNotEmpty && !allAdded) {
+      cards.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FilledButton.icon(
+            onPressed: () => _addAllWinesToCellar(context),
+            icon: const Icon(Icons.playlist_add, size: 20),
+            label: Text(
+              'Ajouter les ${completeWines.length - _addedWineIndices.length} vin(s) à la cave',
+            ),
+          ),
+        ),
+      );
+    }
+    for (var i = 0; i < _currentWineDataList.length; i++) {
+      final alreadyAdded = _addedWineIndices.contains(i);
+      cards.add(
+        WinePreviewCard(
+          wineData: _currentWineDataList[i],
+          onConfirm: alreadyAdded ? null : () => _addWineToCellar(context, i),
+          onEdit: null,
+        ),
+      );
+    }
+    return cards;
+  }
+
+  Future<void> _addAllWinesToCellar(BuildContext context) async {
+    for (var i = 0; i < _currentWineDataList.length; i++) {
+      if (!_addedWineIndices.contains(i) && _currentWineDataList[i].isComplete) {
+        await _addWineToCellar(context, i);
+      }
+    }
+  }
+
+  Future<void> _addWineToCellar(BuildContext context, int wineIndex) async {
+    final data = _currentWineDataList[wineIndex];
+    if (!data.isComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -256,7 +316,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
-    final data = _currentWineData!;
     final repo = ref.read(wineRepositoryProvider);
     final foodCategoryRepo = ref.read(foodCategoryRepositoryProvider);
 
@@ -296,19 +355,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       await repo.addWine(wine);
+      _chatLogger.logWineAdded(wine.displayName);
+      setState(() {
+        _addedWineIndices.add(wineIndex);
+      });
+      _cacheConversationState();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${wine.displayName} ajouté à la cave ! 🍷'),
+            showCloseIcon: true,
             action: SnackBarAction(
               label: 'Voir la cave',
               onPressed: () => context.go('/cellar'),
             ),
           ),
         );
-        _resetConversation();
       }
     } catch (e) {
+      _chatLogger.logError('Erreur ajout vin', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur: $e')),
@@ -318,17 +383,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _resetConversation() {
+    // Reset the AI service chat session if applicable
+    final aiService = ref.read(aiServiceProvider);
+    if (aiService is GeminiService) {
+      aiService.resetChat();
+    } else if (aiService is MistralService) {
+      aiService.resetChat();
+    }
+
+    _chatLogger.endSession();
+    _chatLogger.startSession();
+
     setState(() {
       _messages.clear();
-      _currentWineData = null;
-      _messages.add(ChatMessage(
-        id: _uuid.v4(),
-        content:
-            'Bonjour ! 🍷 Décrivez-moi le vin que vous souhaitez ajouter à votre cave.',
-        role: ChatRole.assistant,
-        timestamp: DateTime.now(),
-      ));
+      _currentWineDataList = [];
+      _addedWineIndices.clear();
+      _messages.add(_buildWelcomeMessage());
     });
+    _cacheConversationState();
+  }
+
+  Future<void> _confirmResetConversation() async {
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Effacer l\'historique ?'),
+        content: const Text(
+          'Cette action remet la conversation actuelle à zéro.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Effacer'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldReset == true && mounted) {
+      _resetConversation();
+    }
+  }
+
+  ChatMessage _buildWelcomeMessage() {
+    return ChatMessage(
+      id: _uuid.v4(),
+      content:
+          'Bonjour ! 🍷 Décrivez-moi le ou les vins que vous souhaitez ajouter à votre cave.\n\n'
+          'Par exemple :\n'
+          '• "J\'ai acheté un Château Margaux 2015, rouge, 3 bouteilles à 45€"\n'
+          '• "Un Chablis Premier Cru 2020"\n'
+          '• "Côtes du Rhône rouge 2019, Guigal"\n'
+          '• "3 vins : Sancerre 2022, Pouilly-Fumé 2021 et Vouvray 2020"',
+      role: ChatRole.assistant,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  void _cacheConversationState() {
+    _sessionMessages = List<ChatMessage>.from(_messages);
+    _sessionWineDataList = List<WineAiResponse>.from(_currentWineDataList);
   }
 
   void _scrollToBottom() {
@@ -341,5 +459,74 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
       }
     });
+  }
+
+  Future<void> _showLogsInfo() async {
+    final logsPath = await _chatLogger.getLogsPath();
+    final logFiles = await _chatLogger.listLogFiles();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logs des conversations'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Dossier :',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                logsPath,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${logFiles.length} fichier(s) de log :',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              if (logFiles.isEmpty)
+                const Text('Aucun log pour le moment.')
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: logFiles.length,
+                    itemBuilder: (context, index) {
+                      final file = logFiles[index];
+                      final name = file.path.split('/').last;
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.description, size: 20),
+                        title: SelectableText(name),
+                        subtitle: SelectableText(
+                          file.path,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 }

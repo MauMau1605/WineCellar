@@ -79,12 +79,18 @@ enum WineMaturity {
 /// AI provider enumeration
 enum AiProvider {
   openai,
+  gemini,
+  mistral,
   ollama;
 
   String get label {
     switch (this) {
       case AiProvider.openai:
         return 'OpenAI';
+      case AiProvider.gemini:
+        return 'Google Gemini';
+      case AiProvider.mistral:
+        return 'Mistral AI';
       case AiProvider.ollama:
         return 'Ollama (local)';
     }
