@@ -7,6 +7,9 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
+
+enum _DuplicateChoice { incrementExisting, createNew }
 
 /// Screen used to choose between AI-assisted add and manual add.
 class WineAddScreen extends ConsumerStatefulWidget {
@@ -414,10 +417,59 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final entity = _buildEntityFromForm();
+
+    final duplicate = await _findPotentialDuplicate(entity);
+    if (!mounted) return;
+
+    if (duplicate != null) {
+      final choice = await _showDuplicateDialog(
+        existingWine: duplicate,
+        addedQuantity: entity.quantity,
+      );
+      if (!mounted || choice == null) return;
+
+      if (choice == _DuplicateChoice.incrementExisting) {
+        if (duplicate.id == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Impossible de mettre à jour ce vin.')),
+          );
+          return;
+        }
+
+        setState(() => _saving = true);
+
+        final updatedQuantity = duplicate.quantity + entity.quantity;
+        final result = await ref.read(updateWineQuantityUseCaseProvider).call(
+              UpdateQuantityParams(
+                wineId: duplicate.id!,
+                newQuantity: updatedQuantity,
+              ),
+            );
+
+        result.fold(
+          (failure) {
+            if (!mounted) return;
+            setState(() => _saving = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(failure.message)),
+            );
+          },
+          (_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Quantité mise à jour sur la fiche existante.'),
+              ),
+            );
+            context.go('/cellar/wine/${duplicate.id}');
+          },
+        );
+        return;
+      }
+    }
 
     setState(() => _saving = true);
-
-    final entity = _buildEntityFromForm();
 
     final result = await ref.read(addWineUseCaseProvider).call(entity);
 
@@ -435,6 +487,69 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
           const SnackBar(content: Text('Vin ajouté à la cave !')),
         );
         context.go('/cellar/wine/$newId');
+      },
+    );
+  }
+
+  Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {
+    final allWines = await ref.read(wineRepositoryProvider).getAllWines();
+
+    final normalizedName = _normalizeForDuplicate(candidate.name);
+    final normalizedProducer = _normalizeForDuplicate(candidate.producer ?? '');
+    final candidateVintage = candidate.vintage;
+
+    for (final wine in allWines) {
+      if (_normalizeForDuplicate(wine.name) != normalizedName) continue;
+      if (wine.vintage != candidateVintage) continue;
+      if (_normalizeForDuplicate(wine.producer ?? '') != normalizedProducer) {
+        continue;
+      }
+      return wine;
+    }
+
+    return null;
+  }
+
+  Future<_DuplicateChoice?> _showDuplicateDialog({
+    required WineEntity existingWine,
+    required int addedQuantity,
+  }) {
+    return showDialog<_DuplicateChoice>(
+      context: context,
+      builder: (dialogContext) {
+        final producer = (existingWine.producer ?? '').trim();
+        final producerText = producer.isEmpty ? 'Non renseigné' : producer;
+
+        return AlertDialog(
+          title: const Text('Doublon probable détecté'),
+          content: Text(
+            'Une bouteille semblable existe probablement déjà dans votre cave :\n'
+            '- Nom : ${existingWine.name}\n'
+            '- Millésime : ${existingWine.vintage ?? '-'}\n'
+            '- Domaine/Producteur : $producerText\n\n'
+            'Souhaitez-vous incrémenter la quantité de cette fiche '
+            '(+${addedQuantity <= 0 ? 1 : addedQuantity}) '
+            'ou créer une nouvelle référence ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                _DuplicateChoice.createNew,
+              ),
+              child: const Text('Créer une nouvelle référence'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                _DuplicateChoice.incrementExisting,
+              ),
+              child: const Text('Incrémenter la quantité'),
+            ),
+          ],
+        );
       },
     );
   }
@@ -568,5 +683,46 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
   String? _emptyToNull(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  String _normalizeForDuplicate(String value) {
+    var normalized = value.trim().toLowerCase();
+
+    const replacements = <String, String>{
+      'à': 'a',
+      'á': 'a',
+      'â': 'a',
+      'ã': 'a',
+      'ä': 'a',
+      'å': 'a',
+      'æ': 'ae',
+      'ç': 'c',
+      'è': 'e',
+      'é': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'ñ': 'n',
+      'ò': 'o',
+      'ó': 'o',
+      'ô': 'o',
+      'õ': 'o',
+      'ö': 'o',
+      'œ': 'oe',
+      'ù': 'u',
+      'ú': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'ÿ': 'y',
+    };
+
+    replacements.forEach((accented, plain) {
+      normalized = normalized.replaceAll(accented, plain);
+    });
+
+    return normalized.replaceAll(RegExp(r'\s+'), ' ');
   }
 }

@@ -12,9 +12,14 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.d
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
 import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
+
+enum _DuplicateChoice { incrementExisting, createNew }
+
+enum _PreAddChoice { edit, continueAdd }
 
 /// Data passed from the add-wine screen to pre-fill the AI chat.
 class PrefillData {
@@ -375,7 +380,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         WinePreviewCard(
           wineData: _currentWineDataList[i],
           onConfirm: alreadyAdded ? null : () => _addWineToCellar(context, i),
-          onEdit: null,
+          onEdit: alreadyAdded ? null : () => _editWineDataDialog(i),
         ),
       );
     }
@@ -383,14 +388,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _addAllWinesToCellar(BuildContext context) async {
+    final preAddChoice = await _askManualEditBeforeAdd();
+    if (!context.mounted || preAddChoice == null) return;
+
+    if (preAddChoice == _PreAddChoice.edit) {
+      final firstEditableIndex = _currentWineDataList.indexWhere(
+        (wine) => wine.isComplete,
+      );
+      if (firstEditableIndex >= 0) {
+        await _editWineDataDialog(firstEditableIndex);
+      }
+      return;
+    }
+
     for (var i = 0; i < _currentWineDataList.length; i++) {
       if (!_addedWineIndices.contains(i) && _currentWineDataList[i].isComplete) {
-        await _addWineToCellar(context, i);
+        await _addWineToCellar(context, i, askManualEditBeforeAdd: false);
       }
     }
   }
 
-  Future<void> _addWineToCellar(BuildContext context, int wineIndex) async {
+  Future<void> _addWineToCellar(
+    BuildContext context,
+    int wineIndex, {
+    bool askManualEditBeforeAdd = true,
+  }) async {
+    if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return;
+
+    if (askManualEditBeforeAdd) {
+      final preAddChoice = await _askManualEditBeforeAdd();
+      if (!context.mounted || preAddChoice == null) return;
+      if (preAddChoice == _PreAddChoice.edit) {
+        await _editWineDataDialog(wineIndex);
+        return;
+      }
+    }
+
     final data = _currentWineDataList[wineIndex];
     if (!data.isComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -439,6 +472,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       foodCategoryIds: matchedCategoryIds,
     );
 
+    final duplicate = await _findPotentialDuplicate(wine);
+    if (!mounted) return;
+
+    if (duplicate != null) {
+      final choice = await _showDuplicateDialog(
+        existingWine: duplicate,
+        addedQuantity: wine.quantity,
+      );
+      if (!mounted || choice == null) return;
+
+      if (choice == _DuplicateChoice.incrementExisting) {
+        if (duplicate.id == null) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Impossible de mettre à jour ce vin existant.'),
+              ),
+            );
+          }
+          return;
+        }
+
+        final updateResult = await ref.read(updateWineQuantityUseCaseProvider).call(
+              UpdateQuantityParams(
+                wineId: duplicate.id!,
+                newQuantity: duplicate.quantity + wine.quantity,
+              ),
+            );
+
+        updateResult.fold(
+          (failure) {
+            _chatLogger.logError('Erreur mise à jour quantité: ${failure.message}');
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(failure.message)),
+              );
+            }
+          },
+          (_) {
+            _chatLogger.logWineAdded('${wine.displayName} (quantité incrémentée)');
+            setState(() {
+              _addedWineIndices.add(wineIndex);
+            });
+            _cacheConversationState();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Quantité incrémentée pour ${duplicate.displayName}.',
+                  ),
+                  showCloseIcon: true,
+                  action: SnackBarAction(
+                    label: 'Voir la cave',
+                    onPressed: () => context.go('/cellar'),
+                  ),
+                ),
+              );
+            }
+          },
+        );
+        return;
+      }
+    }
+
     final result = await addWineUseCase(wine);
     result.fold(
       (failure) {
@@ -469,6 +566,360 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
       },
     );
+  }
+
+  Future<_PreAddChoice?> _askManualEditBeforeAdd() {
+    return showDialog<_PreAddChoice>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Vérification avant ajout'),
+        content: const Text(
+          'Avant de finaliser la mise en cave, souhaitez-vous modifier '
+          'manuellement des informations ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_PreAddChoice.edit),
+            child: const Text('Modifier manuellement'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_PreAddChoice.continueAdd),
+            child: const Text('Continuer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editWineDataDialog(int wineIndex) async {
+    if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return;
+
+    final original = _currentWineDataList[wineIndex];
+
+    final nameCtrl = TextEditingController(text: original.name ?? '');
+    final appellationCtrl = TextEditingController(text: original.appellation ?? '');
+    final producerCtrl = TextEditingController(text: original.producer ?? '');
+    final regionCtrl = TextEditingController(text: original.region ?? '');
+    final countryCtrl = TextEditingController(text: original.country ?? 'France');
+    final vintageCtrl = TextEditingController(
+      text: original.vintage?.toString() ?? '',
+    );
+    final grapesCtrl = TextEditingController(text: original.grapeVarieties.join(', '));
+    final quantityCtrl = TextEditingController(
+      text: (original.quantity ?? 1).toString(),
+    );
+    final priceCtrl = TextEditingController(
+      text: original.purchasePrice?.toString() ?? '',
+    );
+    final drinkFromCtrl = TextEditingController(
+      text: original.drinkFromYear?.toString() ?? '',
+    );
+    final drinkUntilCtrl = TextEditingController(
+      text: original.drinkUntilYear?.toString() ?? '',
+    );
+    final tastingCtrl = TextEditingController(text: original.tastingNotes ?? '');
+
+    var selectedColorName = original.color ?? WineColor.red.name;
+
+    final updated = await showDialog<WineAiResponse>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Modifier la fiche du vin'),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Nom *'),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedColorName,
+                        decoration: const InputDecoration(labelText: 'Couleur *'),
+                        items: WineColor.values
+                            .map(
+                              (color) => DropdownMenuItem<String>(
+                                value: color.name,
+                                child: Text('${color.emoji} ${color.label}'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setDialogState(() => selectedColorName = value);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: appellationCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Appellation'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: producerCtrl,
+                        decoration: const InputDecoration(labelText: 'Producteur'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: regionCtrl,
+                        decoration: const InputDecoration(labelText: 'Région'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: countryCtrl,
+                        decoration: const InputDecoration(labelText: 'Pays'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: vintageCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Millésime'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: grapesCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Cépages (séparés par virgules)',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: quantityCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Quantité'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: priceCtrl,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Prix (€)'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: drinkFromCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'À boire dès'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: drinkUntilCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'À boire jusqu\'à'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: tastingCtrl,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Notes de dégustation',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final parsedQuantity = int.tryParse(quantityCtrl.text.trim()) ??
+                        (original.quantity ?? 1);
+                    final safeQuantity = parsedQuantity <= 0 ? 1 : parsedQuantity;
+                    final safeName = nameCtrl.text.trim();
+                    if (safeName.isEmpty) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text('Le nom du vin est obligatoire.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final grapes = grapesCtrl.text
+                        .split(',')
+                        .map((value) => value.trim())
+                        .where((value) => value.isNotEmpty)
+                        .toList();
+
+                    Navigator.of(dialogContext).pop(
+                      WineAiResponse(
+                        name: safeName,
+                        appellation: _emptyToNull(appellationCtrl.text),
+                        producer: _emptyToNull(producerCtrl.text),
+                        region: _emptyToNull(regionCtrl.text),
+                        country: _emptyToNull(countryCtrl.text) ?? 'France',
+                        color: selectedColorName,
+                        vintage: int.tryParse(vintageCtrl.text.trim()),
+                        grapeVarieties: grapes,
+                        quantity: safeQuantity,
+                        purchasePrice: double.tryParse(priceCtrl.text.trim()),
+                        drinkFromYear: int.tryParse(drinkFromCtrl.text.trim()),
+                        drinkUntilYear: int.tryParse(drinkUntilCtrl.text.trim()),
+                        tastingNotes: _emptyToNull(tastingCtrl.text),
+                        suggestedFoodPairings: original.suggestedFoodPairings,
+                        description: original.description,
+                        needsMoreInfo: false,
+                        followUpQuestion: null,
+                      ),
+                    );
+                  },
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameCtrl.dispose();
+    appellationCtrl.dispose();
+    producerCtrl.dispose();
+    regionCtrl.dispose();
+    countryCtrl.dispose();
+    vintageCtrl.dispose();
+    grapesCtrl.dispose();
+    quantityCtrl.dispose();
+    priceCtrl.dispose();
+    drinkFromCtrl.dispose();
+    drinkUntilCtrl.dispose();
+    tastingCtrl.dispose();
+
+    if (updated == null || !mounted) return;
+
+    setState(() {
+      _currentWineDataList[wineIndex] = updated;
+    });
+    _cacheConversationState();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Fiche mise à jour.')),
+    );
+  }
+
+  Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {
+    final allWines = await ref.read(wineRepositoryProvider).getAllWines();
+    final normalizedName = _normalizeForDuplicate(candidate.name);
+    final normalizedProducer = _normalizeForDuplicate(candidate.producer ?? '');
+    final candidateVintage = candidate.vintage;
+
+    for (final wine in allWines) {
+      if (_normalizeForDuplicate(wine.name) != normalizedName) continue;
+      if (wine.vintage != candidateVintage) continue;
+      if (_normalizeForDuplicate(wine.producer ?? '') != normalizedProducer) {
+        continue;
+      }
+      return wine;
+    }
+    return null;
+  }
+
+  Future<_DuplicateChoice?> _showDuplicateDialog({
+    required WineEntity existingWine,
+    required int addedQuantity,
+  }) {
+    return showDialog<_DuplicateChoice>(
+      context: context,
+      builder: (dialogContext) {
+        final producer = (existingWine.producer ?? '').trim();
+        final producerText = producer.isEmpty ? 'Non renseigné' : producer;
+
+        return AlertDialog(
+          title: const Text('Doublon probable détecté'),
+          content: Text(
+            'Une bouteille semblable existe probablement déjà dans votre cave :\n'
+            '- Nom : ${existingWine.name}\n'
+            '- Millésime : ${existingWine.vintage ?? '-'}\n'
+            '- Domaine/Producteur : $producerText\n\n'
+            'Souhaitez-vous incrémenter la quantité de cette fiche '
+            '(+${addedQuantity <= 0 ? 1 : addedQuantity}) '
+            'ou créer une nouvelle référence ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                _DuplicateChoice.createNew,
+              ),
+              child: const Text('Créer une nouvelle référence'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                _DuplicateChoice.incrementExisting,
+              ),
+              child: const Text('Incrémenter la quantité'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _normalizeForDuplicate(String value) {
+    var normalized = value.trim().toLowerCase();
+
+    const replacements = <String, String>{
+      'à': 'a',
+      'á': 'a',
+      'â': 'a',
+      'ã': 'a',
+      'ä': 'a',
+      'å': 'a',
+      'æ': 'ae',
+      'ç': 'c',
+      'è': 'e',
+      'é': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'ñ': 'n',
+      'ò': 'o',
+      'ó': 'o',
+      'ô': 'o',
+      'õ': 'o',
+      'ö': 'o',
+      'œ': 'oe',
+      'ù': 'u',
+      'ú': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'ÿ': 'y',
+    };
+
+    replacements.forEach((accented, plain) {
+      normalized = normalized.replaceAll(accented, plain);
+    });
+
+    return normalized.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String? _emptyToNull(String value) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   void _resetConversation() {
