@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/core/usecases/usecase.dart';
 
 /// Settings screen for AI provider configuration
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -412,8 +413,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _testingConnection = true);
 
-    final aiService = ref.read(aiServiceProvider);
-    if (aiService == null) {
+    final testUseCase = ref.read(testAiConnectionUseCaseProvider);
+    if (testUseCase == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -426,18 +427,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
 
-    final success = await aiService.testConnection();
+    final result = await testUseCase(const NoParams());
 
     setState(() => _testingConnection = false);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? 'Connexion réussie ! ✅' : 'Échec de la connexion ❌',
-          ),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
+      result.fold(
+        (failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Échec : ${failure.message}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+        (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Connexion réussie ! ✅'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        },
       );
     }
   }

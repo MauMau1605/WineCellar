@@ -64,32 +64,39 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
   }
 
   Future<void> _loadWine() async {
-    final wine =
-        await ref.read(wineRepositoryProvider).getWineById(widget.wineId);
-    if (wine == null) {
-      if (mounted) context.pop();
-      return;
-    }
-    setState(() {
-      _wine = wine;
-      _nameCtrl.text = wine.name;
-      _appellationCtrl.text = wine.appellation ?? '';
-      _producerCtrl.text = wine.producer ?? '';
-      _regionCtrl.text = wine.region ?? '';
-      _countryCtrl.text = wine.country;
-      _vintageCtrl.text = wine.vintage?.toString() ?? '';
-      _grapesCtrl.text = wine.grapeVarieties.join(', ');
-      _quantityCtrl.text = wine.quantity.toString();
-      _priceCtrl.text = wine.purchasePrice?.toStringAsFixed(2) ?? '';
-      _drinkFromCtrl.text = wine.drinkFromYear?.toString() ?? '';
-      _drinkUntilCtrl.text = wine.drinkUntilYear?.toString() ?? '';
-      _tastingNotesCtrl.text = wine.tastingNotes ?? '';
-      _ratingCtrl.text = wine.rating?.toString() ?? '';
-      _notesCtrl.text = wine.notes ?? '';
-      _locationCtrl.text = wine.location ?? '';
-      _selectedColor = wine.color;
-      _loading = false;
-    });
+    final result =
+        await ref.read(getWineByIdUseCaseProvider).call(widget.wineId);
+    result.fold(
+      (failure) {
+        if (mounted) context.pop();
+      },
+      (wine) {
+        if (wine == null) {
+          if (mounted) context.pop();
+          return;
+        }
+        setState(() {
+          _wine = wine;
+          _nameCtrl.text = wine.name;
+          _appellationCtrl.text = wine.appellation ?? '';
+          _producerCtrl.text = wine.producer ?? '';
+          _regionCtrl.text = wine.region ?? '';
+          _countryCtrl.text = wine.country;
+          _vintageCtrl.text = wine.vintage?.toString() ?? '';
+          _grapesCtrl.text = wine.grapeVarieties.join(', ');
+          _quantityCtrl.text = wine.quantity.toString();
+          _priceCtrl.text = wine.purchasePrice?.toStringAsFixed(2) ?? '';
+          _drinkFromCtrl.text = wine.drinkFromYear?.toString() ?? '';
+          _drinkUntilCtrl.text = wine.drinkUntilYear?.toString() ?? '';
+          _tastingNotesCtrl.text = wine.tastingNotes ?? '';
+          _ratingCtrl.text = wine.rating?.toString() ?? '';
+          _notesCtrl.text = wine.notes ?? '';
+          _locationCtrl.text = wine.location ?? '';
+          _selectedColor = wine.color;
+          _loading = false;
+        });
+      },
+    );
   }
 
   @override
@@ -408,13 +415,25 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     );
 
     try {
-      await ref.read(wineRepositoryProvider).updateWine(updated);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vin mis à jour !')),
-        );
-        context.pop(true); // return true to signal update
-      }
+      final result = await ref.read(updateWineUseCaseProvider).call(updated);
+      result.fold(
+        (failure) {
+          setState(() => _saving = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(failure.message)),
+            );
+          }
+        },
+        (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vin mis à jour !')),
+            );
+            context.pop(true); // return true to signal update
+          }
+        },
+      );
     } catch (e) {
       setState(() => _saving = false);
       if (mounted) {

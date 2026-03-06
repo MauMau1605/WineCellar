@@ -8,7 +8,15 @@ import 'package:wine_cellar/features/wine_cellar/data/repositories/wine_reposito
 import 'package:wine_cellar/features/wine_cellar/data/repositories/food_category_repository_impl.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/food_category_repository.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/add_wine.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_wine.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_by_id.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/test_ai_connection.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/openai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
@@ -188,3 +196,46 @@ String _sanitizeGeminiModel(String? storedModel) {
 
   return candidate;
 }
+
+// ============ Use Cases — Wine ============
+
+final addWineUseCaseProvider = Provider<AddWineUseCase>((ref) {
+  return AddWineUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final getWineByIdUseCaseProvider = Provider<GetWineByIdUseCase>((ref) {
+  return GetWineByIdUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final deleteWineUseCaseProvider = Provider<DeleteWineUseCase>((ref) {
+  return DeleteWineUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final updateWineUseCaseProvider = Provider<UpdateWineUseCase>((ref) {
+  return UpdateWineUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final updateWineQuantityUseCaseProvider =
+    Provider<UpdateWineQuantityUseCase>((ref) {
+  return UpdateWineQuantityUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final exportWinesUseCaseProvider = Provider<ExportWinesUseCase>((ref) {
+  return ExportWinesUseCase(ref.watch(wineRepositoryProvider));
+});
+
+// ============ Use Cases — AI ============
+
+/// Returns null when no AI service is configured yet.
+final analyzeWineUseCaseProvider = Provider<AnalyzeWineUseCase?>((ref) {
+  final aiService = ref.watch(aiServiceProvider);
+  if (aiService == null) return null;
+  return AnalyzeWineUseCase(aiService);
+});
+
+final testAiConnectionUseCaseProvider =
+    Provider<TestAiConnectionUseCase?>((ref) {
+  final aiService = ref.watch(aiServiceProvider);
+  if (aiService == null) return null;
+  return TestAiConnectionUseCase(aiService);
+});

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 
 /// Detail screen for a single wine
 class WineDetailScreen extends ConsumerStatefulWidget {
@@ -27,13 +28,19 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Future<void> _loadWine() async {
-    final wine =
-        await ref.read(wineRepositoryProvider).getWineById(widget.wineId);
+    final result =
+        await ref.read(getWineByIdUseCaseProvider).call(widget.wineId);
     if (mounted) {
-      setState(() {
-        _wine = wine;
-        _loading = false;
-      });
+      result.fold(
+        (failure) => setState(() {
+          _wine = null;
+          _loading = false;
+        }),
+        (wine) => setState(() {
+          _wine = wine;
+          _loading = false;
+        }),
+      );
     }
   }
 
@@ -89,40 +96,31 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               context,
               'Informations',
               [
-                if (wine.appellation != null)
-                  _buildInfoRow('Appellation', wine.appellation!),
-                if (wine.producer != null)
-                  _buildInfoRow('Producteur', wine.producer!),
-                if (wine.region != null)
-                  _buildInfoRow('Région', wine.region!),
+                _buildInfoRow('Appellation', _displayValue(wine.appellation)),
+                _buildInfoRow('Producteur', _displayValue(wine.producer)),
+                _buildInfoRow('Région', _displayValue(wine.region)),
                 _buildInfoRow('Pays', wine.country),
                 _buildInfoRow(
                     'Couleur', '${wine.color.emoji} ${wine.color.label}'),
-                if (wine.vintage != null)
-                  _buildInfoRow('Millésime', wine.vintage.toString()),
-                if (wine.grapeVarieties.isNotEmpty)
-                  _buildInfoRow(
-                      'Cépages', wine.grapeVarieties.join(', ')),
+                _buildInfoRow('Millésime', _displayInt(wine.vintage)),
+                _buildInfoRow('Cépages',
+                    wine.grapeVarieties.isEmpty ? '' : wine.grapeVarieties.join(', ')),
               ],
             ),
 
-            if (wine.drinkFromYear != null || wine.drinkUntilYear != null)
-              _buildSection(
-                context,
-                'Garde',
-                [
-                  if (wine.drinkFromYear != null)
-                    _buildInfoRow('À boire à partir de',
-                        wine.drinkFromYear.toString()),
-                  if (wine.drinkUntilYear != null)
-                    _buildInfoRow(
-                        'À boire jusqu\'à', wine.drinkUntilYear.toString()),
-                  _buildInfoRow(
-                    'Statut',
-                    '${wine.maturity.emoji} ${wine.maturity.label}',
-                  ),
-                ],
-              ),
+            _buildSection(
+              context,
+              'Garde',
+              [
+                _buildInfoRow(
+                    'À boire à partir de', _displayInt(wine.drinkFromYear)),
+                _buildInfoRow('À boire jusqu\'à', _displayInt(wine.drinkUntilYear)),
+                _buildInfoRow(
+                  'Statut',
+                  '${wine.maturity.emoji} ${wine.maturity.label}',
+                ),
+              ],
+            ),
 
             _buildSection(
               context,
@@ -130,52 +128,50 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               [
                 _buildInfoRow('Quantité',
                     '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}'),
-                if (wine.purchasePrice != null)
-                  _buildInfoRow('Prix d\'achat',
-                      '${wine.purchasePrice!.toStringAsFixed(2)} €'),
-                if (wine.rating != null)
-                  _buildInfoRow(
-                    'Note',
-                    '${'★' * wine.rating!}${'☆' * (5 - wine.rating!)}',
-                  ),
-                if (wine.location != null && wine.location!.isNotEmpty)
-                  _buildInfoRow('Localisation', wine.location!),
+                _buildInfoRow(
+                    'Prix d\'achat',
+                    wine.purchasePrice != null
+                        ? '${wine.purchasePrice!.toStringAsFixed(2)} €'
+                        : ''),
+                _buildInfoRow(
+                  'Note',
+                  wine.rating != null
+                      ? '${'★' * wine.rating!}${'☆' * (5 - wine.rating!)}'
+                      : '',
+                ),
+                _buildInfoRow('Localisation', _displayValue(wine.location)),
               ],
             ),
 
-            if (wine.tastingNotes != null &&
-                wine.tastingNotes!.isNotEmpty)
-              _buildSection(
-                context,
-                'Notes de dégustation',
-                [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      wine.tastingNotes!,
-                      style: theme.textTheme.bodyMedium,
-                    ),
+            _buildSection(
+              context,
+              'Notes de dégustation',
+              [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    _displayValue(wine.tastingNotes),
+                    style: theme.textTheme.bodyMedium,
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
 
-            if (wine.aiDescription != null &&
-                wine.aiDescription!.isNotEmpty)
-              _buildSection(
-                context,
-                'Description IA',
-                [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      wine.aiDescription!,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontStyle: FontStyle.italic,
-                      ),
+            _buildSection(
+              context,
+              'Description IA',
+              [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    _displayValue(wine.aiDescription),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -309,6 +305,15 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
   }
 
+  String _displayValue(String? value) {
+    if (value == null) return '';
+    return value.trim();
+  }
+
+  String _displayInt(int? value) {
+    return value?.toString() ?? '';
+  }
+
   Future<void> _navigateToEdit(WineEntity wine) async {
     final updated = await context.push<bool>(
       '/cellar/wine/${wine.id}/edit',
@@ -351,22 +356,44 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
 
       if (!mounted || action == null || action == 'cancel') return;
 
-      if (action == 'delete') {
-        await ref.read(wineRepositoryProvider).deleteWine(wine.id!);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vin supprimé')),
-          );
-          context.go('/cellar');
-        }
-        return;
-      }
-      // action == 'zero': continue to set quantity to 0
-    }
+      final useCase = ref.read(updateWineQuantityUseCaseProvider);
+      final params = UpdateQuantityParams(
+        wineId: wine.id!,
+        newQuantity: newQty,
+      );
+      final zeroAction = action == 'delete'
+          ? ZeroQuantityAction.delete
+          : ZeroQuantityAction.keep;
 
-    await ref
-        .read(wineRepositoryProvider)
-        .updateQuantity(wine.id!, newQty < 0 ? 0 : newQty);
+      final result = await useCase.callWithAction(params, zeroAction);
+      result.fold(
+        (failure) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(failure.message)),
+            );
+          }
+        },
+        (_) {
+          if (mounted && action == 'delete') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vin supprimé')),
+            );
+            context.go('/cellar');
+            return;
+          }
+        },
+      );
+      if (action == 'delete') return;
+      // action == 'zero': continue to reload
+    } else {
+      final useCase = ref.read(updateWineQuantityUseCaseProvider);
+      final params = UpdateQuantityParams(
+        wineId: wine.id!,
+        newQuantity: newQty,
+      );
+      await useCase(params);
+    }
     await _loadWine();
   }
 
@@ -392,13 +419,24 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
 
     if (confirmed == true && wine.id != null) {
-      await ref.read(wineRepositoryProvider).deleteWine(wine.id!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vin supprimé')),
-        );
-        context.go('/cellar');
-      }
+      final result = await ref.read(deleteWineUseCaseProvider).call(wine.id!);
+      result.fold(
+        (failure) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(failure.message)),
+            );
+          }
+        },
+        (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Vin supprimé')),
+            );
+            context.go('/cellar');
+          }
+        },
+      );
     }
   }
 }

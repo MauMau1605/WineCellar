@@ -10,13 +10,28 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_servic
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
 import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 
+/// Data passed from the add-wine screen to pre-fill the AI chat.
+class PrefillData {
+  /// Text shown in the chat bubble (field list only).
+  final String displayText;
+
+  /// Full prompt sent to the AI (instructions + field list).
+  final String aiPrompt;
+
+  const PrefillData({required this.displayText, required this.aiPrompt});
+}
+
 /// AI Chat screen for adding wines via natural language
 class ChatScreen extends ConsumerStatefulWidget {
+  /// Set before navigating to /chat to pre-fill and auto-send.
+  static PrefillData? pendingPrefill;
+
   const ChatScreen({super.key});
 
   @override
@@ -38,20 +53,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isLoading = false;
   bool _searchMode = false;
   final _chatLogger = ChatLogger();
+  PrefillData? _prefillData;
 
   @override
   void initState() {
     super.initState();
+    // Consume and clear the pending prefill data (if any).
+    _prefillData = ChatScreen.pendingPrefill;
+    ChatScreen.pendingPrefill = null;
+
     if (_sessionMessages.isEmpty) {
       _chatLogger.startSession();
       _messages.add(_buildWelcomeMessage());
       _cacheConversationState();
-      return;
+    } else {
+      _messages.addAll(_sessionMessages);
+      _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
+      _searchMode = _sessionSearchMode;
     }
-
-    _messages.addAll(_sessionMessages);
-    _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
-    _searchMode = _sessionSearchMode;
+    _handlePrefillMessage();
   }
 
   @override
@@ -64,6 +84,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final aiService = ref.watch(aiServiceProvider);
+    final analyzeUseCase = ref.watch(analyzeWineUseCaseProvider);
+    final isConfigured = aiService != null && analyzeUseCase != null;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -85,7 +107,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           // API key warning
-          if (aiService == null)
+          if (!isConfigured)
             MaterialBanner(
               content: const Text(
                 'Configurez votre clé API dans les paramètres pour utiliser l\'assistant IA.',
@@ -188,7 +210,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       maxLines: null,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
-                      enabled: aiService != null && !_isLoading,
+                      enabled: isConfigured && !_isLoading,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -196,7 +218,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   IconButton.filled(
                     icon: const Icon(Icons.send),
                     onPressed:
-                        aiService != null && !_isLoading ? _sendMessage : null,
+                        isConfigured && !_isLoading ? _sendMessage : null,
                   ),
                 ],
               ),
@@ -209,16 +231,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
-    if (text.isEmpty) return;
+    await _sendText(text);
+  }
 
-    final aiService = ref.read(aiServiceProvider);
-    if (aiService == null) return;
+  /// Sends a message to the AI.
+  ///
+  /// [text] is displayed in the chat bubble.
+  /// If [aiMessage] is provided it is sent to the AI instead of [text],
+  /// allowing the visible message to differ from the actual prompt.
+  Future<void> _sendText(String text, {String? aiMessage}) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || _isLoading) return;
 
-    // Add user message
+    final analyzeUseCase = ref.read(analyzeWineUseCaseProvider);
+    if (analyzeUseCase == null) return;
+
     setState(() {
       _messages.add(ChatMessage(
         id: _uuid.v4(),
-        content: text,
+        content: trimmed,
         role: ChatRole.user,
         timestamp: DateTime.now(),
       ));
@@ -227,7 +258,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _textController.clear();
     _scrollToBottom();
 
-    // Build conversation history for context
     final history = _messages
         .where((m) => m.role != ChatRole.system)
         .map((m) => {
@@ -236,51 +266,85 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             })
         .toList();
 
-    // Remove the last message (current one) from history since it's the userMessage
     if (history.isNotEmpty) history.removeLast();
 
-    // Build the actual message to send to the AI
-    String messageToSend = text;
-    if (_searchMode) {
+    String messageToSend = aiMessage?.trim() ?? trimmed;
+    if (aiMessage == null && _searchMode) {
       final wines = await ref.read(wineRepositoryProvider).getAllWines();
       final cellarSummary = _buildCellarSummary(wines);
       messageToSend = AiPrompts.buildCellarSearchMessage(
-        userQuestion: text,
+        userQuestion: trimmed,
         cellarSummary: cellarSummary,
       );
     }
 
-    // Call AI service
-    _chatLogger.logUserMessage(text);
+    _chatLogger.logUserMessage(trimmed);
 
-    final result = await aiService.analyzeWine(
+    final either = await analyzeUseCase(AnalyzeWineParams(
       userMessage: messageToSend,
       conversationHistory: history,
+    ));
+
+    either.fold(
+      (failure) {
+        _chatLogger.logError(failure.message);
+        setState(() {
+          _isLoading = false;
+          _messages.add(ChatMessage(
+            id: _uuid.v4(),
+            content: failure.message,
+            role: ChatRole.assistant,
+            timestamp: DateTime.now(),
+          ));
+        });
+      },
+      (result) {
+        _chatLogger.logAiResponse(result.textResponse);
+        setState(() {
+          _isLoading = false;
+          _messages.add(ChatMessage(
+            id: _uuid.v4(),
+            content: result.textResponse,
+            role: ChatRole.assistant,
+            timestamp: DateTime.now(),
+          ));
+
+          if (result.wineDataList.isNotEmpty) {
+            _currentWineDataList = result.wineDataList;
+            _addedWineIndices.clear();
+          }
+        });
+      },
     );
-
-    // Log the AI response or error
-    if (result.isError) {
-      _chatLogger.logError(result.errorMessage ?? result.textResponse);
-    } else {
-      _chatLogger.logAiResponse(result.textResponse);
-    }
-
-    setState(() {
-      _isLoading = false;
-      _messages.add(ChatMessage(
-        id: _uuid.v4(),
-        content: result.textResponse,
-        role: ChatRole.assistant,
-        timestamp: DateTime.now(),
-      ));
-
-      if (result.wineDataList.isNotEmpty) {
-        _currentWineDataList = result.wineDataList;
-        _addedWineIndices.clear();
-      }
-    });
     _cacheConversationState();
     _scrollToBottom();
+  }
+
+  void _handlePrefillMessage() {
+    final data = _prefillData;
+    _prefillData = null;
+    if (data == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      // Ensure we are in add-wine mode, not search mode.
+      if (_searchMode) {
+        _onModeChanged(false);
+      }
+
+      final analyzeUseCase = ref.read(analyzeWineUseCaseProvider);
+      if (analyzeUseCase == null) {
+        // AI not configured – just fill the text field so the user can
+        // configure AI and send manually.
+        _textController.text = data.displayText;
+        return;
+      }
+
+      // Show the field list in the chat bubble but send the full
+      // AI instruction prompt.
+      await _sendText(data.displayText, aiMessage: data.aiPrompt);
+    });
   }
 
   /// Build preview cards for all wines in the current list
@@ -338,7 +402,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
-    final repo = ref.read(wineRepositoryProvider);
+    final addWineUseCase = ref.read(addWineUseCaseProvider);
     final foodCategoryRepo = ref.read(foodCategoryRepositoryProvider);
 
     // Match food pairing names to category IDs
@@ -375,33 +439,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       foodCategoryIds: matchedCategoryIds,
     );
 
-    try {
-      await repo.addWine(wine);
-      _chatLogger.logWineAdded(wine.displayName);
-      setState(() {
-        _addedWineIndices.add(wineIndex);
-      });
-      _cacheConversationState();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${wine.displayName} ajouté à la cave ! 🍷'),
-            showCloseIcon: true,
-            action: SnackBarAction(
-              label: 'Voir la cave',
-              onPressed: () => context.go('/cellar'),
+    final result = await addWineUseCase(wine);
+    result.fold(
+      (failure) {
+        _chatLogger.logError('Erreur ajout vin: ${failure.message}');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message)),
+          );
+        }
+      },
+      (_) {
+        _chatLogger.logWineAdded(wine.displayName);
+        setState(() {
+          _addedWineIndices.add(wineIndex);
+        });
+        _cacheConversationState();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${wine.displayName} ajouté à la cave ! 🍷'),
+              showCloseIcon: true,
+              action: SnackBarAction(
+                label: 'Voir la cave',
+                onPressed: () => context.go('/cellar'),
+              ),
             ),
-          ),
-        );
-      }
-    } catch (e) {
-      _chatLogger.logError('Erreur ajout vin', e);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
+          );
+        }
+      },
+    );
   }
 
   void _resetConversation() {

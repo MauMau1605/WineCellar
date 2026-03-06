@@ -6,6 +6,8 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_card.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/wine_list_provider.dart';
 
@@ -37,7 +39,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            onSelected: (value) => _handleMenuAction(context, value),
+            onSelected: _handleMenuAction,
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'export_json',
@@ -128,7 +130,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/chat'),
+        onPressed: () => context.go('/cellar/add'),
         icon: const Icon(Icons.add),
         label: const Text('Ajouter un vin'),
       ),
@@ -246,13 +248,19 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   Future<void> _updateQuantity(WineEntity wine, int newQty) async {
     if (wine.id == null) return;
 
+    final useCase = ref.read(updateWineQuantityUseCaseProvider);
+    final params = UpdateQuantityParams(
+      wineId: wine.id!,
+      newQuantity: newQty,
+    );
+
     if (newQty <= 0) {
       final action = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Derni\u00e8re bouteille !'),
+          title: const Text('Dernière bouteille !'),
           content: Text(
-            'La quantit\u00e9 de "${wine.displayName}" va passer \u00e0 0.\n'
+            'La quantité de "${wine.displayName}" va passer à 0.\n'
             'Que souhaitez-vous faire ?',
           ),
           actions: [
@@ -262,7 +270,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             ),
             OutlinedButton(
               onPressed: () => Navigator.of(ctx).pop('zero'),
-              child: const Text('Garder \u00e0 0'),
+              child: const Text('Garder à 0'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop('delete'),
@@ -275,55 +283,92 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
       if (!mounted || action == null || action == 'cancel') return;
 
-      if (action == 'delete') {
-        await ref.read(wineRepositoryProvider).deleteWine(wine.id!);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('"${wine.displayName}" supprim\u00e9')),
-          );
-        }
-        return;
-      }
-      // action == 'zero'
+      final zeroAction = action == 'delete'
+          ? ZeroQuantityAction.delete
+          : ZeroQuantityAction.keep;
+
+      final result = await useCase.callWithAction(params, zeroAction);
+      result.fold(
+        (failure) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(failure.message)),
+            );
+          }
+        },
+        (_) {
+          if (mounted && action == 'delete') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('"${wine.displayName}" supprimé')),
+            );
+          }
+        },
+      );
+      return;
     }
 
-    await ref.read(wineRepositoryProvider).updateQuantity(wine.id!, newQty < 0 ? 0 : newQty);
+    final result = await useCase(params);
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message)),
+          );
+        }
+      },
+      (_) {},
+    );
   }
 
-  Future<void> _handleMenuAction(BuildContext context, String action) async {
-    final repo = ref.read(wineRepositoryProvider);
-    try {
-      switch (action) {
-        case 'export_json':
-          final json = await repo.exportToJson();
-          await _saveExport(json, 'cave_export.json');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Export JSON réalisé !')),
-            );
-          }
-        case 'export_csv':
-          final csv = await repo.exportToCsv();
-          await _saveExport(csv, 'cave_export.csv');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Export CSV réalisé !')),
-            );
-          }
-        case 'import_json':
-          // TODO: Implement file picker for import
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Import : bientôt disponible')),
-            );
-          }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+  Future<void> _handleMenuAction(String action) async {
+    final exportUseCase = ref.read(exportWinesUseCaseProvider);
+
+    switch (action) {
+      case 'export_json':
+        final result = await exportUseCase(ExportFormat.json);
+        result.fold(
+          (failure) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(failure.message)),
+              );
+            }
+          },
+          (json) async {
+            await _saveExport(json, 'cave_export.json');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Export JSON réalisé !')),
+              );
+            }
+          },
         );
-      }
+      case 'export_csv':
+        final result = await exportUseCase(ExportFormat.csv);
+        result.fold(
+          (failure) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(failure.message)),
+              );
+            }
+          },
+          (csv) async {
+            await _saveExport(csv, 'cave_export.csv');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Export CSV réalisé !')),
+              );
+            }
+          },
+        );
+      case 'import_json':
+        // TODO: Implement file picker for import
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Import : bientôt disponible')),
+          );
+        }
     }
   }
 
