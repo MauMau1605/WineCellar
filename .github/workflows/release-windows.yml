@@ -28,6 +28,17 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Cache build_runner
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-runner-
+
+      - name: Generate code (build_runner)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
       - name: Generate Windows host project (if missing)
         run: flutter create --platforms=windows .
 
