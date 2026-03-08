@@ -39,6 +39,8 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
   late final TextEditingController _ratingCtrl;
   late final TextEditingController _notesCtrl;
   late final TextEditingController _locationCtrl;
+  late final TextEditingController _cellarXCtrl;
+  late final TextEditingController _cellarYCtrl;
 
   WineColor _selectedColor = WineColor.red;
 
@@ -60,6 +62,8 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     _ratingCtrl = TextEditingController();
     _notesCtrl = TextEditingController();
     _locationCtrl = TextEditingController();
+    _cellarXCtrl = TextEditingController();
+    _cellarYCtrl = TextEditingController();
     _loadWine();
   }
 
@@ -92,6 +96,8 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
           _ratingCtrl.text = wine.rating?.toString() ?? '';
           _notesCtrl.text = wine.notes ?? '';
           _locationCtrl.text = wine.location ?? '';
+          _cellarXCtrl.text = wine.cellarPositionX?.toString() ?? '';
+          _cellarYCtrl.text = wine.cellarPositionY?.toString() ?? '';
           _selectedColor = wine.color;
           _loading = false;
         });
@@ -116,6 +122,8 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     _ratingCtrl.dispose();
     _notesCtrl.dispose();
     _locationCtrl.dispose();
+    _cellarXCtrl.dispose();
+    _cellarYCtrl.dispose();
     super.dispose();
   }
 
@@ -289,6 +297,36 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _cellarXCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Position cave X',
+                      prefixIcon: Icon(Icons.straighten),
+                      helperText: 'Coordonnée plan (optionnel)',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _cellarYCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Position cave Y',
+                      prefixIcon: Icon(Icons.straighten),
+                      helperText: 'Coordonnée plan (optionnel)',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _ratingCtrl,
               decoration: const InputDecoration(
@@ -389,6 +427,11 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
         .where((s) => s.isNotEmpty)
         .toList();
 
+    final parsedDrinkFromYear = int.tryParse(_drinkFromCtrl.text);
+    final parsedDrinkUntilYear = int.tryParse(_drinkUntilCtrl.text);
+    final drinkFromChanged = parsedDrinkFromYear != _wine!.drinkFromYear;
+    final drinkUntilChanged = parsedDrinkUntilYear != _wine!.drinkUntilYear;
+
     final updated = _wine!.copyWith(
       name: _nameCtrl.text.trim(),
       appellation:
@@ -403,14 +446,20 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
       grapeVarieties: grapes,
       quantity: int.tryParse(_quantityCtrl.text) ?? _wine!.quantity,
       purchasePrice: double.tryParse(_priceCtrl.text),
-      drinkFromYear: int.tryParse(_drinkFromCtrl.text),
-      drinkUntilYear: int.tryParse(_drinkUntilCtrl.text),
+        drinkFromYear: parsedDrinkFromYear,
+        aiSuggestedDrinkFromYear:
+          drinkFromChanged ? false : _wine!.aiSuggestedDrinkFromYear,
+        drinkUntilYear: parsedDrinkUntilYear,
+        aiSuggestedDrinkUntilYear:
+          drinkUntilChanged ? false : _wine!.aiSuggestedDrinkUntilYear,
       tastingNotes: _tastingNotesCtrl.text.trim().isEmpty
           ? null
           : _tastingNotesCtrl.text.trim(),
       rating: int.tryParse(_ratingCtrl.text),
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       location: _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim(),
+      cellarPositionX: double.tryParse(_cellarXCtrl.text.trim()),
+      cellarPositionY: double.tryParse(_cellarYCtrl.text.trim()),
       updatedAt: DateTime.now(),
     );
 

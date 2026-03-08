@@ -16,12 +16,17 @@ class WineEntity {
   final double? purchasePrice;
   final DateTime? purchaseDate;
   final int? drinkFromYear;
+  final bool aiSuggestedDrinkFromYear;
   final int? drinkUntilYear;
+  final bool aiSuggestedDrinkUntilYear;
   final String? tastingNotes;
   final int? rating;
   final String? photoPath;
   final String? aiDescription;
+  final bool aiSuggestedFoodPairings;
   final String? location;
+  final double? cellarPositionX;
+  final double? cellarPositionY;
   final String? notes;
   final List<int> foodCategoryIds;
   final DateTime? createdAt;
@@ -41,12 +46,17 @@ class WineEntity {
     this.purchasePrice,
     this.purchaseDate,
     this.drinkFromYear,
+    this.aiSuggestedDrinkFromYear = false,
     this.drinkUntilYear,
+    this.aiSuggestedDrinkUntilYear = false,
     this.tastingNotes,
     this.rating,
     this.photoPath,
     this.aiDescription,
+    this.aiSuggestedFoodPairings = false,
     this.location,
+    this.cellarPositionX,
+    this.cellarPositionY,
     this.notes,
     this.foodCategoryIds = const [],
     this.createdAt,
@@ -101,12 +111,17 @@ class WineEntity {
     double? purchasePrice,
     DateTime? purchaseDate,
     int? drinkFromYear,
+    bool? aiSuggestedDrinkFromYear,
     int? drinkUntilYear,
+    bool? aiSuggestedDrinkUntilYear,
     String? tastingNotes,
     int? rating,
     String? photoPath,
     String? aiDescription,
+    bool? aiSuggestedFoodPairings,
     String? location,
+    double? cellarPositionX,
+    double? cellarPositionY,
     String? notes,
     List<int>? foodCategoryIds,
     DateTime? createdAt,
@@ -126,12 +141,20 @@ class WineEntity {
       purchasePrice: purchasePrice ?? this.purchasePrice,
       purchaseDate: purchaseDate ?? this.purchaseDate,
       drinkFromYear: drinkFromYear ?? this.drinkFromYear,
+        aiSuggestedDrinkFromYear:
+          aiSuggestedDrinkFromYear ?? this.aiSuggestedDrinkFromYear,
       drinkUntilYear: drinkUntilYear ?? this.drinkUntilYear,
+        aiSuggestedDrinkUntilYear:
+          aiSuggestedDrinkUntilYear ?? this.aiSuggestedDrinkUntilYear,
       tastingNotes: tastingNotes ?? this.tastingNotes,
       rating: rating ?? this.rating,
       photoPath: photoPath ?? this.photoPath,
       aiDescription: aiDescription ?? this.aiDescription,
+        aiSuggestedFoodPairings:
+          aiSuggestedFoodPairings ?? this.aiSuggestedFoodPairings,
       location: location ?? this.location,
+        cellarPositionX: cellarPositionX ?? this.cellarPositionX,
+        cellarPositionY: cellarPositionY ?? this.cellarPositionY,
       notes: notes ?? this.notes,
       foodCategoryIds: foodCategoryIds ?? this.foodCategoryIds,
       createdAt: createdAt ?? this.createdAt,
@@ -155,11 +178,16 @@ class WineEntity {
       'purchasePrice': purchasePrice,
       'purchaseDate': purchaseDate?.toIso8601String(),
       'drinkFromYear': drinkFromYear,
+      'aiSuggestedDrinkFromYear': aiSuggestedDrinkFromYear,
       'drinkUntilYear': drinkUntilYear,
+      'aiSuggestedDrinkUntilYear': aiSuggestedDrinkUntilYear,
       'tastingNotes': tastingNotes,
       'rating': rating,
       'aiDescription': aiDescription,
+      'aiSuggestedFoodPairings': aiSuggestedFoodPairings,
       'location': location,
+      'cellarPositionX': cellarPositionX,
+      'cellarPositionY': cellarPositionY,
       'notes': notes,
       'foodCategoryIds': foodCategoryIds,
     };
@@ -189,11 +217,19 @@ class WineEntity {
           ? DateTime.tryParse(json['purchaseDate'] as String)
           : null,
       drinkFromYear: json['drinkFromYear'] as int?,
+        aiSuggestedDrinkFromYear:
+          json['aiSuggestedDrinkFromYear'] as bool? ?? false,
       drinkUntilYear: json['drinkUntilYear'] as int?,
+        aiSuggestedDrinkUntilYear:
+          json['aiSuggestedDrinkUntilYear'] as bool? ?? false,
       tastingNotes: json['tastingNotes'] as String?,
       rating: json['rating'] as int?,
       aiDescription: json['aiDescription'] as String?,
+        aiSuggestedFoodPairings:
+          json['aiSuggestedFoodPairings'] as bool? ?? false,
       location: json['location'] as String?,
+        cellarPositionX: (json['cellarPositionX'] as num?)?.toDouble(),
+        cellarPositionY: (json['cellarPositionY'] as num?)?.toDouble(),
       notes: json['notes'] as String?,
       foodCategoryIds: (json['foodCategoryIds'] as List<dynamic>?)
               ?.map((e) => e as int)

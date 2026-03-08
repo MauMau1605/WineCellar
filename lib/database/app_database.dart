@@ -35,9 +35,11 @@ class AppDatabase extends _$AppDatabase {
         await _seedFoodCategories();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 2) {
-          await m.addColumn(wines, wines.location);
-        }
+        await m.deleteTable('wine_food_pairings');
+        await m.deleteTable('wines');
+        await m.deleteTable('food_categories');
+        await m.createAll();
+        await _seedFoodCategories();
       },
     );
   }

@@ -36,6 +36,8 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
   final _ratingCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
+  final _cellarXCtrl = TextEditingController();
+  final _cellarYCtrl = TextEditingController();
   final _aiDescriptionCtrl = TextEditingController();
 
   WineColor _selectedColor = WineColor.red;
@@ -73,6 +75,8 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     _ratingCtrl.dispose();
     _notesCtrl.dispose();
     _locationCtrl.dispose();
+    _cellarXCtrl.dispose();
+    _cellarYCtrl.dispose();
     _aiDescriptionCtrl.dispose();
     super.dispose();
   }
@@ -251,6 +255,36 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                   labelText: 'Localisation',
                   prefixIcon: Icon(Icons.place),
                 ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _cellarXCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Position cave X',
+                        prefixIcon: Icon(Icons.straighten),
+                        helperText: 'Coordonnée plan (optionnel)',
+                      ),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _cellarYCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Position cave Y',
+                        prefixIcon: Icon(Icons.straighten),
+                        helperText: 'Coordonnée plan (optionnel)',
+                      ),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -611,12 +645,17 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       quantity: int.tryParse(_quantityCtrl.text.trim()) ?? 1,
       purchasePrice: double.tryParse(_priceCtrl.text.trim()),
       drinkFromYear: int.tryParse(_drinkFromCtrl.text.trim()),
+      aiSuggestedDrinkFromYear: false,
       drinkUntilYear: int.tryParse(_drinkUntilCtrl.text.trim()),
+      aiSuggestedDrinkUntilYear: false,
       tastingNotes: _emptyToNull(_tastingNotesCtrl.text),
       rating: int.tryParse(_ratingCtrl.text.trim()),
       notes: _emptyToNull(_notesCtrl.text),
       location: _emptyToNull(_locationCtrl.text),
+      cellarPositionX: double.tryParse(_cellarXCtrl.text.trim()),
+      cellarPositionY: double.tryParse(_cellarYCtrl.text.trim()),
       aiDescription: _emptyToNull(_aiDescriptionCtrl.text),
+      aiSuggestedFoodPairings: false,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -645,6 +684,8 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     addField('À boire dès', _drinkFromCtrl.text);
     addField('À boire jusqu\'à', _drinkUntilCtrl.text);
     addField('Localisation', _locationCtrl.text);
+    addField('Position cave X', _cellarXCtrl.text);
+    addField('Position cave Y', _cellarYCtrl.text);
     addField('Note', _ratingCtrl.text);
     addField('Notes de dégustation', _tastingNotesCtrl.text);
     addField('Notes personnelles', _notesCtrl.text);

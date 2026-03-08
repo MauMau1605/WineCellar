@@ -14,6 +14,9 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_by_id.
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_json.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/test_ai_connection.dart';
@@ -222,6 +225,18 @@ final updateWineQuantityUseCaseProvider =
 
 final exportWinesUseCaseProvider = Provider<ExportWinesUseCase>((ref) {
   return ExportWinesUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final importWinesFromJsonUseCaseProvider = Provider<ImportWinesFromJsonUseCase>((ref) {
+  return ImportWinesFromJsonUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final parseCsvImportUseCaseProvider = Provider<ParseCsvImportUseCase>((ref) {
+  return ParseCsvImportUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final importWinesFromCsvUseCaseProvider = Provider<ImportWinesFromCsvUseCase>((ref) {
+  return ImportWinesFromCsvUseCase(ref.watch(wineRepositoryProvider));
 });
 
 // ============ Use Cases — AI ============

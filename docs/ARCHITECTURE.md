@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 6 mars 2026.
+> Dernière mise à jour : 7 mars 2026.
 
 ---
 
@@ -84,7 +84,9 @@ lib/
 │   │   │   ├── entities/
 │   │   │   │   ├── wine_entity.dart
 │   │   │   │   ├── food_category_entity.dart
-│   │   │   │   └── wine_filter.dart
+│   │   │   │   ├── wine_filter.dart
+│   │   │   │   ├── csv_column_mapping.dart
+│   │   │   │   └── csv_import_row.dart
 │   │   │   ├── repositories/
 │   │   │   │   ├── wine_repository.dart
 │   │   │   │   └── food_category_repository.dart
@@ -94,7 +96,10 @@ lib/
 │   │   │       ├── get_wine_by_id.dart
 │   │   │       ├── update_wine.dart
 │   │   │       ├── update_wine_quantity.dart
-│   │   │       └── export_wines.dart
+│   │   │       ├── export_wines.dart
+│   │   │       ├── import_wines_from_json.dart
+│   │   │       ├── parse_csv_import.dart
+│   │   │       └── import_wines_from_csv.dart
 │   │   ├── data/
 │   │   │   └── repositories/
 │   │   │       ├── wine_repository_impl.dart
@@ -108,7 +113,8 @@ lib/
 │   │       │   ├── wine_detail_screen.dart
 │   │       │   └── wine_edit_screen.dart
 │   │       └── widgets/
-│   │           └── wine_card.dart
+│   │           ├── wine_card.dart
+│   │           └── csv_column_mapping_dialog.dart
 │   │
 │   ├── ai_assistant/                  # Feature IA
 │   │   ├── domain/
@@ -245,7 +251,10 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 Infrastructure SQLite partagée (Drift ORM). Vit au niveau `lib/` car utilisée par plusieurs features.
 
 ### `tables/wines.dart` — `Wines`
-Table Drift avec 21 colonnes : `id`, `name`, `appellation`, `producer`, `region`, `country`, `color`, `vintage`, `grapeVarieties` (JSON string), `quantity`, `purchasePrice`, `purchaseDate`, `drinkFromYear`, `drinkUntilYear`, `tastingNotes`, `rating`, `photoPath`, `aiDescription`, `location`, `notes`, `createdAt`, `updatedAt`.
+Table Drift incluant :
+- colonnes métier vin (nom, appellation, producteur, garde, notes, etc.)
+- source IA persistée par champ critique : `aiSuggestedFoodPairings`, `aiSuggestedDrinkFromYear`, `aiSuggestedDrinkUntilYear`
+- localisation cave virtuelle : `cellarPositionX`, `cellarPositionY`
 
 ### `tables/food_categories.dart` — `FoodCategories`
 Table : `id`, `name`, `icon` (emoji), `sortOrder`.
@@ -255,7 +264,8 @@ Table de jointure many-to-many : `wineId` → `Wines.id`, `foodCategoryId` → `
 
 ### `app_database.dart` — `AppDatabase`
 - Classe Drift `@DriftDatabase` regroupant les 3 tables et 2 DAOs
-- `schemaVersion = 2` — migration v1→v2 : ajout colonne `location`
+- `schemaVersion = 3`
+- Stratégie actuelle d'upgrade : reset destructif des tables (pas de migration incrémentale conservatrice)
 - `_seedFoodCategories()` — pré-peuple 18 catégories alimentaires à la création
 
 ### `daos/wine_dao.dart` — `WineDao`
@@ -313,7 +323,7 @@ Contrat pour les opérations vin :
 - Streams réactifs : `watchAllWines`, `watchFilteredWines`
 - Quantité : `updateQuantity`
 - Stats : `getWineCount`, `getTotalBottles`
-- Export/Import : `exportToJson`, `exportToCsv`, `importFromJson`
+- Export/Import : `exportToJson`, `exportToCsv`, `importFromJson`, `parseCsvRows`, `importFromCsv`
 
 #### `food_category_repository.dart` — `FoodCategoryRepository` (abstract)
 - `getAllCategories()`, `watchAllCategories()`, `findByName(String)`
@@ -330,6 +340,9 @@ Chaque use case a **une seule** méthode `call()` retournant `Either<Failure, T>
 | `UpdateWineUseCase` | `WineEntity` | `void` | Valide id non-null + nom non-vide |
 | `UpdateWineQuantityUseCase` | `UpdateQuantityParams` | `void` | Clamp à 0 min. Méthode étendue `callWithAction()` pour gérer le cas « quantité à zéro : garder ou supprimer » |
 | `ExportWinesUseCase` | `ExportFormat` | `String` | Délègue au repo selon format (JSON/CSV) |
+| `ImportWinesFromJsonUseCase` | `String` (JSON) | `int` | Valide contenu + délègue import JSON |
+| `ParseCsvImportUseCase` | `ParseCsvImportParams` | `List<CsvImportRow>` | Parse CSV avec mapping de colonnes utilisateur |
+| `ImportWinesFromCsvUseCase` | `ImportWinesFromCsvParams` | `int` | Import direct CSV après validation de mapping |
 
 ### data/repositories/
 
@@ -338,6 +351,7 @@ Chaque use case a **une seule** méthode `call()` retournant `Either<Failure, T>
 - Injecté avec `WineDao` et `FoodCategoryDao`
 - Responsabilités de mapping : `_mapToEntity(Wine)` (DB → domain) et `_mapToCompanion(WineEntity)` (domain → DB)
 - Import JSON : parse et boucle `addWine`
+- Import CSV : parsing avec mapping utilisateur + normalisation des champs (quantité, prix, couleur)
 
 #### `food_category_repository_impl.dart` — `FoodCategoryRepositoryImpl`
 - Implémente `FoodCategoryRepository`
@@ -357,7 +371,9 @@ Providers Riverpod déclaratifs :
 - Écran principal de la cave
 - Barre de recherche, chips de filtre (couleur + maturité)
 - Layout adaptatif : `ListView` (mobile) / `GridView` (desktop)
-- Actions menu : export JSON/CSV via `ExportWinesUseCase`
+- Actions menu : export JSON/CSV + import JSON/CSV
+- Import CSV guidé : mapping colonnes → prévisualisation extraction → mode direct ou enrichissement IA
+- Enrichissement IA par lots de 20 vins max avec validation utilisateur à chaque lot
 - Gestion quantité via `UpdateWineQuantityUseCase` avec dialogue confirmation
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
 
@@ -522,6 +538,9 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | `updateWineUseCaseProvider` | `Provider<UpdateWineUseCase>` |
 | `updateWineQuantityUseCaseProvider` | `Provider<UpdateWineQuantityUseCase>` |
 | `exportWinesUseCaseProvider` | `Provider<ExportWinesUseCase>` |
+| `importWinesFromJsonUseCaseProvider` | `Provider<ImportWinesFromJsonUseCase>` |
+| `parseCsvImportUseCaseProvider` | `Provider<ParseCsvImportUseCase>` |
+| `importWinesFromCsvUseCaseProvider` | `Provider<ImportWinesFromCsvUseCase>` |
 
 ### Use Cases — AI
 
@@ -583,6 +602,26 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
      → WineDao.getAllWines() → mapping → ListToCsvConverter
    ← Either<Failure, String>
 4. _saveExport(csvString, "cave_export.csv")
+
+### Import CSV avec mapping + IA (optionnel)
+
+```
+1. WineListScreen : menu → "Importer CSV"
+2. FilePicker : sélection du fichier CSV
+3. CsvColumnMappingDialog : l'utilisateur associe les colonnes aux champs vin
+4. ParseCsvImportUseCase.call(ParseCsvImportParams)
+  → WineRepository.parseCsvRows(...)
+  → preview extraction (échantillon)
+5. Choix utilisateur :
+  A) Import direct
+    → ImportWinesFromCsvUseCase.call(...)
+    → WineRepository.importFromCsv(...)
+  B) Compléter avec IA
+    → découpage en lots de 20
+    → AnalyzeWineUseCase.call(...) pour chaque lot
+    → tableau de validation utilisateur
+    → AddWineUseCase pour chaque vin validé
+```
 ```
 
 ---
@@ -615,5 +654,4 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | 3 | **Pas de barrel files** (`index.dart`) | Faible | Simplification des imports |
 | 4 | **`ChatLogger` singleton** — non injecté via Riverpod | Faible | Testabilité |
 | 5 | **Tests unitaires/widget absents** — à implémenter (mocktail) | Haute | Fiabilité |
-| 6 | **`_saveExport` non implémenté** dans `WineListScreen` | Moyenne | La fonctionnalité export est incomplète |
-| 7 | **Import JSON** via file picker non implémenté | Moyenne | Feature manquante |
+| 6 | **Import CSV piloté par prompts IA** (qualité dépendante du provider/modèle) | Moyenne | Peut nécessiter ajustement de prompt selon modèle |

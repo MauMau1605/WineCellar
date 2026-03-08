@@ -8,7 +8,7 @@ class AppConstants {
 
   // Database
   static const String databaseName = 'wine_cellar.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 3;
 
   // AI defaults
   static const String defaultOllamaUrl = 'http://localhost:11434';

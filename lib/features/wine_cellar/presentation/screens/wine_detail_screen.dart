@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/theme.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 
@@ -19,6 +20,7 @@ class WineDetailScreen extends ConsumerStatefulWidget {
 
 class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   WineEntity? _wine;
+  List<FoodCategoryEntity> _pairings = const [];
   bool _loading = true;
 
   @override
@@ -34,14 +36,38 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       result.fold(
         (failure) => setState(() {
           _wine = null;
+          _pairings = const [];
           _loading = false;
         }),
-        (wine) => setState(() {
-          _wine = wine;
-          _loading = false;
-        }),
+        (wine) {
+          if (wine == null) {
+            setState(() {
+              _wine = null;
+              _pairings = const [];
+              _loading = false;
+            });
+            return;
+          }
+          _loadWineWithPairings(wine);
+        },
       );
     }
+  }
+
+  Future<void> _loadWineWithPairings(WineEntity wine) async {
+    final categories =
+        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+
+    final explicitPairings = categories
+        .where((category) => wine.foodCategoryIds.contains(category.id))
+        .toList();
+
+    if (!mounted) return;
+    setState(() {
+      _wine = wine;
+      _pairings = explicitPairings;
+      _loading = false;
+    });
   }
 
   @override
@@ -113,12 +139,32 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               'Garde',
               [
                 _buildInfoRow(
-                    'À boire à partir de', _displayInt(wine.drinkFromYear)),
-                _buildInfoRow('À boire jusqu\'à', _displayInt(wine.drinkUntilYear)),
+                  'À boire à partir de',
+                  _displayInt(wine.drinkFromYear),
+                  aiSuggested:
+                      _isAiSuggestedGuardValue(wine, wine.drinkFromYear),
+                ),
+                _buildInfoRow(
+                  'À boire jusqu\'à',
+                  _displayInt(wine.drinkUntilYear),
+                  aiSuggested:
+                      _isAiSuggestedGuardValue(wine, wine.drinkUntilYear),
+                ),
                 _buildInfoRow(
                   'Statut',
                   '${wine.maturity.emoji} ${wine.maturity.label}',
                 ),
+                if (_isAiGuardInfoPresent(wine))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '🤖 = information proposée par l\'IA',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
             ),
 
@@ -140,6 +186,54 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                       : '',
                 ),
                 _buildInfoRow('Localisation', _displayValue(wine.location)),
+                _buildInfoRow(
+                  'Position cave X',
+                  _displayDouble(wine.cellarPositionX),
+                ),
+                _buildInfoRow(
+                  'Position cave Y',
+                  _displayDouble(wine.cellarPositionY),
+                ),
+              ],
+            ),
+
+            _buildSection(
+              context,
+              'Accords mets-vins',
+              [
+                if (_pairings.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: Text('Aucune proposition disponible.'),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _pairings
+                          .map(
+                            (pairing) => Chip(
+                              label: Text(
+                                '${pairing.icon ?? '🍽️'} ${pairing.name}${wine.aiSuggestedFoodPairings ? ' 🤖' : ''}',
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                if (wine.aiSuggestedFoodPairings && _pairings.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '🤖 = accord proposé par l\'IA',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
             ),
 
@@ -281,7 +375,11 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(
+    String label,
+    String value, {
+    bool aiSuggested = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -298,7 +396,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             ),
           ),
           Expanded(
-            child: Text(value),
+            child: Text(
+              aiSuggested && value.trim().isNotEmpty ? '$value 🤖' : value,
+            ),
           ),
         ],
       ),
@@ -312,6 +412,22 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
 
   String _displayInt(int? value) {
     return value?.toString() ?? '';
+  }
+
+  String _displayDouble(double? value) {
+    if (value == null) return '';
+    return value.toStringAsFixed(2);
+  }
+
+  bool _isAiSuggestedGuardValue(WineEntity wine, int? value) {
+    if (value == null) return false;
+    return (value == wine.drinkFromYear && wine.aiSuggestedDrinkFromYear) ||
+        (value == wine.drinkUntilYear && wine.aiSuggestedDrinkUntilYear);
+  }
+
+  bool _isAiGuardInfoPresent(WineEntity wine) {
+    return (wine.drinkFromYear != null && wine.aiSuggestedDrinkFromYear) ||
+        (wine.drinkUntilYear != null && wine.aiSuggestedDrinkUntilYear);
   }
 
   Future<void> _navigateToEdit(WineEntity wine) async {

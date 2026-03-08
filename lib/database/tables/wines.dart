@@ -16,12 +16,20 @@ class Wines extends Table {
   RealColumn get purchasePrice => real().nullable()();
   DateTimeColumn get purchaseDate => dateTime().nullable()();
   IntColumn get drinkFromYear => integer().nullable()();
+  BoolColumn get aiSuggestedDrinkFromYear =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get drinkUntilYear => integer().nullable()();
+  BoolColumn get aiSuggestedDrinkUntilYear =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get tastingNotes => text().nullable()();
   IntColumn get rating => integer().nullable()(); // 0-5
   TextColumn get photoPath => text().nullable()();
   TextColumn get aiDescription => text().nullable()();
+  BoolColumn get aiSuggestedFoodPairings =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get location => text().nullable()(); // e.g. 'Cave maison', 'Garage'
+  RealColumn get cellarPositionX => real().nullable()();
+  RealColumn get cellarPositionY => real().nullable()();
   TextColumn get notes => text().nullable()(); // free-form user notes
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)();

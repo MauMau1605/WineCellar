@@ -6,6 +6,8 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/database/app_database.dart';
 import 'package:wine_cellar/database/daos/wine_dao.dart';
 import 'package:wine_cellar/database/daos/food_category_dao.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_column_mapping.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_import_row.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_repository.dart';
@@ -132,7 +134,8 @@ class WineRepositoryImpl implements WineRepository {
         'Nom', 'Appellation', 'Producteur', 'Région', 'Pays', 'Couleur',
         'Millésime', 'Cépages', 'Quantité', 'Prix achat',
         'Boire à partir de', 'Boire jusqu\'à', 'Notes', 'Note (/5)',
-        'Localisation',
+        'Localisation', 'Position cave X', 'Position cave Y',
+        'IA: accords mets-vins', 'IA: boire dès', 'IA: boire jusqu\'à',
       ],
       // Data rows
       ...entities.map((w) => [
@@ -151,6 +154,11 @@ class WineRepositoryImpl implements WineRepository {
             w.tastingNotes ?? '',
             w.rating?.toString() ?? '',
             w.location ?? '',
+            w.cellarPositionX?.toString() ?? '',
+            w.cellarPositionY?.toString() ?? '',
+            w.aiSuggestedFoodPairings ? 'true' : 'false',
+            w.aiSuggestedDrinkFromYear ? 'true' : 'false',
+            w.aiSuggestedDrinkUntilYear ? 'true' : 'false',
           ]),
     ];
 
@@ -170,6 +178,101 @@ class WineRepositoryImpl implements WineRepository {
     }
 
     return count;
+  }
+
+  @override
+  Future<List<CsvImportRow>> parseCsvRows(
+    String csvString,
+    CsvColumnMapping mapping, {
+    bool hasHeader = true,
+  }) async {
+    final rows = const CsvToListConverter(
+      shouldParseNumbers: false,
+      eol: '\n',
+    ).convert(csvString);
+
+    if (rows.isEmpty) {
+      return [];
+    }
+
+    final parsedRows = <CsvImportRow>[];
+    final startIndex = hasHeader ? 1 : 0;
+
+    for (var i = startIndex; i < rows.length; i++) {
+      final row = rows[i];
+      if (_isCsvRowEmpty(row)) continue;
+
+      final grapeValue = _readCsvValue(row, mapping.grapeVarieties);
+      final grapes = grapeValue == null
+          ? const <String>[]
+          : grapeValue
+              .split(RegExp(r'[,;/]'))
+              .map((value) => value.trim())
+              .where((value) => value.isNotEmpty)
+              .toList();
+
+      parsedRows.add(
+        CsvImportRow(
+          sourceRowNumber: i + 1,
+          name: _readCsvValue(row, mapping.name),
+          vintage: _parseInt(_readCsvValue(row, mapping.vintage)),
+          producer: _readCsvValue(row, mapping.producer),
+          appellation: _readCsvValue(row, mapping.appellation),
+          quantity: _parseInt(_readCsvValue(row, mapping.quantity)),
+          color: _readCsvValue(row, mapping.color),
+          region: _readCsvValue(row, mapping.region),
+          country: _readCsvValue(row, mapping.country),
+          grapeVarieties: grapes,
+          purchasePrice: _parseDouble(_readCsvValue(row, mapping.purchasePrice)),
+          location: _readCsvValue(row, mapping.location),
+          notes: _readCsvValue(row, mapping.notes),
+        ),
+      );
+    }
+
+    return parsedRows;
+  }
+
+  @override
+  Future<int> importFromCsv(
+    String csvString,
+    CsvColumnMapping mapping, {
+    bool hasHeader = true,
+  }) async {
+    final rows = await parseCsvRows(
+      csvString,
+      mapping,
+      hasHeader: hasHeader,
+    );
+
+    var importedCount = 0;
+    for (final row in rows) {
+      final safeName = (row.name ?? '').trim();
+      if (safeName.isEmpty) continue;
+
+      await addWine(
+        WineEntity(
+          name: safeName,
+          appellation: row.appellation,
+          producer: row.producer,
+          region: row.region,
+          country: row.country ?? 'France',
+          color: _parseColor(row.color),
+          vintage: row.vintage,
+          grapeVarieties: row.grapeVarieties,
+          quantity: (row.quantity ?? 1) <= 0 ? 1 : row.quantity!,
+          purchasePrice: row.purchasePrice,
+          location: row.location,
+          notes: row.notes,
+          aiSuggestedFoodPairings: false,
+          aiSuggestedDrinkFromYear: false,
+          aiSuggestedDrinkUntilYear: false,
+        ),
+      );
+      importedCount++;
+    }
+
+    return importedCount;
   }
 
   // ---- Mapping helpers ----
@@ -192,12 +295,17 @@ class WineRepositoryImpl implements WineRepository {
       purchasePrice: dbWine.purchasePrice,
       purchaseDate: dbWine.purchaseDate,
       drinkFromYear: dbWine.drinkFromYear,
+      aiSuggestedDrinkFromYear: dbWine.aiSuggestedDrinkFromYear,
       drinkUntilYear: dbWine.drinkUntilYear,
+      aiSuggestedDrinkUntilYear: dbWine.aiSuggestedDrinkUntilYear,
       tastingNotes: dbWine.tastingNotes,
       rating: dbWine.rating,
       photoPath: dbWine.photoPath,
       aiDescription: dbWine.aiDescription,
+      aiSuggestedFoodPairings: dbWine.aiSuggestedFoodPairings,
       location: dbWine.location,
+      cellarPositionX: dbWine.cellarPositionX,
+      cellarPositionY: dbWine.cellarPositionY,
       notes: dbWine.notes,
       createdAt: dbWine.createdAt,
       updatedAt: dbWine.updatedAt,
@@ -218,13 +326,78 @@ class WineRepositoryImpl implements WineRepository {
       purchasePrice: Value(entity.purchasePrice),
       purchaseDate: Value(entity.purchaseDate),
       drinkFromYear: Value(entity.drinkFromYear),
+      aiSuggestedDrinkFromYear: Value(entity.aiSuggestedDrinkFromYear),
       drinkUntilYear: Value(entity.drinkUntilYear),
+      aiSuggestedDrinkUntilYear: Value(entity.aiSuggestedDrinkUntilYear),
       tastingNotes: Value(entity.tastingNotes),
       rating: Value(entity.rating),
       photoPath: Value(entity.photoPath),
       aiDescription: Value(entity.aiDescription),
+      aiSuggestedFoodPairings: Value(entity.aiSuggestedFoodPairings),
       location: Value(entity.location),
+      cellarPositionX: Value(entity.cellarPositionX),
+      cellarPositionY: Value(entity.cellarPositionY),
       notes: Value(entity.notes),
     );
+  }
+
+  String? _readCsvValue(List<dynamic> row, int? columnNumber) {
+    if (columnNumber == null || columnNumber <= 0) {
+      return null;
+    }
+
+    final index = columnNumber - 1;
+    if (index >= row.length) {
+      return null;
+    }
+
+    final value = row[index].toString().trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    return value;
+  }
+
+  bool _isCsvRowEmpty(List<dynamic> row) {
+    for (final value in row) {
+      if (value.toString().trim().isNotEmpty) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  int? _parseInt(String? value) {
+    if (value == null) return null;
+    return int.tryParse(value.replaceAll(RegExp(r'[^0-9-]'), ''));
+  }
+
+  double? _parseDouble(String? value) {
+    if (value == null) return null;
+    final normalized = value.replaceAll(',', '.').replaceAll(RegExp(r'[^0-9.-]'), '');
+    return double.tryParse(normalized);
+  }
+
+  WineColor _parseColor(String? rawColor) {
+    final value = (rawColor ?? '').trim().toLowerCase();
+    if (value.isEmpty) return WineColor.red;
+
+    if (value.contains('blanc') || value == 'white') {
+      return WineColor.white;
+    }
+    if (value.contains('ros') || value == 'rose') {
+      return WineColor.rose;
+    }
+    if (value.contains('pétillant') ||
+        value.contains('petillant') ||
+        value.contains('effervescent') ||
+        value.contains('sparkling')) {
+      return WineColor.sparkling;
+    }
+    if (value.contains('moelleux') || value.contains('doux') || value == 'sweet') {
+      return WineColor.sweet;
+    }
+    return WineColor.red;
   }
 }

@@ -1,5 +1,7 @@
 import '../entities/wine_entity.dart';
 import '../entities/wine_filter.dart';
+import '../entities/csv_column_mapping.dart';
+import '../entities/csv_import_row.dart';
 
 /// Abstract repository interface for wine operations
 /// Concrete implementation in data layer uses Drift
@@ -42,4 +44,18 @@ abstract class WineRepository {
 
   /// Import wines from a JSON string
   Future<int> importFromJson(String jsonString);
+
+  /// Parse wine rows from a CSV string using a user-defined mapping.
+  Future<List<CsvImportRow>> parseCsvRows(
+    String csvString,
+    CsvColumnMapping mapping, {
+    bool hasHeader = true,
+  });
+
+  /// Import wines directly from a CSV string using a user-defined mapping.
+  Future<int> importFromCsv(
+    String csvString,
+    CsvColumnMapping mapping, {
+    bool hasHeader = true,
+  });
 }

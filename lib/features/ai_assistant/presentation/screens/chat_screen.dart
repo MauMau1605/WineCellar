@@ -55,6 +55,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final List<ChatMessage> _messages = [];
   List<WineAiResponse> _currentWineDataList = [];
   final Set<int> _addedWineIndices = {};
+  final Set<int> _manuallyEditedWineIndices = {};
   bool _isLoading = false;
   bool _searchMode = false;
   final _chatLogger = ChatLogger();
@@ -425,6 +426,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     final data = _currentWineDataList[wineIndex];
+    final manuallyEdited = _manuallyEditedWineIndices.contains(wineIndex);
     if (!data.isComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -466,9 +468,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       quantity: data.quantity ?? 1,
       purchasePrice: data.purchasePrice,
       drinkFromYear: data.drinkFromYear,
+      aiSuggestedDrinkFromYear: !manuallyEdited && data.drinkFromYear != null,
       drinkUntilYear: data.drinkUntilYear,
+      aiSuggestedDrinkUntilYear:
+          !manuallyEdited && data.drinkUntilYear != null,
       tastingNotes: data.tastingNotes,
       aiDescription: data.description,
+      aiSuggestedFoodPairings: !manuallyEdited && matchedCategoryIds.isNotEmpty,
       foodCategoryIds: matchedCategoryIds,
     );
 
@@ -807,6 +813,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     setState(() {
       _currentWineDataList[wineIndex] = updated;
+      _manuallyEditedWineIndices.add(wineIndex);
     });
     _cacheConversationState();
 
