@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 7 mars 2026.
+> Dernière mise à jour : 8 mars 2026.
 
 ---
 
@@ -237,7 +237,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 ### `chat_logger.dart` — `ChatLogger`
 - Singleton loggant les conversations IA dans des fichiers `.log` horodatés
 - Méthodes : `startSession()`, `logUserMessage()`, `logAiResponse()`, `logError()`, `logWineAdded()`, `endSession()`
-- Stockage dans `<documents>/wine_cellar_logs/`
+- Stockage desktop : priorité au répertoire d'installation (`wine_cellar_logs/`), fallback sur `<documents>/wine_cellar_logs/` si non écrivable
 
 ### `widgets/shell_scaffold.dart` — `ShellScaffold`
 - Shell layout adaptatif : `NavigationBar` (mobile) / `NavigationRail` (desktop)
@@ -265,8 +265,11 @@ Table de jointure many-to-many : `wineId` → `Wines.id`, `foodCategoryId` → `
 ### `app_database.dart` — `AppDatabase`
 - Classe Drift `@DriftDatabase` regroupant les 3 tables et 2 DAOs
 - `schemaVersion = 3`
-- Stratégie actuelle d'upgrade : reset destructif des tables (pas de migration incrémentale conservatrice)
+- Stratégie actuelle d'upgrade : migration non destructive (création conditionnelle des tables/colonnes manquantes)
 - `_seedFoodCategories()` — pré-peuple 18 catégories alimentaires à la création
+- Seeding idempotent des catégories : insertion uniquement des catégories absentes
+- Stockage DB desktop : priorité au répertoire d'installation (si écriture autorisée), fallback sur `<documents>`
+- Migration automatique au démarrage : copie de l'ancienne DB depuis `<documents>` vers le répertoire d'installation si nécessaire
 
 ### `daos/wine_dao.dart` — `WineDao`
 DAO pour les opérations sur les vins :

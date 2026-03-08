@@ -35,76 +35,188 @@ class AppDatabase extends _$AppDatabase {
         await _seedFoodCategories();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        await m.deleteTable('wine_food_pairings');
-        await m.deleteTable('wines');
-        await m.deleteTable('food_categories');
-        await m.createAll();
+        await _migrateWithoutDataLoss(m);
         await _seedFoodCategories();
       },
     );
   }
 
-  /// Pre-populate food categories with common French food types
-  Future<void> _seedFoodCategories() async {
-    final categories = [
-      FoodCategoriesCompanion.insert(
-          name: 'Viande rouge', icon: const Value('🥩'), sortOrder: const Value(1)),
-      FoodCategoriesCompanion.insert(
-          name: 'Viande blanche', icon: const Value('🍗'), sortOrder: const Value(2)),
-      FoodCategoriesCompanion.insert(
-          name: 'Volaille', icon: const Value('🐔'), sortOrder: const Value(3)),
-      FoodCategoriesCompanion.insert(
-          name: 'Gibier', icon: const Value('🦌'), sortOrder: const Value(4)),
-      FoodCategoriesCompanion.insert(
-          name: 'Poisson', icon: const Value('🐟'), sortOrder: const Value(5)),
-      FoodCategoriesCompanion.insert(
-          name: 'Fruits de mer', icon: const Value('🦐'), sortOrder: const Value(6)),
-      FoodCategoriesCompanion.insert(
-          name: 'Fromage', icon: const Value('🧀'), sortOrder: const Value(7)),
-      FoodCategoriesCompanion.insert(
-          name: 'Charcuterie', icon: const Value('🥓'), sortOrder: const Value(8)),
-      FoodCategoriesCompanion.insert(
-          name: 'Pâtes / Risotto', icon: const Value('🍝'), sortOrder: const Value(9)),
-      FoodCategoriesCompanion.insert(
-          name: 'Pizza', icon: const Value('🍕'), sortOrder: const Value(10)),
-      FoodCategoriesCompanion.insert(
-          name: 'Salade', icon: const Value('🥗'), sortOrder: const Value(11)),
-      FoodCategoriesCompanion.insert(
-          name: 'Soupe', icon: const Value('🍲'), sortOrder: const Value(12)),
-      FoodCategoriesCompanion.insert(
-          name: 'Barbecue / Grillades',
-          icon: const Value('🔥'),
-          sortOrder: const Value(13)),
-      FoodCategoriesCompanion.insert(
-          name: 'Cuisine asiatique',
-          icon: const Value('🥢'),
-          sortOrder: const Value(14)),
-      FoodCategoriesCompanion.insert(
-          name: 'Cuisine épicée',
-          icon: const Value('🌶️'),
-          sortOrder: const Value(15)),
-      FoodCategoriesCompanion.insert(
-          name: 'Dessert chocolat',
-          icon: const Value('🍫'),
-          sortOrder: const Value(16)),
-      FoodCategoriesCompanion.insert(
-          name: 'Dessert fruité',
-          icon: const Value('🍓'),
-          sortOrder: const Value(17)),
-      FoodCategoriesCompanion.insert(
-          name: 'Apéritif', icon: const Value('🥂'), sortOrder: const Value(18)),
-    ];
+  Future<void> _migrateWithoutDataLoss(Migrator m) async {
+    await _createTableIfMissing('wines', () => m.createTable(wines));
+    await _createTableIfMissing(
+      'food_categories',
+      () => m.createTable(foodCategories),
+    );
+    await _createTableIfMissing(
+      'wine_food_pairings',
+      () => m.createTable(wineFoodPairings),
+    );
 
-    for (final category in categories) {
-      await into(foodCategories).insert(category);
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'ai_suggested_drink_from_year',
+      addColumn: () => m.addColumn(wines, wines.aiSuggestedDrinkFromYear),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'ai_suggested_drink_until_year',
+      addColumn: () => m.addColumn(wines, wines.aiSuggestedDrinkUntilYear),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'ai_suggested_food_pairings',
+      addColumn: () => m.addColumn(wines, wines.aiSuggestedFoodPairings),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'cellar_position_x',
+      addColumn: () => m.addColumn(wines, wines.cellarPositionX),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'cellar_position_y',
+      addColumn: () => m.addColumn(wines, wines.cellarPositionY),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'notes',
+      addColumn: () => m.addColumn(wines, wines.notes),
+    );
+  }
+
+  Future<void> _createTableIfMissing(
+    String tableName,
+    Future<void> Function() createTable,
+  ) async {
+    final exists = await _tableExists(tableName);
+    if (!exists) {
+      await createTable();
     }
   }
+
+  Future<void> _addColumnIfMissing({
+    required String tableName,
+    required String columnName,
+    required Future<void> Function() addColumn,
+  }) async {
+    final exists = await _columnExists(tableName, columnName);
+    if (!exists) {
+      await addColumn();
+    }
+  }
+
+  Future<bool> _tableExists(String tableName) async {
+    final result = await customSelect(
+      'SELECT 1 FROM sqlite_master WHERE type = ? AND name = ? LIMIT 1',
+      variables: [
+        const Variable<String>('table'),
+        Variable<String>(tableName),
+      ],
+    ).getSingleOrNull();
+
+    return result != null;
+  }
+
+  Future<bool> _columnExists(String tableName, String columnName) async {
+    final result = await customSelect(
+      "PRAGMA table_info('$tableName')",
+    ).get();
+
+    return result.any((row) => row.read<String>('name') == columnName);
+  }
+
+  /// Pre-populate food categories with common French food types
+  Future<void> _seedFoodCategories() async {
+    final existingCategories = await select(foodCategories).get();
+    final existingNames = existingCategories.map((row) => row.name).toSet();
+
+    for (final category in _defaultFoodCategories) {
+      if (existingNames.contains(category.name)) {
+        continue;
+      }
+
+      await into(foodCategories).insert(
+        FoodCategoriesCompanion.insert(
+          name: category.name,
+          icon: Value(category.icon),
+          sortOrder: Value(category.sortOrder),
+        ),
+      );
+    }
+  }
+
+  List<({String name, String icon, int sortOrder})> get _defaultFoodCategories =>
+      [
+        (name: 'Viande rouge', icon: '🥩', sortOrder: 1),
+        (name: 'Viande blanche', icon: '🍗', sortOrder: 2),
+        (name: 'Volaille', icon: '🐔', sortOrder: 3),
+        (name: 'Gibier', icon: '🦌', sortOrder: 4),
+        (name: 'Poisson', icon: '🐟', sortOrder: 5),
+        (name: 'Fruits de mer', icon: '🦐', sortOrder: 6),
+        (name: 'Fromage', icon: '🧀', sortOrder: 7),
+        (name: 'Charcuterie', icon: '🥓', sortOrder: 8),
+        (name: 'Pâtes / Risotto', icon: '🍝', sortOrder: 9),
+        (name: 'Pizza', icon: '🍕', sortOrder: 10),
+        (name: 'Salade', icon: '🥗', sortOrder: 11),
+        (name: 'Soupe', icon: '🍲', sortOrder: 12),
+        (name: 'Barbecue / Grillades', icon: '🔥', sortOrder: 13),
+        (name: 'Cuisine asiatique', icon: '🥢', sortOrder: 14),
+        (name: 'Cuisine épicée', icon: '🌶️', sortOrder: 15),
+        (name: 'Dessert chocolat', icon: '🍫', sortOrder: 16),
+        (name: 'Dessert fruité', icon: '🍓', sortOrder: 17),
+        (name: 'Apéritif', icon: '🥂', sortOrder: 18),
+      ];
 }
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, AppConstants.databaseName));
+    final file = await _resolveDatabaseFile();
     return NativeDatabase.createInBackground(file);
   });
+}
+
+Future<File> _resolveDatabaseFile() async {
+  final documentsDir = await getApplicationDocumentsDirectory();
+  final documentsFile = File(p.join(documentsDir.path, AppConstants.databaseName));
+
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    final installDir = await _findWritableInstallDirectory();
+
+    if (installDir != null) {
+      final installFile = File(p.join(installDir.path, AppConstants.databaseName));
+
+      if (!await installFile.exists() && await documentsFile.exists()) {
+        try {
+          await documentsFile.copy(installFile.path);
+        } catch (_) {
+          return documentsFile;
+        }
+      }
+
+      return installFile;
+    }
+  }
+
+  return documentsFile;
+}
+
+Future<Directory?> _findWritableInstallDirectory() async {
+  final executableDir = Directory(p.dirname(Platform.resolvedExecutable));
+
+  if (!await executableDir.exists()) {
+    return null;
+  }
+
+  final probePath = p.join(executableDir.path, '.wine_cellar_write_probe');
+  final probeFile = File(probePath);
+
+  try {
+    await probeFile.writeAsString('ok', flush: true);
+    if (await probeFile.exists()) {
+      await probeFile.delete();
+    }
+    return executableDir;
+  } catch (_) {
+    return null;
+  }
 }

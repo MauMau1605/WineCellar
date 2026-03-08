@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:logger/logger.dart';
 
@@ -20,12 +21,42 @@ class ChatLogger {
 
   /// Get the logs directory path
   Future<Directory> get _logsDir async {
-    final docsDir = await getApplicationDocumentsDirectory();
-    final logsDir = Directory('${docsDir.path}/wine_cellar_logs');
+    final logsDir = await _resolveLogsDir();
     if (!await logsDir.exists()) {
       await logsDir.create(recursive: true);
     }
     return logsDir;
+  }
+
+  Future<Directory> _resolveLogsDir() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final docsLogsDir = Directory(p.join(docsDir.path, 'wine_cellar_logs'));
+
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final executableDir = Directory(p.dirname(Platform.resolvedExecutable));
+
+      if (await executableDir.exists()) {
+        final installLogsDir = Directory(p.join(executableDir.path, 'wine_cellar_logs'));
+
+        try {
+          if (!await installLogsDir.exists()) {
+            await installLogsDir.create(recursive: true);
+          }
+
+          final probeFile = File(p.join(installLogsDir.path, '.wine_cellar_write_probe'));
+          await probeFile.writeAsString('ok', flush: true);
+          if (await probeFile.exists()) {
+            await probeFile.delete();
+          }
+
+          return installLogsDir;
+        } catch (_) {
+          return docsLogsDir;
+        }
+      }
+    }
+
+    return docsLogsDir;
   }
 
   /// Start a new conversation session log file
