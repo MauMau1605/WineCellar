@@ -18,12 +18,15 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_fr
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/repositories/image_text_extractor.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/test_ai_connection.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/openai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/ollama_service.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/mlkit_image_text_extractor.dart';
 
 // ============ Database ============
 
@@ -240,6 +243,15 @@ final importWinesFromCsvUseCaseProvider = Provider<ImportWinesFromCsvUseCase>((r
 });
 
 // ============ Use Cases — AI ============
+
+final imageTextExtractorProvider = Provider<ImageTextExtractor>((ref) {
+  return MlKitImageTextExtractor();
+});
+
+final extractTextFromWineImageUseCaseProvider =
+    Provider<ExtractTextFromWineImageUseCase>((ref) {
+  return ExtractTextFromWineImageUseCase(ref.watch(imageTextExtractorProvider));
+});
 
 /// Returns null when no AI service is configured yet.
 final analyzeWineUseCaseProvider = Provider<AnalyzeWineUseCase?>((ref) {

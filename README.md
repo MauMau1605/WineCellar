@@ -65,13 +65,34 @@ flutter run -d linux
 flutter pub get && dart run build_runner build --delete-conflicting-outputs && flutter build linux
 ```
 
-## Build Android (futur)
+## Build Android
 
 ```bash
 flutter build apk
 # ou
 flutter build appbundle
 ```
+
+## CI/CD GitHub (Android)
+
+- `build-android.yml`
+	- Déclenchement : `push`/`pull_request` sur `main` + manuel (`workflow_dispatch`)
+	- Actions : `flutter pub get` + `build_runner` + test migration + `flutter build apk --debug`
+	- Résultat : artifact `wine-cellar-android-debug-apk`
+
+- `release-android.yml`
+	- Déclenchement : push d'un tag `v*` (ex: `v0.2.0`)
+	- Actions : build APK release puis publication dans une GitHub Release
+	- Asset publié : `wine-cellar-android-<tag>.apk`
+
+### Publier une release Android
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Ensuite, télécharge l'APK depuis la section **Releases** du repo et installe-le sur le téléphone.
 
 ## Structure du projet
 

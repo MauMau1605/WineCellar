@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 8 mars 2026.
+> Dernière mise à jour : 11 mars 2026.
 
 ---
 
@@ -122,9 +122,11 @@ lib/
 │   │   │   │   ├── chat_message.dart
 │   │   │   │   └── wine_ai_response.dart
 │   │   │   ├── repositories/
-│   │   │   │   └── ai_service.dart
+│   │   │   │   ├── ai_service.dart
+│   │   │   │   └── image_text_extractor.dart
 │   │   │   └── usecases/
 │   │   │       ├── analyze_wine.dart
+│   │   │       ├── extract_text_from_wine_image.dart
 │   │   │       └── test_ai_connection.dart
 │   │   ├── data/
 │   │   │   ├── ai_prompts.dart
@@ -132,7 +134,8 @@ lib/
 │   │   │       ├── openai_service.dart
 │   │   │       ├── gemini_service.dart
 │   │   │       ├── mistral_service.dart
-│   │   │       └── ollama_service.dart
+│   │   │       ├── ollama_service.dart
+│   │   │       └── mlkit_image_text_extractor.dart
 │   │   └── presentation/
 │   │       ├── screens/
 │   │       │   └── chat_screen.dart
@@ -432,11 +435,16 @@ Interface commune aux 4 providers IA :
 - `wineDataList` — liste de `WineAiResponse` extraits
 - `isError` / `errorMessage`
 
+#### `image_text_extractor.dart` — `ImageTextExtractor` (abstract)
+Interface d'extraction OCR pour les photos d'étiquette :
+- `extractTextFromImage(imagePath)` → `String`
+
 ### domain/usecases/
 
 | Use Case | Params | Retour | Logique |
 |----------|--------|--------|---------|
 | `AnalyzeWineUseCase` | `AnalyzeWineParams` | `AiChatResult` | Appelle `AiService.analyzeWine()`, convertit erreurs en `AiFailure` |
+| `ExtractTextFromWineImageUseCase` | `ExtractTextFromWineImageParams` | `String` | Appelle `ImageTextExtractor.extractTextFromImage()`, valide texte non vide, mappe erreurs en `Failure` |
 | `TestAiConnectionUseCase` | `NoParams` | `bool` | Appelle `AiService.testConnection()`, convertit échec en `AiFailure` |
 
 ### data/
@@ -445,7 +453,7 @@ Interface commune aux 4 providers IA :
 - `systemPrompt` — prompt système complet pour le sommelier IA (extraction JSON, règles de complétion)
 - `buildCellarSearchMessage()` — construit le prompt pour le mode « accord mets-vin » avec le contenu réel de la cave
 
-#### `datasources/` — 4 implémentations de `AiService`
+#### `datasources/` — 4 implémentations de `AiService` + 1 datasource OCR
 
 | Fichier | Classe | API | Particularités |
 |---------|--------|-----|----------------|
@@ -453,6 +461,7 @@ Interface commune aux 4 providers IA :
 | `gemini_service.dart` | `GeminiService` | Google Generative AI (SDK natif) | Rate limiting 4s, session chat réutilisée, auto-discovery modèle |
 | `mistral_service.dart` | `MistralService` | Mistral API (compatible OpenAI, via Dio) | Session historique, tracking RPM |
 | `ollama_service.dart` | `OllamaService` | API REST locale Ollama (via Dio) | Fonctionne hors-ligne |
+| `mlkit_image_text_extractor.dart` | `MlKitImageTextExtractor` | Google ML Kit Text Recognition | OCR on-device depuis photo d'étiquette |
 
 **Pattern commun à toutes les implémentations :**
 1. Construction des messages (system prompt + historique + message courant)
@@ -468,6 +477,7 @@ Interface commune aux 4 providers IA :
 - Deux modes : « Ajouter un vin » / « Accord mets-vin » (SegmentedButton)
 - Gère l'historique des messages en session (static pour persistance inter-navigation)
 - Envoi de messages via `AnalyzeWineUseCase`
+- Capture photo Android via `image_picker` + OCR via `ExtractTextFromWineImageUseCase`, puis envoi du texte extrait à l'IA
 - Ajout de vins à la cave via `AddWineUseCase` + auto-matching des catégories alimentaires
 - Reset de session (réinitialise le chat du service IA sous-jacent)
 - Bouton « Ajouter tous les vins » pour les réponses multi-vins
@@ -530,6 +540,7 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | Provider | Type | Fournit |
 |----------|------|---------|
 | `aiServiceProvider` | `Provider<AiService?>` | L'implémentation IA active (ou `null` si non configuré). Switch sur `aiProviderSettingProvider`. |
+| `imageTextExtractorProvider` | `Provider<ImageTextExtractor>` | Implémentation OCR active : `MlKitImageTextExtractor` |
 
 ### Use Cases — Wine
 
@@ -550,6 +561,7 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | Provider | Type |
 |----------|------|
 | `analyzeWineUseCaseProvider` | `Provider<AnalyzeWineUseCase?>` |
+| `extractTextFromWineImageUseCaseProvider` | `Provider<ExtractTextFromWineImageUseCase>` |
 | `testAiConnectionUseCaseProvider` | `Provider<TestAiConnectionUseCase?>` |
 
 ---

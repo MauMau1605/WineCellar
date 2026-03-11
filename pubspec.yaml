@@ -45,6 +45,7 @@ dependencies:
 
   # Image picking (future photo feature)
   image_picker: ^1.1.2
+  google_mlkit_text_recognition: ^0.15.0
 
   # Logging
   logger: ^2.5.0
