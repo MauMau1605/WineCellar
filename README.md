@@ -73,6 +73,46 @@ flutter build apk
 flutter build appbundle
 ```
 
+### Installer l'APK sur téléphone sans Android Studio
+
+Prérequis Linux:
+
+```bash
+sudo apt install -y adb
+```
+
+Script fourni:
+
+```bash
+chmod +x scripts/install_android_apk.sh
+```
+
+Installer depuis la dernière GitHub Release:
+
+```bash
+scripts/install_android_apk.sh --repo <owner>/<repo>
+```
+
+> Par défaut, le script fait une **mise à jour** (`adb install -r`) et conserve les données locales.
+
+Installer depuis un tag précis:
+
+```bash
+scripts/install_android_apk.sh --repo <owner>/<repo> --tag v0.2.0
+```
+
+Installer depuis un APK local déjà téléchargé:
+
+```bash
+scripts/install_android_apk.sh --apk-file ./wine-cellar-android-v0.2.0.apk
+```
+
+Forcer une réinstallation complète (suppression des données):
+
+```bash
+scripts/install_android_apk.sh --repo <owner>/<repo> --fresh-install
+```
+
 ## CI/CD GitHub (Android)
 
 - `build-android.yml`
