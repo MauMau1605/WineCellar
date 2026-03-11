@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
@@ -486,6 +488,24 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   }
 
   Future<bool> _saveExport(String content, String fileName) async {
+    // On Android/iOS, the native save dialog is often unavailable.
+    // Share the generated file so the user can save it to Drive/Files/etc.
+    if (Platform.isAndroid || Platform.isIOS) {
+      final tmpDir = await getTemporaryDirectory();
+      final file = File('${tmpDir.path}/$fileName');
+      await file.writeAsString(content);
+
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          text: 'Export Wine Cellar',
+          files: [XFile(file.path)],
+          title: fileName,
+        ),
+      );
+
+      return result.status != ShareResultStatus.unavailable;
+    }
+
     final path = await FilePicker.platform.saveFile(
       dialogTitle: 'Enregistrer l\'export',
       fileName: fileName,

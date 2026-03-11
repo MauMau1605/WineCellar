@@ -73,6 +73,44 @@ flutter build apk
 flutter build appbundle
 ```
 
+### Signature Android release (important pour conserver les donnees)
+
+Si l'APK est signe avec une cle differente de la version deja installee,
+Android refuse la mise a jour et force une reinstallation complete
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`), ce qui supprime les donnees locales.
+
+1. Generer un keystore unique (une seule fois) :
+
+```bash
+mkdir -p android/keystore
+keytool -genkeypair -v \
+	-keystore android/keystore/upload-keystore.jks \
+	-alias upload \
+	-keyalg RSA -keysize 2048 -validity 10000
+```
+
+2. Creer `android/key.properties` a partir du template :
+
+```bash
+cp android/key.properties.example android/key.properties
+```
+
+Puis renseigner les vrais mots de passe/alias.
+
+3. Builder en release (signe avec cette cle) :
+
+```bash
+flutter build apk --release
+```
+
+4. Installer en mise a jour (donnees conservees) :
+
+```bash
+scripts/install_android_apk.sh --apk-file <chemin_vers_apk_release>
+```
+
+Regle d'or : garde toujours le meme keystore pour toutes les versions futures.
+
 ### Installer l'APK sur téléphone sans Android Studio
 
 Prérequis Linux:
