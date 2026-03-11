@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,7 +14,7 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_servi
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
-import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
@@ -189,13 +191,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: SafeArea(
               child: Row(
                 children: [
-                  // Photo button (disabled for MVP)
+                  // Photo button
                   IconButton(
                     icon: const Icon(Icons.camera_alt_outlined),
                     onPressed: isConfigured && !_isLoading
                         ? _captureWinePhotoAndAnalyze
                         : null,
-                    tooltip: 'Prendre une photo de l\'étiquette',
+                    tooltip: 'Photo ou galerie',
                   ),
                   // Text input
                   Expanded(
@@ -244,8 +246,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _captureWinePhotoAndAnalyze() async {
     if (_isLoading) return;
 
-    final analyzeUseCase = ref.read(analyzeWineUseCaseProvider);
-    if (analyzeUseCase == null) {
+    final analyzeImageUseCase = ref.read(analyzeWineFromImageUseCaseProvider);
+    if (analyzeImageUseCase == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -255,52 +257,110 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    final source = await _showImageSourceDialog();
+    if (source == null) return;
+
     final imagePicker = ImagePicker();
     final image = await imagePicker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       preferredCameraDevice: CameraDevice.rear,
       imageQuality: 85,
     );
 
     if (image == null) return;
 
-    setState(() => _isLoading = true);
+    final imageBytes = await File(image.path).readAsBytes();
+    final mimeType = _guessMimeTypeFromPath(image.path);
+    final history = _messages
+        .where((m) => m.role != ChatRole.system)
+        .map((m) => {
+              'role': m.role == ChatRole.user ? 'user' : 'assistant',
+              'content': m.content,
+            })
+        .toList();
 
-    final extractTextUseCase = ref.read(extractTextFromWineImageUseCaseProvider);
-    final extractionResult = await extractTextUseCase(
-      ExtractTextFromWineImageParams(imagePath: image.path),
+    final sourceText = source == ImageSource.camera ? 'caméra' : 'galerie';
+
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          id: _uuid.v4(),
+          content: '📷 Image envoyée depuis $sourceText',
+          role: ChatRole.user,
+          timestamp: DateTime.now(),
+        ),
+      );
+      _isLoading = true;
+    });
+    _scrollToBottom();
+
+    final either = await analyzeImageUseCase(
+      AnalyzeWineFromImageParams(
+        imageBytes: imageBytes,
+        mimeType: mimeType,
+        userMessage:
+            'Extrait les informations du vin visibles sur l\'image et retourne la réponse au format JSON habituel, sans raisonnement long.',
+        conversationHistory: history,
+      ),
     );
 
     if (!mounted) return;
 
-    String? extractedText;
-    String? failureMessage;
-    extractionResult.fold(
-      (failure) => failureMessage = failure.message,
-      (text) => extractedText = text,
+    either.fold(
+      (failure) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+      },
+      (result) {
+        _chatLogger.logAiResponse(result.textResponse);
+
+        setState(() {
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: result.textResponse,
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+          _currentWineDataList = result.wineDataList;
+          _isLoading = false;
+        });
+        _cacheConversationState();
+        _scrollToBottom();
+      },
     );
+  }
 
-    if (failureMessage != null || extractedText == null) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failureMessage ?? 'Impossible d\'analyser la photo.')),
-      );
-      return;
-    }
-
-    final normalizedPreview = extractedText!
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final preview = normalizedPreview.length > 140
-        ? '${normalizedPreview.substring(0, 140)}...'
-        : normalizedPreview;
-
-    setState(() => _isLoading = false);
-
-    await _sendText(
-      '📷 Photo analysée : $preview',
-      aiMessage: _buildPhotoAnalysisMessage(extractedText!),
+  Future<ImageSource?> _showImageSourceDialog() async {
+    return showDialog<ImageSource>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Choisir une image'),
+        content: const Text('Sélectionnez la source de l\'image à analyser.'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(ImageSource.gallery),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: const Text('Galerie'),
+          ),
+          TextButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(ImageSource.camera),
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: const Text('Caméra'),
+          ),
+        ],
+      ),
     );
+  }
+
+  String _guessMimeTypeFromPath(String path) {
+    final lowerPath = path.toLowerCase();
+    if (lowerPath.endsWith('.png')) return 'image/png';
+    if (lowerPath.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 
   /// Sends a message to the AI.
@@ -1161,21 +1221,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     return buffer.toString();
-  }
-
-  String _buildPhotoAnalysisMessage(String extractedText) {
-    return '''
-[ANALYSE DE PHOTO D'ÉTIQUETTE VIN]
-Le texte ci-dessous a été extrait automatiquement depuis une photo prise avec le téléphone de l'utilisateur.
-
-Texte OCR extrait :
-$extractedText
-
-Consignes spécifiques :
-- Corrige les erreurs OCR évidentes (caractères mal reconnus, espacements, accents).
-- Identifie un ou plusieurs vins potentiels.
-- Retourne ensuite la réponse au format habituel avec le bloc JSON ```json.
-''';
   }
 
   void _scrollToBottom() {

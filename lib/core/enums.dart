@@ -76,6 +76,39 @@ enum WineMaturity {
   }
 }
 
+/// Wine sort field enumeration
+enum WineSortField {
+  name,
+  vintage,
+  drinkUntilYear,
+  drinkFromYear,
+  color,
+  region,
+  appellation,
+  rating;
+
+  String get label {
+    switch (this) {
+      case WineSortField.name:
+        return 'Nom';
+      case WineSortField.vintage:
+        return 'Millésime';
+      case WineSortField.drinkUntilYear:
+        return 'Fin de fenêtre';
+      case WineSortField.drinkFromYear:
+        return 'Apogée';
+      case WineSortField.color:
+        return 'Couleur';
+      case WineSortField.region:
+        return 'Région';
+      case WineSortField.appellation:
+        return 'Appellation';
+      case WineSortField.rating:
+        return 'Note';
+    }
+  }
+}
+
 /// AI provider enumeration
 enum AiProvider {
   openai,

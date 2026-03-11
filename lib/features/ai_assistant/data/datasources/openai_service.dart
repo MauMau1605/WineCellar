@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:dart_openai/dart_openai.dart';
 import 'package:logger/logger.dart';
 
@@ -11,10 +12,18 @@ class OpenAiService implements AiService {
   final String apiKey;
   final String model;
   final Logger _logger = Logger();
+  String? _discoveredVisionModel;
+
+  static const List<String> _preferredVisionModels = [
+    'gpt-4o-mini',
+    'gpt-4.1-mini',
+    'gpt-4o',
+    'gpt-4.1',
+  ];
 
   OpenAiService({
     required this.apiKey,
-    this.model = 'gpt-3.5-turbo',
+    this.model = 'gpt-4o-mini',
   }) {
     OpenAI.apiKey = apiKey;
   }
@@ -89,6 +98,206 @@ class OpenAiService implements AiService {
       return AiChatResult.error(
         'Erreur de communication avec OpenAI: ${e.toString()}',
       );
+    }
+  }
+
+  @override
+  Future<AiChatResult> analyzeWineFromImage({
+    required List<int> imageBytes,
+    required String mimeType,
+    String userMessage = 'Analyse cette photo de bouteille de vin.',
+    List<Map<String, String>> conversationHistory = const [],
+  }) async {
+    try {
+      return await _analyzeWineFromImageWithModel(
+        modelName: model,
+        imageBytes: imageBytes,
+        mimeType: mimeType,
+        userMessage: userMessage,
+        conversationHistory: conversationHistory,
+      );
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      final responseData = e.response?.data;
+      _logger.e('OpenAI image API error', error: e, stackTrace: e.stackTrace);
+
+      if (statusCode == 401) {
+        return AiChatResult.error(
+          'Clé API OpenAI invalide. Vérifiez votre clé dans les paramètres.',
+        );
+      }
+
+      if (statusCode == 400 || statusCode == 404) {
+        final fallbackModel = await _discoverVisionModel();
+        if (fallbackModel != null && fallbackModel != model) {
+          try {
+            return await _analyzeWineFromImageWithModel(
+              modelName: fallbackModel,
+              imageBytes: imageBytes,
+              mimeType: mimeType,
+              userMessage: userMessage,
+              conversationHistory: conversationHistory,
+            );
+          } catch (_) {
+            // Keep original contextual message below.
+          }
+        }
+
+        String? detail;
+        if (responseData is Map) {
+          final err = (responseData as Map)['error'];
+          if (err is Map) detail = err['message']?.toString();
+        }
+        return AiChatResult.error(
+          'Le modèle OpenAI "$model" ne supporte peut-être pas la vision. '
+          'Essayez un modèle multimodal (ex: gpt-4o-mini). '
+          '${detail ?? ""}'.trim(),
+        );
+      }
+
+      return AiChatResult.error(
+        'Erreur d\'analyse d\'image avec OpenAI: ${e.message}',
+      );
+    } catch (e) {
+      _logger.e('OpenAI image error', error: e);
+      return AiChatResult.error(
+        'Erreur d\'analyse d\'image avec OpenAI: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<AiChatResult> _analyzeWineFromImageWithModel({
+    required String modelName,
+    required List<int> imageBytes,
+    required String mimeType,
+    required String userMessage,
+    required List<Map<String, String>> conversationHistory,
+  }) async {
+    final base64Image = base64Encode(imageBytes);
+    final dataUrl = 'data:$mimeType;base64,$base64Image';
+
+    final messages = <Map<String, dynamic>>[
+      {
+        'role': 'system',
+        'content': AiPrompts.systemPrompt,
+      },
+    ];
+
+    for (final msg in conversationHistory) {
+      final role = msg['role'] == 'user' ? 'user' : 'assistant';
+      messages.add({
+        'role': role,
+        'content': msg['content'] ?? '',
+      });
+    }
+
+    messages.add({
+      'role': 'user',
+      'content': [
+        {'type': 'text', 'text': userMessage},
+        {
+          'type': 'image_url',
+          'image_url': {'url': dataUrl},
+        },
+      ],
+    });
+
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://api.openai.com',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 120),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      ),
+    );
+
+    final response = await dio.post(
+      '/v1/chat/completions',
+      data: {
+        'model': modelName,
+        'messages': messages,
+        'temperature': 0.1,
+        'max_tokens': 1200,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    final choices = data['choices'] as List?;
+    final textResponse =
+        choices?.firstOrNull?['message']?['content'] as String? ?? '';
+
+    final wineDataList = _extractWineData(textResponse);
+
+    return AiChatResult(
+      textResponse: _cleanTextResponse(textResponse),
+      wineDataList: wineDataList,
+    );
+  }
+
+  Future<String?> _discoverVisionModel() async {
+    if (_discoveredVisionModel != null) return _discoveredVisionModel;
+
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://api.openai.com',
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+        },
+      ),
+    );
+
+    final response = await dio.get('/v1/models');
+    final data = response.data as Map<String, dynamic>?;
+    final models = data?['data'] as List?;
+    if (models == null) return null;
+
+    final ids = models
+        .whereType<Map>()
+        .map((e) => e['id'])
+        .whereType<String>()
+        .toList();
+
+    for (final preferred in _preferredVisionModels) {
+      if (ids.contains(preferred)) {
+        _discoveredVisionModel = preferred;
+        return preferred;
+      }
+    }
+
+    final candidates = ids.where(_looksVisionCapable).toList();
+    if (candidates.isNotEmpty) {
+      _discoveredVisionModel = candidates.first;
+      return candidates.first;
+    }
+
+    return null;
+  }
+
+  bool _looksVisionCapable(String id) {
+    final lower = id.toLowerCase();
+    if (lower.contains('embedding') ||
+        lower.contains('audio') ||
+        lower.contains('realtime') ||
+        lower.contains('tts')) {
+      return false;
+    }
+    return lower.contains('4o') ||
+        lower.contains('vision') ||
+        lower.contains('omni') ||
+        lower.contains('gpt-4.1');
+  }
+
+  @override
+  Future<String?> discoverVisionModel() async {
+    try {
+      return await _discoverVisionModel();
+    } catch (_) {
+      return null;
     }
   }
 

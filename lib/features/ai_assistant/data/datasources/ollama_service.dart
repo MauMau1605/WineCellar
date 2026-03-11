@@ -79,6 +79,21 @@ class OllamaService implements AiService {
   }
 
   @override
+  Future<AiChatResult> analyzeWineFromImage({
+    required List<int> imageBytes,
+    required String mimeType,
+    String userMessage = 'Analyse cette photo de bouteille de vin.',
+    List<Map<String, String>> conversationHistory = const [],
+  }) async {
+    return AiChatResult.error(
+      'L\'analyse d\'image directe n\'est pas disponible avec le provider Ollama actuellement.',
+    );
+  }
+
+  @override
+  Future<String?> discoverVisionModel() async => null;
+
+  @override
   Future<bool> testConnection() async {
     try {
       final response = await _dio.get('/api/tags');

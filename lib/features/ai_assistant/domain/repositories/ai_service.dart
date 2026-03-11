@@ -11,8 +11,21 @@ abstract class AiService {
     List<Map<String, String>> conversationHistory = const [],
   });
 
+  /// Analyze a wine image directly and return structured data.
+  Future<AiChatResult> analyzeWineFromImage({
+    required List<int> imageBytes,
+    required String mimeType,
+    String userMessage,
+    List<Map<String, String>> conversationHistory = const [],
+  });
+
   /// Test the connection / API key validity
   Future<bool> testConnection();
+
+  /// Discovers which vision-capable model is available for this service.
+  /// Returns the model name if vision is supported, null otherwise.
+  /// Implementations that auto-discover a fallback model should cache the result.
+  Future<String?> discoverVisionModel() async => null;
 }
 
 /// Result of an AI chat interaction

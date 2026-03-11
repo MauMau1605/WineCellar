@@ -20,6 +20,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_fr
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/image_text_extractor.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/test_ai_connection.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/openai_service.dart';
@@ -260,9 +261,25 @@ final analyzeWineUseCaseProvider = Provider<AnalyzeWineUseCase?>((ref) {
   return AnalyzeWineUseCase(aiService);
 });
 
+/// Returns null when no AI service is configured yet.
+final analyzeWineFromImageUseCaseProvider =
+    Provider<AnalyzeWineFromImageUseCase?>((ref) {
+  final aiService = ref.watch(aiServiceProvider);
+  if (aiService == null) return null;
+  return AnalyzeWineFromImageUseCase(aiService);
+});
+
 final testAiConnectionUseCaseProvider =
     Provider<TestAiConnectionUseCase?>((ref) {
   final aiService = ref.watch(aiServiceProvider);
   if (aiService == null) return null;
   return TestAiConnectionUseCase(aiService);
+});
+
+/// Discovers which vision-capable model is available for the current AI service.
+/// Auto-invalidated when the service changes (API key, provider, model).
+final visionModelProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final aiService = ref.watch(aiServiceProvider);
+  if (aiService == null) return null;
+  return aiService.discoverVisionModel();
 });

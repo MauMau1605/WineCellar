@@ -15,9 +15,15 @@ class MistralService implements AiService {
   final Dio _dio;
   final Logger _logger = Logger();
   final ChatLogger _chatLogger = ChatLogger();
+  String? _discoveredVisionModel;
 
   static final List<DateTime> _requestTimestamps = <DateTime>[];
   static int _totalRequests = 0;
+  static const List<String> _preferredVisionModels = [
+    'pixtral-large-latest',
+    'pixtral-12b-latest',
+    'pixtral-12b-2409',
+  ];
 
   /// Conversation history maintained for session reuse
   final List<Map<String, String>> _sessionHistory = [];
@@ -123,7 +129,8 @@ class MistralService implements AiService {
         errorMsg =
             'Limite de requêtes Mistral atteinte. Attendez un moment avant de réessayer.';
       } else if (statusCode == 400) {
-        final detail = responseData is Map ? responseData['message'] : null;
+        String? detail;
+        if (responseData is Map) detail = (responseData as Map)['message']?.toString();
         errorMsg =
             'Requête invalide Mistral (modèle "$model" indisponible ?). ${detail ?? e.message}';
       }
@@ -132,6 +139,164 @@ class MistralService implements AiService {
     } catch (e) {
       _logger.e('Mistral error', error: e);
       return AiChatResult.error('Erreur Mistral: ${e.toString()}');
+    }
+  }
+
+  @override
+  Future<AiChatResult> analyzeWineFromImage({
+    required List<int> imageBytes,
+    required String mimeType,
+    String userMessage = 'Analyse cette photo de bouteille de vin.',
+    List<Map<String, String>> conversationHistory = const [],
+  }) async {
+    try {
+      return await _analyzeWineFromImageWithModel(
+        modelName: model,
+        imageBytes: imageBytes,
+        mimeType: mimeType,
+        userMessage: userMessage,
+        conversationHistory: conversationHistory,
+      );
+    } on DioException catch (e) {
+      _logger.e('Mistral image API error', error: e);
+
+      final statusCode = e.response?.statusCode;
+      final responseData = e.response?.data;
+      String errorMsg = 'Erreur de communication avec Mistral: ${e.message}';
+
+      if (statusCode == 401) {
+        return AiChatResult.error(
+          'Clé API Mistral invalide. Vérifiez votre clé dans les paramètres.',
+        );
+      }
+
+      if (statusCode == 400 || statusCode == 404) {
+        final fallbackModel = await _discoverVisionModel();
+        if (fallbackModel != null && fallbackModel != model) {
+          try {
+            return await _analyzeWineFromImageWithModel(
+              modelName: fallbackModel,
+              imageBytes: imageBytes,
+              mimeType: mimeType,
+              userMessage: userMessage,
+              conversationHistory: conversationHistory,
+            );
+          } catch (_) {
+            // Keep contextual message below.
+          }
+        }
+
+        String? detail;
+        if (responseData is Map) detail = (responseData as Map)['message']?.toString();
+        errorMsg =
+            'Le modèle Mistral "$model" ne supporte peut-être pas la vision. '
+            'Essayez un modèle multimodal (ex: pixtral-large-latest). '
+            '${detail ?? ""}'.trim();
+      } else if (statusCode == 429) {
+        errorMsg =
+            'Limite de requêtes Mistral atteinte. Attendez un moment avant de réessayer.';
+      }
+
+      return AiChatResult.error(errorMsg);
+    } catch (e) {
+      _logger.e('Mistral image error', error: e);
+      return AiChatResult.error('Erreur Mistral image: ${e.toString()}');
+    }
+  }
+
+  Future<AiChatResult> _analyzeWineFromImageWithModel({
+    required String modelName,
+    required List<int> imageBytes,
+    required String mimeType,
+    required String userMessage,
+    required List<Map<String, String>> conversationHistory,
+  }) async {
+    final base64Image = base64Encode(imageBytes);
+    final dataUrl = 'data:$mimeType;base64,$base64Image';
+
+    final messages = <Map<String, dynamic>>[
+      {'role': 'system', 'content': AiPrompts.systemPrompt},
+    ];
+
+    if (_sessionHistory.isNotEmpty) {
+      messages.addAll(_sessionHistory);
+    } else if (conversationHistory.isNotEmpty) {
+      messages.addAll(conversationHistory);
+    }
+
+    messages.add({
+      'role': 'user',
+      'content': [
+        {'type': 'text', 'text': userMessage},
+        {'type': 'image_url', 'image_url': dataUrl},
+      ],
+    });
+
+    _recordApiRequest(endpoint: 'chat/completions.image', modelName: modelName);
+
+    final response = await _dio.post(
+      '/v1/chat/completions',
+      data: {
+        'model': modelName,
+        'messages': messages,
+        'temperature': 0.1,
+        'max_tokens': 2000,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    final choices = data['choices'] as List?;
+    final textResponse =
+        choices?.firstOrNull?['message']?['content'] as String? ?? '';
+
+    _sessionHistory.add({'role': 'user', 'content': userMessage});
+    _sessionHistory.add({'role': 'assistant', 'content': textResponse});
+
+    final wineDataList = _extractWineData(textResponse);
+
+    return AiChatResult(
+      textResponse: _cleanTextResponse(textResponse),
+      wineDataList: wineDataList,
+    );
+  }
+
+  Future<String?> _discoverVisionModel() async {
+    if (_discoveredVisionModel != null) return _discoveredVisionModel;
+
+    _recordApiRequest(endpoint: 'models', modelName: 'list');
+    final response = await _dio.get('/v1/models');
+    final data = response.data as Map<String, dynamic>?;
+    final models = data?['data'] as List?;
+    if (models == null) return null;
+
+    final ids = models
+        .whereType<Map>()
+        .map((e) => e['id'])
+        .whereType<String>()
+        .toList();
+
+    for (final preferred in _preferredVisionModels) {
+      if (ids.contains(preferred)) {
+        _discoveredVisionModel = preferred;
+        return preferred;
+      }
+    }
+
+    final candidates = ids.where((id) => id.toLowerCase().contains('pixtral')).toList();
+    if (candidates.isNotEmpty) {
+      _discoveredVisionModel = candidates.first;
+      return candidates.first;
+    }
+
+    return null;
+  }
+
+  @override
+  Future<String?> discoverVisionModel() async {
+    try {
+      return await _discoverVisionModel();
+    } catch (_) {
+      return null;
     }
   }
 

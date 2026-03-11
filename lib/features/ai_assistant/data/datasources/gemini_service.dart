@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:logger/logger.dart';
@@ -48,6 +49,9 @@ class GeminiService implements AiService {
       ),
     );
   }
+
+  @override
+  Future<String?> discoverVisionModel() async => model;
 
   /// Reset the chat session (call when starting a new conversation)
   void resetChat() {
@@ -258,6 +262,64 @@ class GeminiService implements AiService {
     }
 
     return null;
+  }
+
+  @override
+  Future<AiChatResult> analyzeWineFromImage({
+    required List<int> imageBytes,
+    required String mimeType,
+    String userMessage = 'Analyse cette photo de bouteille de vin.',
+    List<Map<String, String>> conversationHistory = const [],
+  }) async {
+    try {
+      await _waitForRateLimit();
+
+      // Create or reuse chat session
+      if (_chatSession == null) {
+        final history = <Content>[];
+        for (final msg in conversationHistory) {
+          final role = msg['role'] == 'user' ? 'user' : 'model';
+          history.add(Content(role, [TextPart(msg['content'] ?? '')]));
+        }
+        _chatSession = _model.startChat(history: history);
+      }
+
+      // Send multimodal message: image + text
+      _recordApiRequest(endpoint: 'chat.sendMessage.image', modelName: model);
+      final response = await _chatSession!.sendMessage(
+        Content.multi([
+          DataPart(mimeType, Uint8List.fromList(imageBytes)),
+          TextPart(userMessage),
+        ]),
+      );
+
+      final textResponse = response.text ?? '';
+
+      // Extract JSON from response
+      final wineDataList = _extractWineData(textResponse);
+
+      return AiChatResult(
+        textResponse: _cleanTextResponse(textResponse),
+        wineDataList: wineDataList,
+      );
+    } catch (e) {
+      _logger.e('Gemini API error (image)', error: e);
+
+      final errorStr = e.toString();
+      String errorMsg = "Erreur d'analyse d'image avec Gemini: $errorStr";
+
+      if (errorStr.contains('API_KEY_INVALID') ||
+          errorStr.contains('PERMISSION_DENIED')) {
+        errorMsg =
+            'Clé API Gemini invalide. Vérifiez votre clé dans les paramètres.';
+      } else if (errorStr.contains('RESOURCE_EXHAUSTED') ||
+          errorStr.contains('429')) {
+        errorMsg =
+            'Limite d\'API Gemini atteinte. Attendez quelques minutes.';
+      }
+
+      return AiChatResult.error(errorMsg);
+    }
   }
 
   @override

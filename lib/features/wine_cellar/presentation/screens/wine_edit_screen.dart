@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 
 /// Screen for editing an existing wine's fields
@@ -43,6 +44,8 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
   late final TextEditingController _cellarYCtrl;
 
   WineColor _selectedColor = WineColor.red;
+  List<FoodCategoryEntity> _allPairingCategories = const [];
+  Set<int> _selectedPairingIds = <int>{};
 
   @override
   void initState() {
@@ -99,10 +102,18 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
           _cellarXCtrl.text = wine.cellarPositionX?.toString() ?? '';
           _cellarYCtrl.text = wine.cellarPositionY?.toString() ?? '';
           _selectedColor = wine.color;
+          _selectedPairingIds = wine.foodCategoryIds.toSet();
           _loading = false;
         });
       },
     );
+
+    final categories =
+        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    if (!mounted) return;
+    setState(() {
+      _allPairingCategories = categories;
+    });
   }
 
   @override
@@ -252,6 +263,34 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 24),
+            _sectionTitle('Accords mets-vins'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _editFoodPairings,
+              icon: const Icon(Icons.restaurant_menu),
+              label: Text(
+                _selectedPairingIds.isEmpty
+                    ? 'Choisir les accords'
+                    : 'Modifier les accords (${_selectedPairingIds.length})',
+              ),
+            ),
+            if (_selectedPairingIds.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _allPairingCategories
+                    .where((c) => _selectedPairingIds.contains(c.id))
+                    .map(
+                      (pairing) => Chip(
+                        label: Text('${pairing.icon ?? '🍽️'} ${pairing.name}'),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
 
             const SizedBox(height: 24),
             _sectionTitle('Cave'),
@@ -444,6 +483,7 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
       color: _selectedColor,
       vintage: int.tryParse(_vintageCtrl.text),
       grapeVarieties: grapes,
+      foodCategoryIds: _selectedPairingIds.toList(),
       quantity: int.tryParse(_quantityCtrl.text) ?? _wine!.quantity,
       purchasePrice: double.tryParse(_priceCtrl.text),
         drinkFromYear: parsedDrinkFromYear,
@@ -491,5 +531,85 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
         );
       }
     }
+  }
+
+  Future<void> _editFoodPairings() async {
+    final selected = Set<int>.from(_selectedPairingIds);
+    final customCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Accords mets-vins'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ..._allPairingCategories.map(
+                      (category) => CheckboxListTile(
+                        value: selected.contains(category.id),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${category.icon ?? '🍽️'} ${category.name}'),
+                        onChanged: (checked) {
+                          setDialogState(() {
+                            if (checked == true) {
+                              selected.add(category.id);
+                            } else {
+                              selected.remove(category.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const Divider(height: 20),
+                    TextField(
+                      controller: customCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Autre accord personnalisé',
+                        hintText: 'Ex: Raclette',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Valider'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final customName = customCtrl.text.trim();
+    if (customName.isNotEmpty) {
+      final created = await ref
+          .read(foodCategoryRepositoryProvider)
+          .createOrGetCategory(customName, icon: '🍽️');
+      if (!mounted) return;
+      if (_allPairingCategories.every((c) => c.id != created.id)) {
+        _allPairingCategories = [..._allPairingCategories, created];
+      }
+      selected.add(created.id);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _selectedPairingIds = selected;
+    });
   }
 }

@@ -10,4 +10,7 @@ abstract class FoodCategoryRepository {
 
   /// Find categories matching a name (for AI auto-matching)
   Future<List<FoodCategoryEntity>> findByName(String name);
+
+  /// Create a category if it does not exist, otherwise return existing.
+  Future<FoodCategoryEntity> createOrGetCategory(String name, {String? icon});
 }

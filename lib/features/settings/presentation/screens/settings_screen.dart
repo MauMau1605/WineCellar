@@ -63,6 +63,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final currentProvider = ref.watch(aiProviderSettingProvider);
+    final visionModel = ref.watch(visionModelProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -156,6 +157,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'Recommandé : gpt-4o-mini (pas cher et efficace)',
                       ),
                     ),
+                    if (visionModel.hasValue && visionModel.value != null) ...[  
+                      const SizedBox(height: 12),
+                      _VisionModelChip(modelName: visionModel.value!),
+                    ],
                   ],
                 ),
               ),
@@ -263,6 +268,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'Recommandé : mistral-small-latest (bon rapport qualité/prix)',
                       ),
                     ),
+                    if (visionModel.hasValue && visionModel.value != null) ...[  
+                      const SizedBox(height: 8),
+                      _VisionModelChip(modelName: visionModel.value!),
+                    ],
                     const SizedBox(height: 8),
                     Text(
                       'Obtenez votre clé sur console.mistral.ai',
@@ -408,6 +417,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _testConnection() async {
+    // Invalidate vision model cache so it re-discovers with updated settings
+    ref.invalidate(visionModelProvider);
+
     // Save first
     await _saveSettings();
 
@@ -451,5 +463,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         },
       );
     }
+  }
+}
+
+/// Small info chip displayed below the model field when a vision-capable model
+/// has been auto-discovered for the current provider.
+class _VisionModelChip extends StatelessWidget {
+  const _VisionModelChip({required this.modelName});
+
+  final String modelName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer.withAlpha(100),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.secondary.withAlpha(60),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.camera_alt_outlined,
+            size: 14,
+            color: theme.colorScheme.secondary,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              'Vision disponible : $modelName',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

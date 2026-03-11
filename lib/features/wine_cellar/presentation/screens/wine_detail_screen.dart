@@ -201,6 +201,15 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               context,
               'Accords mets-vins',
               [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _editFoodPairings(wine),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Modifier les accords'),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 if (_pairings.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4),
@@ -437,6 +446,106 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     if (updated == true) {
       await _loadWine();
     }
+  }
+
+  Future<void> _editFoodPairings(WineEntity wine) async {
+    final categories =
+        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    if (!mounted) return;
+
+    final selected = wine.foodCategoryIds.toSet();
+    final customCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Modifier les accords mets-vins'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...categories.map(
+                      (category) => CheckboxListTile(
+                        value: selected.contains(category.id),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${category.icon ?? '🍽️'} ${category.name}'),
+                        onChanged: (checked) {
+                          setDialogState(() {
+                            if (checked == true) {
+                              selected.add(category.id);
+                            } else {
+                              selected.remove(category.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const Divider(height: 20),
+                    TextField(
+                      controller: customCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Autre accord personnalisé',
+                        hintText: 'Ex: Raclette',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final customName = customCtrl.text.trim();
+    if (customName.isNotEmpty) {
+      final created = await ref
+          .read(foodCategoryRepositoryProvider)
+          .createOrGetCategory(customName, icon: '🍽️');
+      if (!mounted) return;
+      selected.add(created.id);
+    }
+
+    final updatedWine = wine.copyWith(
+      foodCategoryIds: selected.toList(),
+      aiSuggestedFoodPairings: false,
+      updatedAt: DateTime.now(),
+    );
+
+    final result = await ref.read(updateWineUseCaseProvider).call(updatedWine);
+    if (!mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+      },
+      (_) async {
+        await _loadWine();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Accords mets-vins mis à jour.')),
+        );
+      },
+    );
   }
 
   Future<void> _updateQuantity(WineEntity wine, int newQty) async {

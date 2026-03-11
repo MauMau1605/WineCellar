@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/constants.dart';
+import '../core/food_pairing_catalog.dart';
 import 'tables/wines.dart';
 import 'tables/food_categories.dart';
 import 'tables/wine_food_pairings.dart';
@@ -145,27 +146,8 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  List<({String name, String icon, int sortOrder})> get _defaultFoodCategories =>
-      [
-        (name: 'Viande rouge', icon: '🥩', sortOrder: 1),
-        (name: 'Viande blanche', icon: '🍗', sortOrder: 2),
-        (name: 'Volaille', icon: '🐔', sortOrder: 3),
-        (name: 'Gibier', icon: '🦌', sortOrder: 4),
-        (name: 'Poisson', icon: '🐟', sortOrder: 5),
-        (name: 'Fruits de mer', icon: '🦐', sortOrder: 6),
-        (name: 'Fromage', icon: '🧀', sortOrder: 7),
-        (name: 'Charcuterie', icon: '🥓', sortOrder: 8),
-        (name: 'Pâtes / Risotto', icon: '🍝', sortOrder: 9),
-        (name: 'Pizza', icon: '🍕', sortOrder: 10),
-        (name: 'Salade', icon: '🥗', sortOrder: 11),
-        (name: 'Soupe', icon: '🍲', sortOrder: 12),
-        (name: 'Barbecue / Grillades', icon: '🔥', sortOrder: 13),
-        (name: 'Cuisine asiatique', icon: '🥢', sortOrder: 14),
-        (name: 'Cuisine épicée', icon: '🌶️', sortOrder: 15),
-        (name: 'Dessert chocolat', icon: '🍫', sortOrder: 16),
-        (name: 'Dessert fruité', icon: '🍓', sortOrder: 17),
-        (name: 'Apéritif', icon: '🥂', sortOrder: 18),
-      ];
+  List<FoodPairingPreset> get _defaultFoodCategories =>
+      defaultFoodPairingCatalog;
 }
 
 LazyDatabase _openConnection() {

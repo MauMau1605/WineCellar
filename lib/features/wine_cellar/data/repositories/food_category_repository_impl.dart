@@ -28,6 +28,12 @@ class FoodCategoryRepositoryImpl implements FoodCategoryRepository {
     return categories.map(_mapToEntity).toList();
   }
 
+  @override
+  Future<FoodCategoryEntity> createOrGetCategory(String name, {String? icon}) async {
+    final category = await _dao.createOrGetByName(name, icon: icon);
+    return _mapToEntity(category);
+  }
+
   FoodCategoryEntity _mapToEntity(FoodCategory db) {
     return FoodCategoryEntity(
       id: db.id,

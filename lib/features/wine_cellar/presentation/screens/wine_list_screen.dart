@@ -14,6 +14,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_import_row.
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_sort.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
@@ -36,6 +37,7 @@ class WineListScreen extends ConsumerStatefulWidget {
 class _WineListScreenState extends ConsumerState<WineListScreen> {
   final _searchController = TextEditingController();
   WineFilter _filter = const WineFilter();
+  WineSort? _sort;
 
   @override
   void dispose() {
@@ -51,6 +53,16 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       appBar: AppBar(
         title: const Text('Ma Cave à Vin'),
         actions: [
+          IconButton(
+            icon: Icon(
+              Icons.sort,
+              color: _sort != null
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: 'Trier',
+            onPressed: _showSortSheet,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: _handleMenuAction,
@@ -131,11 +143,16 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             child: winesAsync.when(
               data: (wines) {
                 // Apply maturity filter in-memory if needed
-                final filtered = _filter.maturity != null
+                var filtered = _filter.maturity != null
                     ? wines
                         .where((w) => w.maturity == _filter.maturity)
                         .toList()
                     : wines;
+
+                // Apply sort
+                if (_sort != null) {
+                  filtered = _sort!.apply(filtered);
+                }
 
                 if (filtered.isEmpty) {
                   return _buildEmptyState();
@@ -156,6 +173,82 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Ajouter un vin'),
       ),
+    );
+  }
+
+  Future<void> _showSortSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Trier par',
+                          style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const Spacer(),
+                        if (_sort != null)
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _sort = null);
+                              Navigator.of(ctx).pop();
+                            },
+                            child: const Text('Réinitialiser'),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  ...WineSortField.values.map((field) {
+                    final isSelected = _sort?.field == field;
+                    return ListTile(
+                      leading: Icon(
+                        isSelected
+                            ? (_sort!.ascending
+                                ? Icons.arrow_upward
+                                : Icons.arrow_downward)
+                            : Icons.remove,
+                        color: isSelected
+                            ? Theme.of(ctx).colorScheme.primary
+                            : null,
+                      ),
+                      title: Text(field.label),
+                      selected: isSelected,
+                      onTap: () {
+                        setSheetState(() {
+                          setState(() {
+                            if (isSelected) {
+                              // Toggle direction
+                              _sort = _sort!.copyWith(ascending: !_sort!.ascending);
+                            } else {
+                              _sort = WineSort(field: field);
+                            }
+                          });
+                        });
+                      },
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 
@@ -42,6 +43,8 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
 
   WineColor _selectedColor = WineColor.red;
   bool _saving = false;
+  List<FoodCategoryEntity> _allPairingCategories = const [];
+  Set<int> _selectedPairingIds = <int>{};
 
   bool get _canSubmit {
     final hasName = _nameCtrl.text.trim().isNotEmpty;
@@ -54,6 +57,16 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     super.initState();
     _nameCtrl.addListener(_refresh);
     _vintageCtrl.addListener(_refresh);
+    _loadFoodCategories();
+  }
+
+  Future<void> _loadFoodCategories() async {
+    final categories =
+        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    if (!mounted) return;
+    setState(() {
+      _allPairingCategories = categories;
+    });
   }
 
   @override
@@ -214,6 +227,34 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 24),
+              _sectionTitle('Accords mets-vins'),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _editFoodPairings,
+                icon: const Icon(Icons.restaurant_menu),
+                label: Text(
+                  _selectedPairingIds.isEmpty
+                      ? 'Choisir les accords'
+                      : 'Modifier les accords (${_selectedPairingIds.length})',
+                ),
+              ),
+              if (_selectedPairingIds.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _allPairingCategories
+                      .where((c) => _selectedPairingIds.contains(c.id))
+                      .map(
+                        (pairing) => Chip(
+                          label: Text('${pairing.icon ?? '🍽️'} ${pairing.name}'),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
 
               const SizedBox(height: 24),
               _sectionTitle('Cave'),
@@ -655,6 +696,7 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       cellarPositionX: double.tryParse(_cellarXCtrl.text.trim()),
       cellarPositionY: double.tryParse(_cellarYCtrl.text.trim()),
       aiDescription: _emptyToNull(_aiDescriptionCtrl.text),
+      foodCategoryIds: _selectedPairingIds.toList(),
       aiSuggestedFoodPairings: false,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -690,6 +732,14 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     addField('Notes de dégustation', _tastingNotesCtrl.text);
     addField('Notes personnelles', _notesCtrl.text);
     addField('Description', _aiDescriptionCtrl.text);
+
+    if (_selectedPairingIds.isNotEmpty) {
+      final pairings = _allPairingCategories
+          .where((c) => _selectedPairingIds.contains(c.id))
+          .map((c) => c.name)
+          .join(', ');
+      addField('Accords mets-vins', pairings);
+    }
 
     return fields.join('\n');
   }
@@ -765,5 +815,85 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     });
 
     return normalized.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Future<void> _editFoodPairings() async {
+    final selected = Set<int>.from(_selectedPairingIds);
+    final customCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Accords mets-vins'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ..._allPairingCategories.map(
+                      (category) => CheckboxListTile(
+                        value: selected.contains(category.id),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${category.icon ?? '🍽️'} ${category.name}'),
+                        onChanged: (checked) {
+                          setDialogState(() {
+                            if (checked == true) {
+                              selected.add(category.id);
+                            } else {
+                              selected.remove(category.id);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const Divider(height: 20),
+                    TextField(
+                      controller: customCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Autre accord personnalisé',
+                        hintText: 'Ex: Raclette',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Valider'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final customName = customCtrl.text.trim();
+    if (customName.isNotEmpty) {
+      final created = await ref
+          .read(foodCategoryRepositoryProvider)
+          .createOrGetCategory(customName, icon: '🍽️');
+      if (!mounted) return;
+      if (_allPairingCategories.every((c) => c.id != created.id)) {
+        _allPairingCategories = [..._allPairingCategories, created];
+      }
+      selected.add(created.id);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _selectedPairingIds = selected;
+    });
   }
 }
