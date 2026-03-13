@@ -20,7 +20,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _mistralApiKeyController = TextEditingController();
   final _ollamaUrlController = TextEditingController();
   final _modelController = TextEditingController();
+  final _visionModelController = TextEditingController();
+  final _visionApiKeyController = TextEditingController();
+  AiProvider? _visionProviderOverride;
   bool _obscureApiKey = true;
+  bool _obscureVisionApiKey = true;
   bool _testingConnection = false;
 
   @override
@@ -39,6 +43,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final mistralApiKey = ref.read(mistralApiKeyProvider);
     final ollamaUrl = ref.read(ollamaUrlProvider);
     final model = ref.read(selectedModelProvider);
+    final visionProviderName = ref.read(visionProviderOverrideProvider);
+    final visionModel = ref.read(visionModelOverrideProvider);
+    final visionApiKey = ref.read(visionApiKeyOverrideProvider);
+
+    final parsedVisionProvider = AiProvider.values.where(
+      (provider) => provider.name == visionProviderName,
+    );
 
     setState(() {
       _apiKeyController.text = apiKey ?? '';
@@ -47,6 +58,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _ollamaUrlController.text =
           ollamaUrl ?? AppConstants.defaultOllamaUrl;
       _modelController.text = model ?? '';
+      _visionProviderOverride =
+          parsedVisionProvider.isEmpty ? null : parsedVisionProvider.first;
+      _visionModelController.text = visionModel ?? '';
+      _visionApiKeyController.text = visionApiKey ?? '';
     });
   }
 
@@ -57,6 +72,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _mistralApiKeyController.dispose();
     _ollamaUrlController.dispose();
     _modelController.dispose();
+    _visionModelController.dispose();
+    _visionApiKeyController.dispose();
     super.dispose();
   }
 
@@ -64,6 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final currentProvider = ref.watch(aiProviderSettingProvider);
     final visionModel = ref.watch(visionModelProvider);
+    final useOcr = ref.watch(useOcrForImagesProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -327,6 +345,122 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // -------- Section : Analyse d'image --------
+          Text(
+            'Analyse d\'image',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.text_fields_outlined),
+                    title: const Text('OCR local (Google MLKit)'),
+                    subtitle: const Text(
+                      'Extrait le texte de l\'étiquette sur l\'appareil, '
+                      'sans envoyer l\'image à l\'IA.\n'
+                      'Recommandé si votre fournisseur ne supporte pas la vision.',
+                    ),
+                    value: useOcr,
+                    onChanged: (value) => ref
+                        .read(useOcrForImagesProvider.notifier)
+                        .setValue(value),
+                  ),
+                  if (!useOcr) ...[
+                    const Divider(height: 24),
+                    Text(
+                      'Overrides vision IA (optionnels)',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<AiProvider?>(
+                      initialValue: _visionProviderOverride,
+                      decoration: const InputDecoration(
+                        labelText: 'Fournisseur pour l\'analyse d\'image',
+                        prefixIcon: Icon(Icons.hub_outlined),
+                        helperText:
+                            'Par défaut: même fournisseur que le chat.',
+                      ),
+                      items: [
+                        const DropdownMenuItem<AiProvider?>(
+                          value: null,
+                          child: Text('Utiliser le fournisseur principal'),
+                        ),
+                        ...AiProvider.values
+                            .where((provider) => provider != AiProvider.ollama)
+                            .map(
+                              (provider) => DropdownMenuItem<AiProvider?>(
+                                value: provider,
+                                child: Text(provider.label),
+                              ),
+                            ),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _visionProviderOverride = value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _visionModelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Modèle dédié à la vision',
+                        hintText: 'ex: gpt-4o, gemini-2.0-flash-exp…',
+                        prefixIcon: Icon(Icons.camera_alt_outlined),
+                        helperText:
+                            'Laissez vide pour utiliser le modèle principal.',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _visionApiKeyController,
+                      decoration: InputDecoration(
+                        labelText: 'Clé API dédiée à la vision',
+                        hintText: 'sk-… / AIza… / …',
+                        prefixIcon: const Icon(Icons.vpn_key_outlined),
+                        helperText:
+                            'Laissez vide pour utiliser la clé principale.',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureVisionApiKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscureVisionApiKey = !_obscureVisionApiKey,
+                          ),
+                        ),
+                      ),
+                      obscureText: _obscureVisionApiKey,
+                    ),
+                    const SizedBox(height: 8),
+                    if (visionModel.hasValue && visionModel.value != null) ...[
+                      _VisionModelChip(modelName: visionModel.value!),
+                      const SizedBox(height: 4),
+                    ],
+                    Text(
+                      'OpenAI : gpt-4o-mini  •  Gemini : gemini-2.0-flash  •  Mistral : pixtral-12b-latest',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // Save & Test buttons
           Row(
             children: [
@@ -407,6 +541,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     };
     await ref.read(selectedModelProvider.notifier).setValue(
           _modelController.text.isNotEmpty ? _modelController.text : defaultModel,
+        );
+
+    // Overrides vision (stockés que si non vides)
+    await ref.read(visionProviderOverrideProvider.notifier).setValue(
+        _visionProviderOverride?.name,
+      );
+    await ref.read(visionModelOverrideProvider.notifier).setValue(
+          _visionModelController.text.isNotEmpty
+              ? _visionModelController.text
+              : null,
+        );
+    await ref.read(visionApiKeyOverrideProvider.notifier).setValue(
+          _visionApiKeyController.text.isNotEmpty
+              ? _visionApiKeyController.text
+              : null,
         );
 
     if (mounted) {

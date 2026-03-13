@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 11 mars 2026.
+> Dernière mise à jour : 13 mars 2026.
 
 ---
 
@@ -534,12 +534,16 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | `mistralApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API Mistral |
 | `ollamaUrlProvider` | `StateNotifierProvider<…, String?>` | URL Ollama |
 | `selectedModelProvider` | `StateNotifierProvider<…, String?>` | Modèle sélectionné |
+| `visionModelOverrideProvider` | `StateNotifierProvider<…, String?>` | Modèle dédié à l'analyse d'image (optionnel) |
+| `visionApiKeyOverrideProvider` | `StateNotifierProvider<…, String?>` | Clé API dédiée à l'analyse d'image (optionnel) |
+| `useOcrForImagesProvider` | `StateNotifierProvider<…, bool>` | Si `true`, analyse image via OCR local (MLKit) plutôt que vision IA |
 
 ### AI Service
 
 | Provider | Type | Fournit |
 |----------|------|---------|
 | `aiServiceProvider` | `Provider<AiService?>` | L'implémentation IA active (ou `null` si non configuré). Switch sur `aiProviderSettingProvider`. |
+| `visionAiServiceProvider` | `Provider<AiService?>` | Service IA dédié à l'analyse d'images. Applique les overrides de modèle/clé vision si configurés ; sinon délègue à `aiServiceProvider`. Retourne toujours `null` pour Ollama (non supporté). |
 | `imageTextExtractorProvider` | `Provider<ImageTextExtractor>` | Implémentation OCR active : `MlKitImageTextExtractor` |
 
 ### Use Cases — Wine
@@ -561,6 +565,7 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | Provider | Type |
 |----------|------|
 | `analyzeWineUseCaseProvider` | `Provider<AnalyzeWineUseCase?>` |
+| `analyzeWineFromImageUseCaseProvider` | `Provider<AnalyzeWineFromImageUseCase?>` | Utilise `visionAiServiceProvider` |
 | `extractTextFromWineImageUseCaseProvider` | `Provider<ExtractTextFromWineImageUseCase>` |
 | `testAiConnectionUseCaseProvider` | `Provider<TestAiConnectionUseCase?>` |
 
@@ -670,3 +675,4 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | 4 | **`ChatLogger` singleton** — non injecté via Riverpod | Faible | Testabilité |
 | 5 | **Tests unitaires/widget absents** — à implémenter (mocktail) | Haute | Fiabilité |
 | 6 | **Import CSV piloté par prompts IA** (qualité dépendante du provider/modèle) | Moyenne | Peut nécessiter ajustement de prompt selon modèle |
+| 7 | **Tesseract OCR** — alternatif plus puissant pour les textes très artistiques. Ajouter `tesseract_ocr` (~15 MB) si MLKit s'avère insuffisant sur certaines étiquettes | Faible | Amélioration OCR, coût en taille d'APK |

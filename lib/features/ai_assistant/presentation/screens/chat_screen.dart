@@ -15,6 +15,7 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.d
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
@@ -246,15 +247,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _captureWinePhotoAndAnalyze() async {
     if (_isLoading) return;
 
-    final analyzeImageUseCase = ref.read(analyzeWineFromImageUseCaseProvider);
-    if (analyzeImageUseCase == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Configurez votre clé API avant d\'utiliser la caméra.'),
-        ),
-      );
-      return;
+    final useOcr = ref.read(useOcrForImagesProvider);
+
+    // En mode vision IA, on vérifie qu'un service est configuré.
+    if (!useOcr) {
+      final analyzeImageUseCase = ref.read(analyzeWineFromImageUseCaseProvider);
+      if (analyzeImageUseCase == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Configurez votre clé API avant d\'utiliser la caméra.'),
+          ),
+        );
+        return;
+      }
     }
 
     final source = await _showImageSourceDialog();
@@ -268,16 +275,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
 
     if (image == null) return;
-
-    final imageBytes = await File(image.path).readAsBytes();
-    final mimeType = _guessMimeTypeFromPath(image.path);
-    final history = _messages
-        .where((m) => m.role != ChatRole.system)
-        .map((m) => {
-              'role': m.role == ChatRole.user ? 'user' : 'assistant',
-              'content': m.content,
-            })
-        .toList();
 
     final sourceText = source == ImageSource.camera ? 'caméra' : 'galerie';
 
@@ -293,6 +290,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _isLoading = true;
     });
     _scrollToBottom();
+
+    if (useOcr) {
+      await _analyzeWithOcr(image.path);
+    } else {
+      await _analyzeWithVision(image.path);
+    }
+  }
+
+  /// Branche OCR : extrait le texte via MLKit puis envoie au chat texte.
+  Future<void> _analyzeWithOcr(String imagePath) async {
+    final extractUseCase = ref.read(extractTextFromWineImageUseCaseProvider);
+    final either = await extractUseCase(
+        ExtractTextFromWineImageParams(imagePath: imagePath));
+
+    if (!mounted) return;
+
+    either.fold(
+      (failure) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+      },
+      (extractedText) async {
+        setState(() => _isLoading = false);
+        // Texte visible dans le chat (résumé).
+        const displayText = '🔍 Texte extrait par OCR — analyse en cours…';
+        // Prompt complet envoyé à l\'IA.
+        final aiPrompt =
+            'J\'ai photographié une étiquette de vin. '
+            'Voici le texte extrait par OCR :\n\n$extractedText\n\n'
+            'Analyse ces informations et retourne la réponse '
+            'au format JSON habituel, sans raisonnement long.';
+        await _sendText(displayText, aiMessage: aiPrompt);
+      },
+    );
+  }
+
+  /// Branche vision IA : envoie les bytes de l\'image directement au modèle multimodal.
+  Future<void> _analyzeWithVision(String imagePath) async {
+    final analyzeImageUseCase = ref.read(analyzeWineFromImageUseCaseProvider);
+    if (analyzeImageUseCase == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    final imageBytes = await File(imagePath).readAsBytes();
+    final mimeType = _guessMimeTypeFromPath(imagePath);
+    final history = _messages
+        .where((m) => m.role != ChatRole.system)
+        .map((m) => {
+              'role': m.role == ChatRole.user ? 'user' : 'assistant',
+              'content': m.content,
+            })
+        .toList();
 
     final either = await analyzeImageUseCase(
       AnalyzeWineFromImageParams(

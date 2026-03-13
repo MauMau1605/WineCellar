@@ -25,6 +25,17 @@ class AppConstants {
   static const String keyOllamaUrl = 'ollama_url';
   static const String keySelectedModel = 'selected_model';
 
+  // Vision / image analysis settings
+  /// Fournisseur dédié à l'analyse d'image (optionnel).
+  /// Si absent, le fournisseur principal est utilisé.
+  static const String keyVisionProviderOverride = 'vision_provider_override';
+  /// Modèle dédié à l'analyse d'image (optionnel — remplace le modèle principal)
+  static const String keyVisionModel = 'vision_model';
+  /// Clé API dédiée à l'analyse d'image (optionnel — remplace la clé principale)
+  static const String keyVisionApiKeyOverride = 'vision_api_key_override';
+  /// Si true, utilise l'OCR local (MLKit) au lieu de l'analyse IA multimodale
+  static const String keyUseOcrForImages = 'use_ocr_for_images';
+
   // Wine defaults
   static const int maxRating = 5;
   static const int defaultQuantity = 1;

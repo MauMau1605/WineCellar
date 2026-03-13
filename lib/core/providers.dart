@@ -132,6 +132,48 @@ final selectedModelProvider =
   );
 });
 
+// ---- Vision / image analysis overrides ----
+
+/// Modèle dédié à l'analyse d'image (optionnel).
+/// Si renseigné, remplace le modèle principal pour l'analyse de photos.
+final visionProviderOverrideProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyVisionProviderOverride,
+  );
+});
+
+/// Modèle dédié à l'analyse d'image (optionnel).
+/// Si renseigné, remplace le modèle principal pour l'analyse de photos.
+final visionModelOverrideProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyVisionModel,
+  );
+});
+
+/// Clé API dédiée à l'analyse d'image (optionnel).
+/// Si renseignée, remplace la clé principale pour l'analyse de photos.
+final visionApiKeyOverrideProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyVisionApiKeyOverride,
+  );
+});
+
+/// Si true, l'analyse de photos utilise l'OCR local (MLKit)
+/// au lieu d'envoyer l'image à l'IA multimodale.
+final useOcrForImagesProvider =
+    StateNotifierProvider<SecureBoolNotifier, bool>((ref) {
+  return SecureBoolNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyUseOcrForImages,
+  );
+});
+
 /// Reusable notifier for secure string storage
 class SecureStringNotifier extends StateNotifier<String?> {
   final FlutterSecureStorage _storage;
@@ -152,6 +194,26 @@ class SecureStringNotifier extends StateNotifier<String?> {
     } else {
       await _storage.delete(key: _key);
     }
+  }
+}
+
+/// Reusable notifier for a boolean stored as a string in secure storage.
+class SecureBoolNotifier extends StateNotifier<bool> {
+  final FlutterSecureStorage _storage;
+  final String _key;
+
+  SecureBoolNotifier(this._storage, this._key) : super(false) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final value = await _storage.read(key: _key);
+    if (value != null) state = value == 'true';
+  }
+
+  Future<void> setValue(bool value) async {
+    state = value;
+    await _storage.write(key: _key, value: value.toString());
   }
 }
 
@@ -203,6 +265,102 @@ String _sanitizeGeminiModel(String? storedModel) {
 
   return candidate;
 }
+
+String _defaultModelForProvider(AiProvider provider) {
+  switch (provider) {
+    case AiProvider.openai:
+      return AppConstants.defaultOpenAiModel;
+    case AiProvider.gemini:
+      return AppConstants.defaultGeminiModel;
+    case AiProvider.mistral:
+      return AppConstants.defaultMistralModel;
+    case AiProvider.ollama:
+      return AppConstants.defaultOllamaModel;
+  }
+}
+
+/// Service IA dédié à l'analyse d'images, avec prise en charge des overrides
+/// de modèle et de clé API configurés dans les paramètres.
+///
+/// - Si aucun override n'est défini : délègue directement à [aiServiceProvider].
+/// - Si un modèle vision est défini : l'utilise à la place du modèle principal.
+/// - Si une clé API vision est définie : l'utilise à la place de la clé principale.
+/// - Ollama ne supporte pas la vision : retourne toujours null.
+final visionAiServiceProvider = Provider<AiService?>((ref) {
+  final mainProvider = ref.watch(aiProviderSettingProvider);
+  final visionProviderOverride = ref.watch(visionProviderOverrideProvider);
+  final visionModelOverride = ref.watch(visionModelOverrideProvider);
+  final visionApiKeyOverride = ref.watch(visionApiKeyOverrideProvider);
+
+  final provider = AiProvider.values.firstWhere(
+    (candidate) => candidate.name == visionProviderOverride,
+    orElse: () => mainProvider,
+  );
+
+  final hasVisionModel =
+      visionModelOverride != null && visionModelOverride.isNotEmpty;
+  final hasVisionKey =
+      visionApiKeyOverride != null && visionApiKeyOverride.isNotEmpty;
+
+  // Ollama ne supporte pas la vision, quelle que soit la configuration.
+  if (provider == AiProvider.ollama) return null;
+
+  // Sans override, on délègue au service principal.
+  if (!hasVisionModel && !hasVisionKey) {
+    return ref.watch(aiServiceProvider);
+  }
+
+  // Avec au moins un override, on construit un service vision dédié.
+  final mainOpenAiKey = ref.watch(openAiApiKeyProvider);
+  final mainGeminiKey = ref.watch(geminiApiKeyProvider);
+  final mainMistralKey = ref.watch(mistralApiKeyProvider);
+  final mainModel = ref.watch(selectedModelProvider);
+
+  String effectiveModel() {
+    if (hasVisionModel) return visionModelOverride;
+
+    // Si un fournisseur vision spécifique est choisi, on évite de réutiliser
+    // le modèle principal (souvent d'un autre fournisseur).
+    final hasProviderOverride =
+        visionProviderOverride != null && visionProviderOverride.isNotEmpty;
+    if (hasProviderOverride) {
+      return _defaultModelForProvider(provider);
+    }
+
+    return mainModel ?? _defaultModelForProvider(provider);
+  }
+
+  String effectiveKey(String? mainKey) {
+    if (hasVisionKey) return visionApiKeyOverride;
+    return mainKey ?? '';
+  }
+
+  switch (provider) {
+    case AiProvider.openai:
+      final key = effectiveKey(mainOpenAiKey);
+      if (key.isEmpty) return null;
+      return OpenAiService(
+        apiKey: key,
+        model: effectiveModel(),
+      );
+    case AiProvider.gemini:
+      final key = effectiveKey(mainGeminiKey);
+      if (key.isEmpty) return null;
+      return GeminiService(
+        apiKey: key,
+        model: _sanitizeGeminiModel(effectiveModel()),
+      );
+    case AiProvider.mistral:
+      final key = effectiveKey(mainMistralKey);
+      if (key.isEmpty) return null;
+      return MistralService(
+        apiKey: key,
+        model: effectiveModel(),
+      );
+    case AiProvider.ollama:
+      return null;
+  }
+});
 
 // ============ Use Cases — Wine ============
 
@@ -262,11 +420,13 @@ final analyzeWineUseCaseProvider = Provider<AnalyzeWineUseCase?>((ref) {
 });
 
 /// Returns null when no AI service is configured yet.
+/// Utilise [visionAiServiceProvider] pour respecter les overrides
+/// de modèle/clé API dédiés à l'analyse d'images.
 final analyzeWineFromImageUseCaseProvider =
     Provider<AnalyzeWineFromImageUseCase?>((ref) {
-  final aiService = ref.watch(aiServiceProvider);
-  if (aiService == null) return null;
-  return AnalyzeWineFromImageUseCase(aiService);
+  final visionService = ref.watch(visionAiServiceProvider);
+  if (visionService == null) return null;
+  return AnalyzeWineFromImageUseCase(visionService);
 });
 
 final testAiConnectionUseCaseProvider =
@@ -276,10 +436,11 @@ final testAiConnectionUseCaseProvider =
   return TestAiConnectionUseCase(aiService);
 });
 
-/// Discovers which vision-capable model is available for the current AI service.
+/// Discovers which vision-capable model is available.
+/// Utilise [visionAiServiceProvider] pour refléter les overrides éventuels.
 /// Auto-invalidated when the service changes (API key, provider, model).
 final visionModelProvider = FutureProvider.autoDispose<String?>((ref) async {
-  final aiService = ref.watch(aiServiceProvider);
-  if (aiService == null) return null;
-  return aiService.discoverVisionModel();
+  final visionService = ref.watch(visionAiServiceProvider);
+  if (visionService == null) return null;
+  return visionService.discoverVisionModel();
 });
