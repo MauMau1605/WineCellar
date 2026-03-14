@@ -181,7 +181,7 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<WineColor>(
-              value: _selectedColor,
+              initialValue: _selectedColor,
               decoration: const InputDecoration(
                 labelText: 'Couleur *',
                 prefixIcon: Icon(Icons.palette),

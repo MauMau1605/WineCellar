@@ -6,8 +6,10 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/database/app_database.dart';
 import 'package:wine_cellar/features/wine_cellar/data/repositories/wine_repository_impl.dart';
 import 'package:wine_cellar/features/wine_cellar/data/repositories/food_category_repository_impl.dart';
+import 'package:wine_cellar/features/wine_cellar/data/repositories/virtual_cellar_repository_impl.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/food_category_repository.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/repositories/virtual_cellar_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/add_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_by_id.dart';
@@ -17,6 +19,13 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.da
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_json.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_all_virtual_cellars.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/create_virtual_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_virtual_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_virtual_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/remove_bottle_placement.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_placements.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/image_text_extractor.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
@@ -48,12 +57,22 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
 
 final wineRepositoryProvider = Provider<WineRepository>((ref) {
   final db = ref.watch(databaseProvider);
-  return WineRepositoryImpl(db.wineDao, db.foodCategoryDao);
+  return WineRepositoryImpl(
+    db.wineDao,
+    db.foodCategoryDao,
+    db.virtualCellarDao,
+    db.bottlePlacementDao,
+  );
 });
 
 final foodCategoryRepositoryProvider = Provider<FoodCategoryRepository>((ref) {
   final db = ref.watch(databaseProvider);
   return FoodCategoryRepositoryImpl(db.foodCategoryDao);
+});
+
+final virtualCellarRepositoryProvider = Provider<VirtualCellarRepository>((ref) {
+  final db = ref.watch(databaseProvider);
+  return VirtualCellarRepositoryImpl(db.virtualCellarDao, db.bottlePlacementDao);
 });
 
 // ============ Settings ============
@@ -399,6 +418,45 @@ final parseCsvImportUseCaseProvider = Provider<ParseCsvImportUseCase>((ref) {
 
 final importWinesFromCsvUseCaseProvider = Provider<ImportWinesFromCsvUseCase>((ref) {
   return ImportWinesFromCsvUseCase(ref.watch(wineRepositoryProvider));
+});
+
+// ============ Use Cases — Virtual Cellar ============
+
+final getAllVirtualCellarsUseCaseProvider =
+    Provider<GetAllVirtualCellarsUseCase>((ref) {
+  return GetAllVirtualCellarsUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final createVirtualCellarUseCaseProvider =
+    Provider<CreateVirtualCellarUseCase>((ref) {
+  return CreateVirtualCellarUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final updateVirtualCellarUseCaseProvider =
+    Provider<UpdateVirtualCellarUseCase>((ref) {
+  return UpdateVirtualCellarUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final deleteVirtualCellarUseCaseProvider =
+    Provider<DeleteVirtualCellarUseCase>((ref) {
+  return DeleteVirtualCellarUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final placeWineInCellarUseCaseProvider =
+    Provider<PlaceWineInCellarUseCase>((ref) {
+  return PlaceWineInCellarUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final removeBottlePlacementUseCaseProvider =
+    Provider<RemoveBottlePlacementUseCase>((ref) {
+  return RemoveBottlePlacementUseCase(
+    ref.watch(virtualCellarRepositoryProvider),
+  );
+});
+
+final getWinePlacementsUseCaseProvider =
+    Provider<GetWinePlacementsUseCase>((ref) {
+  return GetWinePlacementsUseCase(ref.watch(virtualCellarRepositoryProvider));
 });
 
 // ============ Use Cases — AI ============

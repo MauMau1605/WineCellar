@@ -28,6 +28,8 @@ class Wines extends Table {
   BoolColumn get aiSuggestedFoodPairings =>
       boolean().withDefault(const Constant(false))();
   TextColumn get location => text().nullable()(); // e.g. 'Cave maison', 'Garage'
+  // FK to virtual_cellars.id — nullable, no FK constraint at DB level for easy migration
+  IntColumn get cellarId => integer().nullable()();
   RealColumn get cellarPositionX => real().nullable()();
   RealColumn get cellarPositionY => real().nullable()();
   TextColumn get notes => text().nullable()(); // free-form user notes

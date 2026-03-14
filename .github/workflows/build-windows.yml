@@ -40,6 +40,9 @@ jobs:
       - name: Run database migration test
         run: flutter test test/database/app_database_migration_test.dart
 
+      - name: Run JSON import compatibility test
+        run: flutter test test/features/wine_cellar/data/repositories/wine_repository_impl_test.dart
+
   build-windows:
     runs-on: windows-latest
     needs: test-migration

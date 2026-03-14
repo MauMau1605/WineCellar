@@ -9,14 +9,18 @@ import '../core/food_pairing_catalog.dart';
 import 'tables/wines.dart';
 import 'tables/food_categories.dart';
 import 'tables/wine_food_pairings.dart';
+import 'tables/virtual_cellars.dart';
+import 'tables/bottle_placements.dart';
 import 'daos/wine_dao.dart';
 import 'daos/food_category_dao.dart';
+import 'daos/virtual_cellar_dao.dart';
+import 'daos/bottle_placement_dao.dart';
 
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [Wines, FoodCategories, WineFoodPairings],
-  daos: [WineDao, FoodCategoryDao],
+  tables: [Wines, FoodCategories, WineFoodPairings, VirtualCellars, BottlePlacements],
+  daos: [WineDao, FoodCategoryDao, VirtualCellarDao, BottlePlacementDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -83,6 +87,40 @@ class AppDatabase extends _$AppDatabase {
       columnName: 'notes',
       addColumn: () => m.addColumn(wines, wines.notes),
     );
+
+    // v4 — virtual cellars
+    await _createTableIfMissing(
+      'virtual_cellars',
+      () => m.createTable(virtualCellars),
+    );
+    await _addColumnIfMissing(
+      tableName: 'wines',
+      columnName: 'cellar_id',
+      addColumn: () => m.addColumn(wines, wines.cellarId),
+    );
+
+    // v5 — one placement row per physical bottle.
+    await _createTableIfMissing(
+      'bottle_placements',
+      () => m.createTable(bottlePlacements),
+    );
+
+    // Migrate legacy per-wine position into one per-bottle placement row.
+    await customStatement('''
+      INSERT INTO bottle_placements (wine_id, cellar_id, position_x, position_y)
+      SELECT w.id, w.cellar_id, CAST(w.cellar_position_x AS INTEGER), CAST(w.cellar_position_y AS INTEGER)
+      FROM wines w
+      WHERE w.cellar_id IS NOT NULL
+        AND w.cellar_position_x IS NOT NULL
+        AND w.cellar_position_y IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM bottle_placements bp
+          WHERE bp.cellar_id = w.cellar_id
+            AND bp.position_x = CAST(w.cellar_position_x AS INTEGER)
+            AND bp.position_y = CAST(w.cellar_position_y AS INTEGER)
+        );
+    ''');
   }
 
   Future<void> _createTableIfMissing(

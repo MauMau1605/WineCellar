@@ -130,7 +130,7 @@ class MistralService implements AiService {
             'Limite de requêtes Mistral atteinte. Attendez un moment avant de réessayer.';
       } else if (statusCode == 400) {
         String? detail;
-        if (responseData is Map) detail = (responseData as Map)['message']?.toString();
+        if (responseData is Map) detail = responseData['message']?.toString();
         errorMsg =
             'Requête invalide Mistral (modèle "$model" indisponible ?). ${detail ?? e.message}';
       }
@@ -187,7 +187,7 @@ class MistralService implements AiService {
         }
 
         String? detail;
-        if (responseData is Map) detail = (responseData as Map)['message']?.toString();
+    if (responseData is Map) detail = responseData['message']?.toString();
         errorMsg =
             'Le modèle Mistral "$model" ne supporte peut-être pas la vision. '
             'Essayez un modèle multimodal (ex: pixtral-large-latest). '

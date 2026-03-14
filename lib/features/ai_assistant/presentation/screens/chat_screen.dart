@@ -378,6 +378,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           );
           _currentWineDataList = result.wineDataList;
+          _addedWineIndices.clear();
           _isLoading = false;
         });
         _cacheConversationState();

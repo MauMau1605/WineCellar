@@ -7,13 +7,12 @@ import 'package:logger/logger.dart';
 /// Service that logs all chat interactions (user input, AI responses, errors)
 /// to timestamped text files for debugging and recovery.
 ///
-/// Logs are stored in: <app_documents>/wine_cellar_logs/
+/// Logs are stored in the app documents directory under wine_cellar_logs/.
 /// One file per conversation session.
 class ChatLogger {
   final Logger _logger = Logger();
 
   File? _currentLogFile;
-  String? _currentSessionId;
 
   static final ChatLogger _instance = ChatLogger._internal();
   factory ChatLogger() => _instance;
@@ -63,7 +62,6 @@ class ChatLogger {
   Future<void> startSession() async {
     final dir = await _logsDir;
     final timestamp = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    _currentSessionId = timestamp;
     _currentLogFile = File('${dir.path}/chat_$timestamp.log');
 
     await _write('=== Nouvelle session de chat ===');
@@ -129,7 +127,6 @@ class ChatLogger {
       await _write('[${_now()}] === Fin de session ===');
     }
     _currentLogFile = null;
-    _currentSessionId = null;
   }
 
   /// Get the path to the current log file (for display to user)

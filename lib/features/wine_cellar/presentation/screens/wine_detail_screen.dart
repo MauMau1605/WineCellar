@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/theme.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placement_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 
 /// Detail screen for a single wine
 class WineDetailScreen extends ConsumerStatefulWidget {
@@ -21,6 +23,8 @@ class WineDetailScreen extends ConsumerStatefulWidget {
 class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   WineEntity? _wine;
   List<FoodCategoryEntity> _pairings = const [];
+  List<BottlePlacementEntity> _placements = const [];
+  Map<int, VirtualCellarEntity> _cellarsById = const {};
   bool _loading = true;
 
   @override
@@ -67,6 +71,30 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       _wine = wine;
       _pairings = explicitPairings;
       _loading = false;
+    });
+    await _loadPlacements(wine.id);
+  }
+
+  Future<void> _loadPlacements(int? wineId) async {
+    if (wineId == null) return;
+
+    final placementsResult = await ref
+        .read(getWinePlacementsUseCaseProvider)
+        .call(wineId);
+    final cellarsResult = await ref.read(virtualCellarRepositoryProvider).getAll();
+
+    if (!mounted) return;
+
+    final placements = placementsResult.getOrElse((_) => const []);
+    final cellars = cellarsResult.getOrElse((_) => const []);
+    final byId = <int, VirtualCellarEntity>{
+      for (final cellar in cellars)
+        if (cellar.id != null) cellar.id!: cellar,
+    };
+
+    setState(() {
+      _placements = placements;
+      _cellarsById = byId;
     });
   }
 
@@ -168,35 +196,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               ],
             ),
 
-            _buildSection(
-              context,
-              'Cave',
-              [
-                _buildInfoRow('Quantité',
-                    '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}'),
-                _buildInfoRow(
-                    'Prix d\'achat',
-                    wine.purchasePrice != null
-                        ? '${wine.purchasePrice!.toStringAsFixed(2)} €'
-                        : ''),
-                _buildInfoRow(
-                  'Note',
-                  wine.rating != null
-                      ? '${'★' * wine.rating!}${'☆' * (5 - wine.rating!)}'
-                      : '',
-                ),
-                _buildInfoRow('Localisation', _displayValue(wine.location)),
-                _buildInfoRow(
-                  'Position cave X',
-                  _displayDouble(wine.cellarPositionX),
-                ),
-                _buildInfoRow(
-                  'Position cave Y',
-                  _displayDouble(wine.cellarPositionY),
-                ),
-              ],
-            ),
-
+            _buildCellarSection(context, wine),
             _buildSection(
               context,
               'Accords mets-vins',
@@ -423,11 +423,195 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     return value?.toString() ?? '';
   }
 
-  String _displayDouble(double? value) {
-    if (value == null) return '';
-    return value.toStringAsFixed(2);
+  Widget _buildCellarSection(BuildContext context, WineEntity wine) {
+    final theme = Theme.of(context);
+    final placedCount = _placements.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cave',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const Divider(),
+          _buildInfoRow('Quantité',
+              '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}'),
+          _buildInfoRow(
+            'Prix d\'achat',
+            wine.purchasePrice != null
+                ? '${wine.purchasePrice!.toStringAsFixed(2)} €'
+                : '',
+          ),
+          _buildInfoRow(
+            'Note',
+            wine.rating != null
+                ? '${'★' * wine.rating!}${'☆' * (5 - wine.rating!)}'
+                : '',
+          ),
+          _buildInfoRow('Localisation', _displayValue(wine.location)),
+          _buildInfoRow(
+            'Bouteilles placées',
+            '$placedCount / ${wine.quantity}',
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  placedCount == 0
+                      ? 'Aucune bouteille placée en cellier.'
+                      : 'Afficher les emplacements en cave',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontStyle:
+                        placedCount == 0 ? FontStyle.italic : FontStyle.normal,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: placedCount == 0
+                    ? () => context.go('/cellars')
+                    : () => _showPlacementsDialog(context, wine),
+                icon: Icon(
+                  placedCount == 0
+                      ? Icons.grid_view_outlined
+                      : Icons.visibility_outlined,
+                  size: 16,
+                ),
+                label: Text(placedCount == 0 ? 'Gérer les celliers' : 'Voir'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
+  Future<void> _showPlacementsDialog(
+    BuildContext context,
+    WineEntity wine,
+  ) async {
+    if (_placements.isEmpty) return;
+
+    final placementsByCellar = <int, List<BottlePlacementEntity>>{};
+    for (final placement in _placements) {
+      placementsByCellar.putIfAbsent(placement.cellarId, () => []).add(placement);
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Placements de ${wine.displayName}'),
+        content: SizedBox(
+          width: 720,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: placementsByCellar.entries.map((entry) {
+                final cellarId = entry.key;
+                final cellar = _cellarsById[cellarId];
+                if (cellar == null) return const SizedBox.shrink();
+                final cellarPlacements = entry.value;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${cellar.name} - ${cellarPlacements.length} bouteille(s)',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => context.push('/cellars/${cellar.id}'),
+                            child: const Text('Ouvrir le cellier'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _buildPlacementGridPreview(
+                        context: context,
+                        cellar: cellar,
+                        placements: cellarPlacements,
+                        wineColor: AppTheme.colorForWine(wine.color.name),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlacementGridPreview({
+    required BuildContext context,
+    required VirtualCellarEntity cellar,
+    required List<BottlePlacementEntity> placements,
+    required Color wineColor,
+  }) {
+    final maxColumns = cellar.columns > 10 ? 10 : cellar.columns;
+    final maxRows = cellar.rows > 8 ? 8 : cellar.rows;
+
+    final points = <(int, int)>{
+      for (final p in placements) (p.positionY, p.positionX),
+    };
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(maxRows, (r) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(maxColumns, (c) {
+              final occupied = points.contains((r, c));
+              return Container(
+                width: 20,
+                height: 20,
+                margin: const EdgeInsets.all(1),
+                decoration: BoxDecoration(
+                  color: occupied
+                      ? wineColor.withValues(alpha: 0.25)
+                      : Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.35),
+                  border: Border.all(
+                    color: occupied
+                        ? wineColor
+                        : Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          );
+        }),
+      ),
+    );
+  }
   bool _isAiSuggestedGuardValue(WineEntity wine, int? value) {
     if (value == null) return false;
     return (value == wine.drinkFromYear && wine.aiSuggestedDrinkFromYear) ||
@@ -551,6 +735,17 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   Future<void> _updateQuantity(WineEntity wine, int newQty) async {
     if (wine.id == null) return;
 
+    if (newQty >= 0 && _placements.length > newQty && _placements.isNotEmpty) {
+      final mustChoose = _placements.length == wine.quantity;
+      if (mustChoose) {
+        final toRemove = await _askWhichPlacedBottleWasRemoved(context);
+        if (toRemove == null) return;
+        await ref.read(removeBottlePlacementUseCaseProvider).call(toRemove.id);
+      }
+    }
+
+    if (!mounted) return;
+
     if (newQty <= 0) {
       // Ask user if they want to delete when quantity reaches 0
       final action = await showDialog<String>(
@@ -620,6 +815,43 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       await useCase(params);
     }
     await _loadWine();
+  }
+
+  Future<BottlePlacementEntity?> _askWhichPlacedBottleWasRemoved(
+    BuildContext context,
+  ) async {
+    return showDialog<BottlePlacementEntity>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Quelle bouteille a été retirée ?'),
+        content: SizedBox(
+          width: 500,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _placements.length,
+            itemBuilder: (context, index) {
+              final placement = _placements[index];
+              final cellarName =
+                  _cellarsById[placement.cellarId]?.name ?? 'Cellier ${placement.cellarId}';
+              return ListTile(
+                leading: const Icon(Icons.place_outlined),
+                title: Text(cellarName),
+                subtitle: Text(
+                  'Rangée ${placement.positionY + 1}, Colonne ${placement.positionX + 1}',
+                ),
+                onTap: () => Navigator.of(dialogContext).pop(placement),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmDelete(WineEntity wine) async {

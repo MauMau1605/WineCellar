@@ -25,6 +25,8 @@ class WineEntity {
   final String? aiDescription;
   final bool aiSuggestedFoodPairings;
   final String? location;
+  /// FK to a [VirtualCellarEntity]. Null when the wine is not placed in any virtual cellar.
+  final int? cellarId;
   final double? cellarPositionX;
   final double? cellarPositionY;
   final String? notes;
@@ -55,6 +57,7 @@ class WineEntity {
     this.aiDescription,
     this.aiSuggestedFoodPairings = false,
     this.location,
+    this.cellarId,
     this.cellarPositionX,
     this.cellarPositionY,
     this.notes,
@@ -120,6 +123,7 @@ class WineEntity {
     String? aiDescription,
     bool? aiSuggestedFoodPairings,
     String? location,
+    int? cellarId,
     double? cellarPositionX,
     double? cellarPositionY,
     String? notes,
@@ -153,6 +157,7 @@ class WineEntity {
         aiSuggestedFoodPairings:
           aiSuggestedFoodPairings ?? this.aiSuggestedFoodPairings,
       location: location ?? this.location,
+      cellarId: cellarId ?? this.cellarId,
         cellarPositionX: cellarPositionX ?? this.cellarPositionX,
         cellarPositionY: cellarPositionY ?? this.cellarPositionY,
       notes: notes ?? this.notes,
@@ -186,6 +191,7 @@ class WineEntity {
       'aiDescription': aiDescription,
       'aiSuggestedFoodPairings': aiSuggestedFoodPairings,
       'location': location,
+      'cellarId': cellarId,
       'cellarPositionX': cellarPositionX,
       'cellarPositionY': cellarPositionY,
       'notes': notes,
@@ -228,6 +234,7 @@ class WineEntity {
         aiSuggestedFoodPairings:
           json['aiSuggestedFoodPairings'] as bool? ?? false,
       location: json['location'] as String?,
+        cellarId: json['cellarId'] as int?,
         cellarPositionX: (json['cellarPositionX'] as num?)?.toDouble(),
         cellarPositionY: (json['cellarPositionY'] as num?)?.toDouble(),
       notes: json['notes'] as String?,

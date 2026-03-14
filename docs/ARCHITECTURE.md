@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 13 mars 2026.
+> Dernière mise à jour : 14 mars 2026.
 
 ---
 
@@ -73,10 +73,12 @@ lib/
 │   ├── tables/
 │   │   ├── wines.dart
 │   │   ├── food_categories.dart
-│   │   └── wine_food_pairings.dart
+│   │   ├── wine_food_pairings.dart
+│   │   └── virtual_cellars.dart
 │   └── daos/
 │       ├── wine_dao.dart (+.g.dart)
-│       └── food_category_dao.dart (+.g.dart)
+│       ├── food_category_dao.dart (+.g.dart)
+│       └── virtual_cellar_dao.dart (+.g.dart)
 │
 ├── features/
 │   ├── wine_cellar/                   # Feature principale
@@ -89,7 +91,8 @@ lib/
 │   │   │   │   └── csv_import_row.dart
 │   │   │   ├── repositories/
 │   │   │   │   ├── wine_repository.dart
-│   │   │   │   └── food_category_repository.dart
+│   │   │   │   ├── food_category_repository.dart
+│   │   │   │   └── virtual_cellar_repository.dart
 │   │   │   └── usecases/
 │   │   │       ├── add_wine.dart
 │   │   │       ├── delete_wine.dart
@@ -99,11 +102,17 @@ lib/
 │   │   │       ├── export_wines.dart
 │   │   │       ├── import_wines_from_json.dart
 │   │   │       ├── parse_csv_import.dart
-│   │   │       └── import_wines_from_csv.dart
+│   │   │       ├── import_wines_from_csv.dart
+│   │   │       ├── get_all_virtual_cellars.dart
+│   │   │       ├── create_virtual_cellar.dart
+│   │   │       ├── update_virtual_cellar.dart
+│   │   │       ├── delete_virtual_cellar.dart
+│   │   │       └── place_wine_in_cellar.dart
 │   │   ├── data/
 │   │   │   └── repositories/
 │   │   │       ├── wine_repository_impl.dart
-│   │   │       └── food_category_repository_impl.dart
+│   │   │       ├── food_category_repository_impl.dart
+│   │   │       └── virtual_cellar_repository_impl.dart
 │   │   └── presentation/
 │   │       ├── providers/
 │   │       │   └── wine_list_provider.dart
@@ -111,7 +120,9 @@ lib/
 │   │       │   ├── wine_list_screen.dart
 │   │       │   ├── wine_add_screen.dart
 │   │       │   ├── wine_detail_screen.dart
-│   │       │   └── wine_edit_screen.dart
+│   │       │   ├── wine_edit_screen.dart
+│   │       │   ├── virtual_cellar_list_screen.dart
+│   │       │   └── virtual_cellar_detail_screen.dart
 │   │       └── widgets/
 │   │           ├── wine_card.dart
 │   │           └── csv_column_mapping_dialog.dart
@@ -229,8 +240,8 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 
 ### `router.dart`
 - Configuration GoRouter avec `ShellRoute` pour la navigation bottom bar/rail
-- 3 routes principales : `/cellar`, `/chat`, `/settings`
-- Sous-routes : `/cellar/add`, `/cellar/wine/:id`, `/cellar/wine/:id/edit`
+- 4 routes principales : `/cellar`, `/chat`, `/cellars`, `/settings`
+- Sous-routes : `/cellar/add`, `/cellar/wine/:id`, `/cellar/wine/:id/edit`, `/cellars/:id`
 
 ### `theme.dart` — `AppTheme`
 - Color scheme Material 3 inspiré du vin (rouge `#722F37`, or `#D4A843`)
@@ -244,7 +255,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 
 ### `widgets/shell_scaffold.dart` — `ShellScaffold`
 - Shell layout adaptatif : `NavigationBar` (mobile) / `NavigationRail` (desktop)
-- 3 destinations : Cave, Assistant IA, Paramètres
+- 4 destinations : Cave, Assistant IA, Celliers, Paramètres
 - **Utilisé par :** `core/router.dart` (ShellRoute builder)
 
 ---
@@ -257,7 +268,12 @@ Infrastructure SQLite partagée (Drift ORM). Vit au niveau `lib/` car utilisée 
 Table Drift incluant :
 - colonnes métier vin (nom, appellation, producteur, garde, notes, etc.)
 - source IA persistée par champ critique : `aiSuggestedFoodPairings`, `aiSuggestedDrinkFromYear`, `aiSuggestedDrinkUntilYear`
+- rattachement à un cellier virtuel : `cellarId`
 - localisation cave virtuelle : `cellarPositionX`, `cellarPositionY`
+
+### `tables/virtual_cellars.dart` — `VirtualCellars`
+Table Drift des celliers virtuels : `id`, `name`, `rows`, `columns`, `createdAt`, `updatedAt`.
+Chaque bouteille placée dans un cellier référence cette table via `Wines.cellarId`.
 
 ### `tables/food_categories.dart` — `FoodCategories`
 Table : `id`, `name`, `icon` (emoji), `sortOrder`.
@@ -266,9 +282,10 @@ Table : `id`, `name`, `icon` (emoji), `sortOrder`.
 Table de jointure many-to-many : `wineId` → `Wines.id`, `foodCategoryId` → `FoodCategories.id`. Clé primaire composite. Cascade on delete.
 
 ### `app_database.dart` — `AppDatabase`
-- Classe Drift `@DriftDatabase` regroupant les 3 tables et 2 DAOs
-- `schemaVersion = 3`
+- Classe Drift `@DriftDatabase` regroupant 4 tables et 3 DAOs
+- `schemaVersion = 4`
 - Stratégie actuelle d'upgrade : migration non destructive (création conditionnelle des tables/colonnes manquantes)
+- Migration v4 : création de `virtual_cellars` et ajout de `wines.cellar_id`
 - `_seedFoodCategories()` — pré-peuple 18 catégories alimentaires à la création
 - Seeding idempotent des catégories : insertion uniquement des catégories absentes
 - Stockage DB desktop : priorité au répertoire d'installation (si écriture autorisée), fallback sur `<documents>`
@@ -298,6 +315,18 @@ DAO pour les opérations sur les vins :
 | `watchAllCategories()` | Stream réactif |
 | `findCategoriesByName(String)` | Recherche LIKE (pour auto-matching IA) |
 
+### `daos/virtual_cellar_dao.dart` — `VirtualCellarDao`
+DAO dédié aux celliers virtuels et à l'occupation de leurs emplacements :
+
+| Méthode | Description |
+|---------|-------------|
+| `watchAll()` / `getAll()` | Liste des celliers triée par nom |
+| `getById(int)` | Chargement d'un cellier |
+| `insertCellar(...)` / `updateCellar(...)` / `deleteCellar(int)` | CRUD cellier |
+| `watchWinesByCellarId(int)` / `getWinesByCellarId(int)` | Bouteilles placées dans un cellier |
+| `clearCellarPlacementsForCellar(int)` | Déplace toutes les bouteilles hors du cellier avant suppression |
+| `updateCellarPlacement(...)` | Place ou retire une bouteille d'un emplacement |
+
 ---
 
 ## Feature `wine_cellar/`
@@ -308,10 +337,16 @@ Gestion CRUD de la cave à vin.
 
 #### `wine_entity.dart` — `WineEntity`
 - Entité métier principale, **immutable** (champs `final`)
+- Inclut le placement virtuel via `cellarId`, `cellarPositionX`, `cellarPositionY`
 - Propriétés calculées : `maturity` (basée sur l'année courante vs fenêtre de dégustation), `displayName`
 - `copyWith()` pour les modifications
 - `toJson()` / `fromJson()` pour l'import/export
 - `grapeVarietiesJson` / `parseGrapeVarieties()` pour la sérialisation DB
+
+#### `virtual_cellar_entity.dart` — `VirtualCellarEntity`
+- Entité métier d'un cellier virtuel
+- Champs : `id`, `name`, `rows`, `columns`, `createdAt`, `updatedAt`
+- Propriété calculée : `totalSlots`
 
 #### `food_category_entity.dart` — `FoodCategoryEntity`
 - Entité légère : `id`, `name`, `icon`, `sortOrder`
@@ -330,9 +365,15 @@ Contrat pour les opérations vin :
 - Quantité : `updateQuantity`
 - Stats : `getWineCount`, `getTotalBottles`
 - Export/Import : `exportToJson`, `exportToCsv`, `importFromJson`, `parseCsvRows`, `importFromCsv`
+- Le JSON est un instantané complet de cave : vins, celliers virtuels et placements. Son import restaure cet état complet après confirmation explicite en UI.
 
 #### `food_category_repository.dart` — `FoodCategoryRepository` (abstract)
 - `getAllCategories()`, `watchAllCategories()`, `findByName(String)`
+
+#### `virtual_cellar_repository.dart` — `VirtualCellarRepository` (abstract)
+- Lecture : `watchAll`, `getAll`, `getById`
+- Écriture : `create`, `update`, `delete`
+- Occupation : `getWinesByCellarId`, `watchWinesByCellarId`, `placeWine`
 
 ### domain/usecases/
 
@@ -349,6 +390,11 @@ Chaque use case a **une seule** méthode `call()` retournant `Either<Failure, T>
 | `ImportWinesFromJsonUseCase` | `String` (JSON) | `int` | Valide contenu + délègue import JSON |
 | `ParseCsvImportUseCase` | `ParseCsvImportParams` | `List<CsvImportRow>` | Parse CSV avec mapping de colonnes utilisateur |
 | `ImportWinesFromCsvUseCase` | `ImportWinesFromCsvParams` | `int` | Import direct CSV après validation de mapping |
+| `GetAllVirtualCellarsUseCase` | `NoParams` implicite / `watch()` | `List<VirtualCellarEntity>` | Liste et observe les celliers |
+| `CreateVirtualCellarUseCase` | `VirtualCellarEntity` | `int` | Crée un cellier |
+| `UpdateVirtualCellarUseCase` | `VirtualCellarEntity` | `void` | Met à jour nom et dimensions |
+| `DeleteVirtualCellarUseCase` | `int` | `void` | Supprime un cellier après dépose des bouteilles |
+| `PlaceWineInCellarUseCase` | `PlaceWineParams` | `void` | Place ou retire une bouteille d'un emplacement |
 
 ### data/repositories/
 
@@ -356,12 +402,20 @@ Chaque use case a **une seule** méthode `call()` retournant `Either<Failure, T>
 - Implémente `WineRepository`
 - Injecté avec `WineDao` et `FoodCategoryDao`
 - Responsabilités de mapping : `_mapToEntity(Wine)` (DB → domain) et `_mapToCompanion(WineEntity)` (domain → DB)
-- Import JSON : parse et boucle `addWine`
+- Import JSON : supporte deux modes
+- Instantané complet moderne : remplace la cave actuelle et restaure vins, celliers et placements
+- JSON historique sans `virtualCellars` : import additionnel rétrocompatible, sans réappliquer de placements virtuels
 - Import CSV : parsing avec mapping utilisateur + normalisation des champs (quantité, prix, couleur)
 
 #### `food_category_repository_impl.dart` — `FoodCategoryRepositoryImpl`
 - Implémente `FoodCategoryRepository`
 - Mapping `FoodCategory` (DB) → `FoodCategoryEntity` (domain)
+
+#### `virtual_cellar_repository_impl.dart` — `VirtualCellarRepositoryImpl`
+- Implémente `VirtualCellarRepository`
+- Injecté avec `VirtualCellarDao`
+- Mappe `VirtualCellar` et `Wine` (Drift) vers les entités métier
+- Gère le placement et le retrait des bouteilles dans les celliers
 
 ### presentation/providers/
 
@@ -379,6 +433,8 @@ Providers Riverpod déclaratifs :
 - Layout adaptatif : `ListView` (mobile) / `GridView` (desktop)
 - Actions menu : export JSON/CSV + import JSON/CSV
 - Import CSV guidé : mapping colonnes → prévisualisation extraction → mode direct ou enrichissement IA
+- Vérification avant import CSV et confirmation explicite de préservation de la cave virtuelle actuelle
+- Pour le JSON snapshot, confirmation destructive dédiée avant restauration complète de la cave
 - Enrichissement IA par lots de 20 vins max avec validation utilisateur à chaque lot
 - Gestion quantité via `UpdateWineQuantityUseCase` avec dialogue confirmation
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
@@ -393,11 +449,23 @@ Providers Riverpod déclaratifs :
 - Détail complet d'un vin (chargé via `GetWineByIdUseCase`)
 - Actions : modifier, supprimer (`DeleteWineUseCase`), ajuster quantité (`UpdateWineQuantityUseCase`)
 - Affichage maturité, cépages, accords mets-vin, notes de dégustation
+- Remplace les anciennes coordonnées brutes par un aperçu du placement dans le cellier avec navigation vers le cellier concerné
 
 #### `wine_edit_screen.dart` — `WineEditScreen`
 - Formulaire d'édition complet (15+ champs)
 - Chargement via `GetWineByIdUseCase`, sauvegarde via `UpdateWineUseCase`
 - Sélecteur de couleur, champs numériques validés
+
+#### `virtual_cellar_list_screen.dart` — `VirtualCellarListScreen`
+- Liste l'ensemble des celliers virtuels sous forme de cartes
+- Permet création, renommage, redimensionnement et suppression
+- Affiche la capacité et le nombre d'emplacements par cellier
+
+#### `virtual_cellar_detail_screen.dart` — `VirtualCellarDetailScreen`
+- Vue grille d'un cellier avec placement interactif des bouteilles
+- Tap sur emplacement vide : sélection d'un vin à placer
+- Tap sur emplacement occupé : infos bouteille + retrait ou navigation vers la fiche
+- Redimensionnement avec alerte avant dépose automatique des bouteilles hors bornes
 
 ### presentation/widgets/
 
@@ -523,6 +591,7 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 |----------|------|---------|
 | `wineRepositoryProvider` | `Provider<WineRepository>` | `WineRepositoryImpl(wineDao, foodCategoryDao)` |
 | `foodCategoryRepositoryProvider` | `Provider<FoodCategoryRepository>` | `FoodCategoryRepositoryImpl(foodCategoryDao)` |
+| `virtualCellarRepositoryProvider` | `Provider<VirtualCellarRepository>` | `VirtualCellarRepositoryImpl(virtualCellarDao)` |
 
 ### Settings (state persisté)
 
@@ -559,6 +628,11 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | `importWinesFromJsonUseCaseProvider` | `Provider<ImportWinesFromJsonUseCase>` |
 | `parseCsvImportUseCaseProvider` | `Provider<ParseCsvImportUseCase>` |
 | `importWinesFromCsvUseCaseProvider` | `Provider<ImportWinesFromCsvUseCase>` |
+| `getAllVirtualCellarsUseCaseProvider` | `Provider<GetAllVirtualCellarsUseCase>` |
+| `createVirtualCellarUseCaseProvider` | `Provider<CreateVirtualCellarUseCase>` |
+| `updateVirtualCellarUseCaseProvider` | `Provider<UpdateVirtualCellarUseCase>` |
+| `deleteVirtualCellarUseCaseProvider` | `Provider<DeleteVirtualCellarUseCase>` |
+| `placeWineInCellarUseCaseProvider` | `Provider<PlaceWineInCellarUseCase>` |
 
 ### Use Cases — AI
 

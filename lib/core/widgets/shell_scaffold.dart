@@ -10,7 +10,8 @@ class ShellScaffold extends StatelessWidget {
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/chat')) return 1;
-    if (location.startsWith('/settings')) return 2;
+    if (location.startsWith('/cellars')) return 2;
+    if (location.startsWith('/settings')) return 3;
     return 0;
   }
 
@@ -21,6 +22,8 @@ class ShellScaffold extends StatelessWidget {
       case 1:
         context.go('/chat');
       case 2:
+        context.go('/cellars');
+      case 3:
         context.go('/settings');
     }
   }
@@ -62,6 +65,11 @@ class ShellScaffold extends StatelessWidget {
                   label: Text('Assistant IA'),
                 ),
                 NavigationRailDestination(
+                  icon: Icon(Icons.grid_view_outlined),
+                  selectedIcon: Icon(Icons.grid_view),
+                  label: Text('Celliers'),
+                ),
+                NavigationRailDestination(
                   icon: Icon(Icons.settings_outlined),
                   selectedIcon: Icon(Icons.settings),
                   label: Text('Paramètres'),
@@ -91,6 +99,11 @@ class ShellScaffold extends StatelessWidget {
             icon: Icon(Icons.chat_outlined),
             selectedIcon: Icon(Icons.chat),
             label: 'Assistant IA',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'Celliers',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

@@ -6,6 +6,8 @@ import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_edit_
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_add_screen.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_list_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_detail_screen.dart';
 import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
 
 /// Application router configuration
@@ -49,6 +51,21 @@ final GoRouter appRouter = GoRouter(
           pageBuilder: (context, state) => const NoTransitionPage(
             child: ChatScreen(),
           ),
+        ),
+        GoRoute(
+          path: '/cellars',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: VirtualCellarListScreen(),
+          ),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (context, state) {
+                final id = int.parse(state.pathParameters['id']!);
+                return VirtualCellarDetailScreen(cellarId: id);
+              },
+            ),
+          ],
         ),
         GoRoute(
           path: '/settings',

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:csv/csv.dart';
@@ -20,7 +21,6 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_sort.dart'
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
-import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_json.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_card.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/wine_list_provider.dart';
@@ -535,6 +535,15 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     final jsonPath = path.files.single.path!;
     final content = await File(jsonPath).readAsString();
+    final importMode = _inspectJsonImport(content);
+    final importApproved = importMode.isFullSnapshot
+        ? await _confirmJsonSnapshotRestore(importMode)
+        : await _confirmVirtualCellarImportSafety(
+            formatLabel: 'JSON',
+            importedPlacementsWillBeIgnored: true,
+          );
+    if (!mounted || !importApproved) return;
+
     final importUseCase = ref.read(importWinesFromJsonUseCaseProvider);
     final result = await importUseCase(content);
 
@@ -547,9 +556,22 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         );
       },
       (count) {
+        final message = importMode.isFullSnapshot
+            ? 'Instantané JSON restauré : $count vin(s) et ${importMode.cellarCount} cellier(s).'
+            : '$count vin(s) importé(s) depuis le JSON.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$count vin(s) importé(s) depuis le JSON.')),
+          SnackBar(content: Text(message)),
         );
+
+        if (importMode.hasCompatibilityAdjustments) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Compatibilité détectée: certaines valeurs ont été adaptées et la position en cave a été ignorée pour préserver les données vin.',
+              ),
+            ),
+          );
+        }
       },
     );
   }
@@ -567,6 +589,12 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     final csvPath = picked.files.single.path!;
     final csvContent = await File(csvPath).readAsString();
+    final importApproved = await _confirmVirtualCellarImportSafety(
+      formatLabel: 'CSV',
+      importedPlacementsWillBeIgnored: false,
+    );
+    if (!mounted || !importApproved) return;
+
     final previewRows = _extractCsvPreviewRows(csvContent, maxRows: 2);
 
     if (!mounted) return;
@@ -674,6 +702,177 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
 
     return confirmed ?? false;
+  }
+
+  Future<bool> _confirmVirtualCellarImportSafety({
+    required String formatLabel,
+    required bool importedPlacementsWillBeIgnored,
+  }) async {
+    final wines = await ref.read(wineRepositoryProvider).getAllWines();
+    final placedCount = wines
+        .where(
+          (wine) =>
+              wine.cellarId != null &&
+              wine.cellarPositionX != null &&
+              wine.cellarPositionY != null,
+        )
+        .length;
+
+    if (!mounted || placedCount == 0) {
+      return true;
+    }
+
+    final message = importedPlacementsWillBeIgnored
+        ? '$placedCount bouteille(s) sont déjà placée(s) dans un cellier virtuel. '
+            'Pour préserver la cave actuelle, les placements contenus dans ce fichier $formatLabel '
+            'seront ignorés à l\'import. Les vins importés seront ajoutés sans emplacement virtuel.'
+        : '$placedCount bouteille(s) sont déjà placée(s) dans un cellier virtuel. '
+            'L\'import $formatLabel n\'écrasera pas la cave actuelle : les vins importés '
+            'seront ajoutés sans emplacement virtuel.';
+
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Préserver la cave virtuelle actuelle'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Continuer l\'import'),
+          ),
+        ],
+      ),
+    );
+
+    return approved ?? false;
+  }
+
+  _JsonImportMode _inspectJsonImport(String content) {
+    try {
+      final decoded = jsonDecode(content);
+
+      List<dynamic> wines;
+      List<dynamic> cellars;
+      bool isFullSnapshot;
+      bool hasCompatibilityAdjustments;
+
+      if (decoded is List<dynamic>) {
+        wines = decoded;
+        cellars = const [];
+        isFullSnapshot = false;
+        hasCompatibilityAdjustments = true;
+      } else if (decoded is Map<String, dynamic>) {
+        wines = (decoded['wines'] as List<dynamic>? ?? const []);
+        cellars = (decoded['virtualCellars'] as List<dynamic>? ?? const []);
+        isFullSnapshot = decoded['snapshotType'] == 'full_cellar' ||
+            decoded.containsKey('virtualCellars');
+        hasCompatibilityAdjustments = _hasCompatibilityHints(wines);
+      } else {
+        return const _JsonImportMode(
+          isFullSnapshot: false,
+          wineCount: 0,
+          cellarCount: 0,
+          hasCompatibilityAdjustments: true,
+        );
+      }
+
+      return _JsonImportMode(
+        isFullSnapshot: isFullSnapshot,
+        wineCount: wines.length,
+        cellarCount: cellars.length,
+        hasCompatibilityAdjustments: hasCompatibilityAdjustments,
+      );
+    } catch (_) {
+      return const _JsonImportMode(
+        isFullSnapshot: false,
+        wineCount: 0,
+        cellarCount: 0,
+        hasCompatibilityAdjustments: false,
+      );
+    }
+  }
+
+  bool _hasCompatibilityHints(List<dynamic> wines) {
+    for (final wine in wines) {
+      if (wine is! Map<String, dynamic>) {
+        return true;
+      }
+
+      if (wine.containsKey('nom') ||
+          wine.containsKey('couleur') ||
+          wine.containsKey('millesime') ||
+          wine.containsKey('pays') ||
+          wine.containsKey('cepages')) {
+        return true;
+      }
+
+      if (wine['quantity'] is String ||
+          wine['vintage'] is String ||
+          wine['purchasePrice'] is String ||
+          wine['drinkFromYear'] is String ||
+          wine['drinkUntilYear'] is String ||
+          wine['aiSuggestedFoodPairings'] is String ||
+          wine['aiSuggestedDrinkFromYear'] is String ||
+          wine['aiSuggestedDrinkUntilYear'] is String) {
+        return true;
+      }
+
+      // Non-snapshot JSON import intentionally drops legacy placement fields.
+      if (wine['cellarId'] != null ||
+          wine['cellarPositionX'] != null ||
+          wine['cellarPositionY'] != null) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  Future<bool> _confirmJsonSnapshotRestore(_JsonImportMode importMode) async {
+    final currentWines = await ref.read(wineRepositoryProvider).getAllWines();
+    final currentCellarsResult =
+        await ref.read(virtualCellarRepositoryProvider).getAll();
+    final currentCellars = currentCellarsResult.getOrElse((_) => const []);
+    if (!mounted) return false;
+
+    final currentPlacedCount = currentWines
+        .where(
+          (wine) =>
+              wine.cellarId != null &&
+              wine.cellarPositionX != null &&
+              wine.cellarPositionY != null,
+        )
+        .length;
+
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restaurer un instantané complet'),
+        content: Text(
+          'Ce fichier JSON contient un instantané complet de cave. '
+          'L\'import remplacera la cave actuelle : ${currentWines.length} vin(s), '
+          '${currentCellars.length} cellier(s) et $currentPlacedCount placement(s) seront supprimés, '
+          'puis ${importMode.wineCount} vin(s) et ${importMode.cellarCount} cellier(s) '
+          'seront restaurés avec leurs placements.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Restaurer la cave'),
+          ),
+        ],
+      ),
+    );
+
+    return approved ?? false;
   }
 
   Future<_CsvImportMode?> _askCsvImportMode() {
@@ -1342,6 +1541,20 @@ $rowsText
       foodCategoryIds: matchedCategoryIds,
     );
   }
+}
+
+class _JsonImportMode {
+  final bool isFullSnapshot;
+  final int wineCount;
+  final int cellarCount;
+  final bool hasCompatibilityAdjustments;
+
+  const _JsonImportMode({
+    required this.isFullSnapshot,
+    required this.wineCount,
+    required this.cellarCount,
+    required this.hasCompatibilityAdjustments,
+  });
 }
 
 class _BidirectionalScrollableDataTable extends StatefulWidget {

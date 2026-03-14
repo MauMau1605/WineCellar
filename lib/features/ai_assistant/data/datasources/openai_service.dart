@@ -145,7 +145,7 @@ class OpenAiService implements AiService {
 
         String? detail;
         if (responseData is Map) {
-          final err = (responseData as Map)['error'];
+          final err = responseData['error'];
           if (err is Map) detail = err['message']?.toString();
         }
         return AiChatResult.error(
