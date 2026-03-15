@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 14 mars 2026.
+> Dernière mise à jour : 15 mars 2026.
 
 ---
 
@@ -444,12 +444,14 @@ Providers Riverpod déclaratifs :
 - Trois actions : redirection vers `/chat`, complétion IA d'une fiche partiellement remplie, ajout manuel direct
 - Les boutons « complétion IA » et « ajout manuel » restent grisés tant que nom + millésime ne sont pas valides
 - Validation UX : tooltip au survol + popup explicative au clic si prérequis manquants
+- Après création d'un vin, propose immédiatement un placement dans un cellier virtuel avec sélection du cellier cible
 
 #### `wine_detail_screen.dart` — `WineDetailScreen`
 - Détail complet d'un vin (chargé via `GetWineByIdUseCase`)
 - Actions : modifier, supprimer (`DeleteWineUseCase`), ajuster quantité (`UpdateWineQuantityUseCase`)
 - Affichage maturité, cépages, accords mets-vin, notes de dégustation
 - Remplace les anciennes coordonnées brutes par un aperçu du placement dans le cellier avec navigation vers le cellier concerné
+- Ajoute un CTA « Placer en cave » lorsque des bouteilles restent non placées, avec sélection du cellier avant navigation
 
 #### `wine_edit_screen.dart` — `WineEditScreen`
 - Formulaire d'édition complet (15+ champs)
@@ -466,6 +468,9 @@ Providers Riverpod déclaratifs :
 - Tap sur emplacement vide : sélection d'un vin à placer
 - Tap sur emplacement occupé : infos bouteille + retrait ou navigation vers la fiche
 - Redimensionnement avec alerte avant dépose automatique des bouteilles hors bornes
+- La grille garde une taille de cellule fixe et devient scrollable horizontalement et verticalement avec scrollbars visibles
+- Supporte un vin pré-sélectionné via la navigation, puis accompagne le placement bouteille par bouteille jusqu'au retour optionnel vers la fiche vin
+- Ajoute un filtrage multi-sélection par stade de fenetre de degustation (pret a boire, apogee, etc.) pour n'afficher que les bouteilles correspondantes dans la grille
 
 ### presentation/widgets/
 
@@ -547,6 +552,8 @@ Interface d'extraction OCR pour les photos d'étiquette :
 - Envoi de messages via `AnalyzeWineUseCase`
 - Capture photo Android via `image_picker` + OCR via `ExtractTextFromWineImageUseCase`, puis envoi du texte extrait à l'IA
 - Ajout de vins à la cave via `AddWineUseCase` + auto-matching des catégories alimentaires
+- Après ajout IA, propose aussi un placement immédiat dans un cellier virtuel avec pré-sélection du vin
+- En mode accord mets-vin, enrichit la reponse avec des liens rapides vers les fiches detail des vins proposes presents en cave
 - Reset de session (réinitialise le chat du service IA sous-jacent)
 - Bouton « Ajouter tous les vins » pour les réponses multi-vins
 

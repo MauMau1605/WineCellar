@@ -16,10 +16,11 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
-import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
-import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 
 enum _DuplicateChoice { incrementExisting, createNew }
@@ -164,7 +165,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 final message = _messages[index];
                 return Column(
                   children: [
-                    ChatBubble(message: message),
+                    ChatBubble(
+                      message: message,
+                      onLinkTap: _handleAssistantLinkTap,
+                    ),
                     // Show wine preview cards after the last AI message
                     if (message.role == ChatRole.assistant &&
                         _currentWineDataList.isNotEmpty &&
@@ -451,8 +455,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (history.isNotEmpty) history.removeLast();
 
     String messageToSend = aiMessage?.trim() ?? trimmed;
+    List<WineEntity> cellarWinesForSearch = const [];
     if (aiMessage == null && _searchMode) {
       final wines = await ref.read(wineRepositoryProvider).getAllWines();
+      cellarWinesForSearch = wines;
       final cellarSummary = _buildCellarSummary(wines);
       messageToSend = AiPrompts.buildCellarSearchMessage(
         userQuestion: trimmed,
@@ -482,11 +488,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
       (result) {
         _chatLogger.logAiResponse(result.textResponse);
+        final assistantText = _searchMode
+            ? _appendWineDetailLinksToResponse(
+                result.textResponse,
+                cellarWinesForSearch,
+              )
+            : result.textResponse;
         setState(() {
           _isLoading = false;
           _messages.add(ChatMessage(
             id: _uuid.v4(),
-            content: result.textResponse,
+            content: assistantText,
             role: ChatRole.assistant,
             timestamp: DateTime.now(),
           ));
@@ -500,6 +512,54 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     _cacheConversationState();
     _scrollToBottom();
+  }
+
+  void _handleAssistantLinkTap(String href) {
+    if (!mounted) return;
+    if (href.startsWith('/')) {
+      context.push(href);
+      return;
+    }
+    final uri = Uri.tryParse(href);
+    if (uri != null && uri.path.startsWith('/cellar/wine/')) {
+      context.push(uri.path);
+    }
+  }
+
+  String _appendWineDetailLinksToResponse(
+    String responseText,
+    List<WineEntity> cellarWines,
+  ) {
+    if (cellarWines.isEmpty || responseText.contains('/cellar/wine/')) {
+      return responseText;
+    }
+
+    final normalizedResponse = _normalizeForDuplicate(responseText);
+    final matched = <WineEntity>[];
+
+    for (final wine in cellarWines) {
+      if (wine.id == null) continue;
+      final normalizedDisplayName = _normalizeForDuplicate(wine.displayName);
+      final normalizedName = _normalizeForDuplicate(wine.name);
+      final isMentioned = normalizedDisplayName.isNotEmpty &&
+              normalizedResponse.contains(normalizedDisplayName) ||
+          (normalizedName.isNotEmpty &&
+              normalizedResponse.contains(normalizedName));
+      if (isMentioned) {
+        matched.add(wine);
+      }
+    }
+
+    if (matched.isEmpty) return responseText;
+
+    final uniqueById = <int, WineEntity>{
+      for (final wine in matched) wine.id!: wine,
+    };
+    final links = uniqueById.values.take(5).map((wine) {
+      return '- [${wine.displayName}](/cellar/wine/${wine.id})';
+    }).join('\n');
+
+    return '$responseText\n\nAcces rapide aux fiches des vins proposes :\n$links';
   }
 
   void _handlePrefillMessage() {
@@ -728,26 +788,100 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
       },
-      (_) {
+      (newId) {
         _chatLogger.logWineAdded(wine.displayName);
         setState(() {
           _addedWineIndices.add(wineIndex);
         });
         _cacheConversationState();
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${wine.displayName} ajouté à la cave ! 🍷'),
-              showCloseIcon: true,
-              action: SnackBarAction(
-                label: 'Voir la cave',
-                onPressed: () => context.go('/cellar'),
-              ),
-            ),
-          );
+          _askPlaceInCellar(context, newId, wine.displayName);
         }
       },
     );
+  }
+
+  Future<void> _askPlaceInCellar(
+    BuildContext context,
+    int wineId,
+    String wineName,
+  ) async {
+    if (!context.mounted) return;
+
+    final wantsToPlace = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$wineName ajouté à la cave !'),
+        content: const Text(
+          'Souhaitez-vous placer ce vin dans une cave virtuelle maintenant ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Non merci'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Placer en cave'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || wantsToPlace != true) return;
+
+    final cellarsResult =
+        await ref.read(virtualCellarRepositoryProvider).getAll();
+    if (!mounted) return;
+
+    final cellars = cellarsResult.getOrElse((_) => const []);
+    if (cellars.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Aucune cave virtuelle. Créez-en une dans l\'onglet Celliers.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final selectedCellar = await showDialog<VirtualCellarEntity>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choisir une cave'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: cellars.length,
+            itemBuilder: (context, index) {
+              final cellar = cellars[index];
+              return ListTile(
+                leading: const Icon(Icons.grid_view_outlined),
+                title: Text(cellar.name),
+                subtitle: Text(
+                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+                ),
+                onTap: () => Navigator.of(ctx).pop(cellar),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedCellar == null || selectedCellar.id == null || !context.mounted) {
+      return;
+    }
+
+    context.go('/cellars/${selectedCellar.id}?wineId=$wineId');
   }
 
   Future<_PreAddChoice?> _askManualEditBeforeAdd() {

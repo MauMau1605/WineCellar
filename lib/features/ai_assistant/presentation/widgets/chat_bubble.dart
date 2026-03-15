@@ -6,8 +6,13 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.d
 /// Chat bubble widget for displaying messages
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
+  final ValueChanged<String>? onLinkTap;
 
-  const ChatBubble({super.key, required this.message});
+  const ChatBubble({
+    super.key,
+    required this.message,
+    this.onLinkTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +66,10 @@ class ChatBubble extends StatelessWidget {
                   : MarkdownBody(
                       data: message.content,
                       selectable: true,
+                      onTapLink: (text, href, title) {
+                        if (href == null || onLinkTap == null) return;
+                        onLinkTap!(href);
+                      },
                       styleSheet: MarkdownStyleSheet(
                         p: theme.textTheme.bodyMedium?.copyWith(color: textColor),
                         h1: theme.textTheme.titleLarge?.copyWith(color: textColor),

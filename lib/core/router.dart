@@ -1,20 +1,19 @@
 import 'package:go_router/go_router.dart';
 
-import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_list_screen.dart';
-import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_detail_screen.dart';
-import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_edit_screen.dart';
-import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_add_screen.dart';
+import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
-import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_list_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_detail_screen.dart';
-import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_list_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_add_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_detail_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_edit_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_list_screen.dart';
 
 /// Application router configuration
 final GoRouter appRouter = GoRouter(
   initialLocation: '/cellar',
   routes: [
-    // Shell route for bottom navigation
     ShellRoute(
       builder: (context, state, child) => ShellScaffold(child: child),
       routes: [
@@ -62,7 +61,13 @@ final GoRouter appRouter = GoRouter(
               path: ':id',
               builder: (context, state) {
                 final id = int.parse(state.pathParameters['id']!);
-                return VirtualCellarDetailScreen(cellarId: id);
+                final wineIdStr = state.uri.queryParameters['wineId'];
+                final preSelectedWineId =
+                    wineIdStr != null ? int.tryParse(wineIdStr) : null;
+                return VirtualCellarDetailScreen(
+                  cellarId: id,
+                  preSelectedWineId: preSelectedWineId,
+                );
               },
             ),
           ],

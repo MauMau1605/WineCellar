@@ -7,6 +7,7 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 
@@ -558,12 +559,98 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       },
       (newId) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vin ajouté à la cave !')),
-        );
-        context.go('/cellar/wine/$newId');
+        setState(() => _saving = false);
+        _askPlaceInCellar(context, newId);
       },
     );
+  }
+
+  Future<void> _askPlaceInCellar(BuildContext context, int wineId) async {
+    if (!context.mounted) return;
+
+    final wantsToPlace = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vin ajouté à la cave !'),
+        content: const Text(
+          'Souhaitez-vous placer ce vin dans une cave virtuelle maintenant ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Non merci'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Placer en cave'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (wantsToPlace != true) {
+      context.go('/cellar/wine/$wineId');
+      return;
+    }
+
+    final cellarsResult =
+        await ref.read(virtualCellarRepositoryProvider).getAll();
+    if (!mounted) return;
+
+    final cellars = cellarsResult.getOrElse((_) => const []);
+    if (cellars.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Aucune cave virtuelle. Créez-en une dans l\'onglet Celliers.',
+          ),
+        ),
+      );
+      context.go('/cellar/wine/$wineId');
+      return;
+    }
+
+    final selectedCellar = await showDialog<VirtualCellarEntity>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choisir une cave'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: cellars.length,
+            itemBuilder: (context, index) {
+              final cellar = cellars[index];
+              return ListTile(
+                leading: const Icon(Icons.grid_view_outlined),
+                title: Text(cellar.name),
+                subtitle: Text(
+                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+                ),
+                onTap: () => Navigator.of(ctx).pop(cellar),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (selectedCellar == null || selectedCellar.id == null) {
+      context.go('/cellar/wine/$wineId');
+      return;
+    }
+
+    context.go('/cellars/${selectedCellar.id}?wineId=$wineId');
   }
 
   Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {

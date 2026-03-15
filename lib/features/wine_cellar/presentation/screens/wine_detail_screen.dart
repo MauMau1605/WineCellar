@@ -426,6 +426,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   Widget _buildCellarSection(BuildContext context, WineEntity wine) {
     final theme = Theme.of(context);
     final placedCount = _placements.length;
+    final unplacedCount = wine.quantity - placedCount;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -473,23 +474,99 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                   ),
                 ),
               ),
-              TextButton.icon(
-                onPressed: placedCount == 0
-                    ? () => context.go('/cellars')
-                    : () => _showPlacementsDialog(context, wine),
-                icon: Icon(
-                  placedCount == 0
-                      ? Icons.grid_view_outlined
-                      : Icons.visibility_outlined,
-                  size: 16,
+              if (placedCount > 0)
+                TextButton.icon(
+                  onPressed: () => _showPlacementsDialog(context, wine),
+                  icon: const Icon(Icons.visibility_outlined, size: 16),
+                  label: const Text('Voir'),
                 ),
-                label: Text(placedCount == 0 ? 'Gérer les celliers' : 'Voir'),
-              ),
             ],
+          ),
+          if (unplacedCount > 0) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _showPlaceInCellarFlow(context, wine),
+                icon: const Icon(Icons.grid_view_outlined),
+                label: Text(
+                  unplacedCount == wine.quantity
+                      ? 'Placer en cave'
+                      : 'Placer les $unplacedCount bouteille(s) non placée(s)',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showPlaceInCellarFlow(
+    BuildContext context,
+    WineEntity wine,
+  ) async {
+    final cellarsResult = await ref.read(virtualCellarRepositoryProvider).getAll();
+    if (!mounted) return;
+
+    final cellars = cellarsResult.getOrElse((_) => const []);
+    if (cellars.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Aucun cellier'),
+          content: const Text(
+            'Vous n\'avez pas encore créé de cave virtuelle.\n'
+            'Rendez-vous dans l\'onglet Celliers pour en créer une.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final selectedCellar = await showDialog<VirtualCellarEntity>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choisir une cave'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: cellars.length,
+            itemBuilder: (context, index) {
+              final cellar = cellars[index];
+              return ListTile(
+                leading: const Icon(Icons.grid_view_outlined),
+                title: Text(cellar.name),
+                subtitle: Text(
+                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+                ),
+                onTap: () => Navigator.of(ctx).pop(cellar),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annuler'),
           ),
         ],
       ),
     );
+
+    if (selectedCellar == null || selectedCellar.id == null || !context.mounted) {
+      return;
+    }
+
+    context.push('/cellars/${selectedCellar.id}?wineId=${wine.id}');
   }
 
   Future<void> _showPlacementsDialog(
