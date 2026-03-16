@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
+import 'package:wine_cellar/features/user_manual/presentation/screens/user_manual_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_detail_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_list_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/wine_add_screen.dart';
@@ -19,9 +20,8 @@ final GoRouter appRouter = GoRouter(
       routes: [
         GoRoute(
           path: '/cellar',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: WineListScreen(),
-          ),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: WineListScreen()),
           routes: [
             GoRoute(
               path: 'add',
@@ -47,23 +47,22 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/chat',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: ChatScreen(),
-          ),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: ChatScreen()),
         ),
         GoRoute(
           path: '/cellars',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: VirtualCellarListScreen(),
-          ),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: VirtualCellarListScreen()),
           routes: [
             GoRoute(
               path: ':id',
               builder: (context, state) {
                 final id = int.parse(state.pathParameters['id']!);
                 final wineIdStr = state.uri.queryParameters['wineId'];
-                final preSelectedWineId =
-                    wineIdStr != null ? int.tryParse(wineIdStr) : null;
+                final preSelectedWineId = wineIdStr != null
+                    ? int.tryParse(wineIdStr)
+                    : null;
                 return VirtualCellarDetailScreen(
                   cellarId: id,
                   preSelectedWineId: preSelectedWineId,
@@ -74,11 +73,19 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/settings',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: SettingsScreen(),
-          ),
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: SettingsScreen()),
         ),
       ],
+    ),
+    GoRoute(
+      path: '/manual',
+      builder: (context, state) {
+        final section = UserManualSection.fromQuery(
+          state.uri.queryParameters['section'],
+        );
+        return UserManualScreen(initialSection: section);
+      },
     ),
   ],
 );

@@ -56,6 +56,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         title: const Text('Ma Cave à Vin'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Manuel utilisateur',
+            onPressed: () => context.go('/manual'),
+          ),
+          IconButton(
             icon: Icon(
               Icons.sort,
               color: _sort != null
@@ -147,8 +152,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 // Apply maturity filter in-memory if needed
                 var filtered = _filter.maturity != null
                     ? wines
-                        .where((w) => w.maturity == _filter.maturity)
-                        .toList()
+                          .where((w) => w.maturity == _filter.maturity)
+                          .toList()
                     : wines;
 
                 // Apply sort
@@ -161,11 +166,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 }
                 return _buildWineGrid(context, filtered);
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(
-                child: Text('Erreur: $err'),
-              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(child: Text('Erreur: $err')),
             ),
           ),
         ],
@@ -193,14 +195,17 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: Row(
                       children: [
                         Text(
                           'Trier par',
                           style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const Spacer(),
                         if (_sort != null)
@@ -221,8 +226,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                       leading: Icon(
                         isSelected
                             ? (_sort!.ascending
-                                ? Icons.arrow_upward
-                                : Icons.arrow_downward)
+                                  ? Icons.arrow_upward
+                                  : Icons.arrow_downward)
                             : Icons.remove,
                         color: isSelected
                             ? Theme.of(ctx).colorScheme.primary
@@ -235,7 +240,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                           setState(() {
                             if (isSelected) {
                               // Toggle direction
-                              _sort = _sort!.copyWith(ascending: !_sort!.ascending);
+                              _sort = _sort!.copyWith(
+                                ascending: !_sort!.ascending,
+                              );
                             } else {
                               _sort = WineSort(field: field);
                             }
@@ -261,38 +268,42 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       child: Row(
         children: [
           // Color filter chips
-          ...WineColor.values.map((color) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text('${color.emoji} ${color.label}'),
-                  selected: _filter.color == color,
-                  onSelected: (selected) {
-                    setState(() {
-                      _filter = selected
-                          ? WineFilter(color: color)
-                          : const WineFilter();
-                    });
-                  },
-                ),
-              )),
+          ...WineColor.values.map(
+            (color) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text('${color.emoji} ${color.label}'),
+                selected: _filter.color == color,
+                onSelected: (selected) {
+                  setState(() {
+                    _filter = selected
+                        ? WineFilter(color: color)
+                        : const WineFilter();
+                  });
+                },
+              ),
+            ),
+          ),
           const SizedBox(width: 8),
           // Maturity filter chips
           ...WineMaturity.values
               .where((m) => m != WineMaturity.unknown)
-              .map((maturity) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text('${maturity.emoji} ${maturity.label}'),
-                      selected: _filter.maturity == maturity,
-                      onSelected: (selected) {
-                        setState(() {
-                          _filter = selected
-                              ? WineFilter(maturity: maturity)
-                              : const WineFilter();
-                        });
-                      },
-                    ),
-                  )),
+              .map(
+                (maturity) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text('${maturity.emoji} ${maturity.label}'),
+                    selected: _filter.maturity == maturity,
+                    onSelected: (selected) {
+                      setState(() {
+                        _filter = selected
+                            ? WineFilter(maturity: maturity)
+                            : const WineFilter();
+                      });
+                    },
+                  ),
+                ),
+              ),
         ],
       ),
     );
@@ -312,15 +323,19 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           Text(
             'Aucun vin dans votre cave',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             'Utilisez l\'assistant IA pour ajouter votre premier vin',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
           ),
         ],
       ),
@@ -366,10 +381,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     if (wine.id == null) return;
 
     final useCase = ref.read(updateWineQuantityUseCaseProvider);
-    final params = UpdateQuantityParams(
-      wineId: wine.id!,
-      newQuantity: newQty,
-    );
+    final params = UpdateQuantityParams(wineId: wine.id!, newQuantity: newQty);
 
     if (newQty <= 0) {
       final action = await showDialog<String>(
@@ -408,9 +420,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       result.fold(
         (failure) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(failure.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
           }
         },
         (_) {
@@ -425,16 +437,13 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     }
 
     final result = await useCase(params);
-    result.fold(
-      (failure) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(failure.message)),
-          );
-        }
-      },
-      (_) {},
-    );
+    result.fold((failure) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      }
+    }, (_) {});
   }
 
   Future<void> _handleMenuAction(String action) async {
@@ -473,16 +482,16 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     await result.fold(
       (failure) async {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (content) async {
         final saved = await _saveExport(content, suggestedFileName);
         if (!mounted || !saved) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(successMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(successMessage)));
       },
     );
   }
@@ -551,17 +560,17 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (count) {
         final message = importMode.isFullSnapshot
             ? 'Instantané JSON restauré : $count vin(s) et ${importMode.cellarCount} cellier(s).'
             : '$count vin(s) importé(s) depuis le JSON.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
 
         if (importMode.hasCompatibilityAdjustments) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -620,9 +629,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     await parseResult.fold(
       (failure) async {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (rows) async {
         final previewOk = await _confirmCsvPreview(rows);
@@ -724,11 +733,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     final message = importedPlacementsWillBeIgnored
         ? '$placedCount bouteille(s) sont déjà placée(s) dans un cellier virtuel. '
-            'Pour préserver la cave actuelle, les placements contenus dans ce fichier $formatLabel '
-            'seront ignorés à l\'import. Les vins importés seront ajoutés sans emplacement virtuel.'
+              'Pour préserver la cave actuelle, les placements contenus dans ce fichier $formatLabel '
+              'seront ignorés à l\'import. Les vins importés seront ajoutés sans emplacement virtuel.'
         : '$placedCount bouteille(s) sont déjà placée(s) dans un cellier virtuel. '
-            'L\'import $formatLabel n\'écrasera pas la cave actuelle : les vins importés '
-            'seront ajoutés sans emplacement virtuel.';
+              'L\'import $formatLabel n\'écrasera pas la cave actuelle : les vins importés '
+              'seront ajoutés sans emplacement virtuel.';
 
     final approved = await showDialog<bool>(
       context: context,
@@ -768,7 +777,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       } else if (decoded is Map<String, dynamic>) {
         wines = (decoded['wines'] as List<dynamic>? ?? const []);
         cellars = (decoded['virtualCellars'] as List<dynamic>? ?? const []);
-        isFullSnapshot = decoded['snapshotType'] == 'full_cellar' ||
+        isFullSnapshot =
+            decoded['snapshotType'] == 'full_cellar' ||
             decoded.containsKey('virtualCellars');
         hasCompatibilityAdjustments = _hasCompatibilityHints(wines);
       } else {
@@ -834,8 +844,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
   Future<bool> _confirmJsonSnapshotRestore(_JsonImportMode importMode) async {
     final currentWines = await ref.read(wineRepositoryProvider).getAllWines();
-    final currentCellarsResult =
-        await ref.read(virtualCellarRepositoryProvider).getAll();
+    final currentCellarsResult = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
     final currentCellars = currentCellarsResult.getOrElse((_) => const []);
     if (!mounted) return false;
 
@@ -921,9 +932,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (count) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -943,7 +954,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Aucun vin importable (nom manquant sur toutes les lignes).'),
+          content: Text(
+            'Aucun vin importable (nom manquant sur toutes les lignes).',
+          ),
         ),
       );
       return false;
@@ -971,10 +984,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                         Expanded(
                           child: Text(
                             '$ignoredRowsCount ligne(s) seront ignorées (nom manquant).',
-                            style:
-                                Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.error,
-                                    ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
                           ),
                         ),
                         TextButton.icon(
@@ -1042,7 +1055,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Ces lignes ont été ignorées car le nom du vin est vide :'),
+                const Text(
+                  'Ces lignes ont été ignorées car le nom du vin est vide :',
+                ),
                 const SizedBox(height: 10),
                 ...ignoredRows.map(
                   (row) => ListTile(
@@ -1072,7 +1087,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vérifiez les paramètres IA dans Paramètres, puis réessayez.'),
+          content: Text(
+            'Vérifiez les paramètres IA dans Paramètres, puis réessayez.',
+          ),
         ),
       );
       return;
@@ -1095,8 +1112,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       return;
     }
 
-    final allCategories =
-      await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    final allCategories = await ref
+        .read(foodCategoryRepositoryProvider)
+        .getAllCategories();
 
     var importedCount = 0;
     final totalBatches = (meaningfulRows.length / 20).ceil();
@@ -1112,18 +1130,16 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       final result = await _runWithAiWorkingDialog(
         message:
             'L\'IA travaille sur le lot ${batchIndex + 1}/$totalBatches...\nMerci de patienter.',
-        task: () => analyzeUseCase(
-          AnalyzeWineParams(userMessage: prompt),
-        ),
+        task: () => analyzeUseCase(AnalyzeWineParams(userMessage: prompt)),
       );
 
       if (!mounted) return;
 
       final shouldContinue = await result.fold(
         (failure) async {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('IA: ${failure.message}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('IA: ${failure.message}')));
           return false;
         },
         (chatResult) async {
@@ -1151,12 +1167,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           final addWineUseCase = ref.read(addWineUseCaseProvider);
           for (final aiWine in chatResult.wineDataList) {
             if (!aiWine.isComplete) continue;
-            final matchedCategoryIds =
-                _matchFoodCategoryIds(aiWine.suggestedFoodPairings, allCategories);
-            final wine = _aiWineToEntity(
-              aiWine,
-              matchedCategoryIds,
+            final matchedCategoryIds = _matchFoodCategoryIds(
+              aiWine.suggestedFoodPairings,
+              allCategories,
             );
+            final wine = _aiWineToEntity(aiWine, matchedCategoryIds);
             final addResult = await addWineUseCase(wine);
             addResult.fold((_) {}, (_) => importedCount++);
           }
@@ -1173,9 +1188,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          '$importedCount vin(s) ajouté(s) après validation IA.',
-        ),
+        content: Text('$importedCount vin(s) ajouté(s) après validation IA.'),
       ),
     );
   }
@@ -1297,27 +1310,96 @@ $rowsText
     String doubleOrDash(double? value) => value?.toStringAsFixed(2) ?? '—';
 
     return [
-      DataRow(cells: [DataCell(const Text('Nom')), DataCell(Text(valueOrDash(wine.name)))]),
-      DataRow(cells: [DataCell(const Text('Appellation')), DataCell(Text(valueOrDash(wine.appellation)))]),
-      DataRow(cells: [DataCell(const Text('Producteur')), DataCell(Text(valueOrDash(wine.producer)))]),
-      DataRow(cells: [DataCell(const Text('Région')), DataCell(Text(valueOrDash(wine.region)))]),
-      DataRow(cells: [DataCell(const Text('Pays')), DataCell(Text(valueOrDash(wine.country)))]),
-      DataRow(cells: [DataCell(const Text('Couleur')), DataCell(Text(valueOrDash(wine.color)))]),
-      DataRow(cells: [DataCell(const Text('Millésime')), DataCell(Text(intOrDash(wine.vintage)))]),
+      DataRow(
+        cells: [
+          DataCell(const Text('Nom')),
+          DataCell(Text(valueOrDash(wine.name))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Appellation')),
+          DataCell(Text(valueOrDash(wine.appellation))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Producteur')),
+          DataCell(Text(valueOrDash(wine.producer))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Région')),
+          DataCell(Text(valueOrDash(wine.region))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Pays')),
+          DataCell(Text(valueOrDash(wine.country))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Couleur')),
+          DataCell(Text(valueOrDash(wine.color))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Millésime')),
+          DataCell(Text(intOrDash(wine.vintage))),
+        ],
+      ),
       DataRow(
         cells: [
           DataCell(const Text('Cépages')),
-          DataCell(Text(
-            wine.grapeVarieties.isEmpty ? '—' : wine.grapeVarieties.join(', '),
-          )),
+          DataCell(
+            Text(
+              wine.grapeVarieties.isEmpty
+                  ? '—'
+                  : wine.grapeVarieties.join(', '),
+            ),
+          ),
         ],
       ),
-      DataRow(cells: [DataCell(const Text('Quantité')), DataCell(Text(intOrDash(wine.quantity)))]),
-      DataRow(cells: [DataCell(const Text('Prix achat (€)')), DataCell(Text(doubleOrDash(wine.purchasePrice)))]),
-      DataRow(cells: [DataCell(const Text('Boire dès')), DataCell(Text(intOrDash(wine.drinkFromYear)))]),
-      DataRow(cells: [DataCell(const Text('Boire jusqu\'à')), DataCell(Text(intOrDash(wine.drinkUntilYear)))]),
-      DataRow(cells: [DataCell(const Text('Notes dégustation')), DataCell(Text(valueOrDash(wine.tastingNotes)))]),
-      DataRow(cells: [DataCell(const Text('Description IA')), DataCell(Text(valueOrDash(wine.description)))]),
+      DataRow(
+        cells: [
+          DataCell(const Text('Quantité')),
+          DataCell(Text(intOrDash(wine.quantity))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Prix achat (€)')),
+          DataCell(Text(doubleOrDash(wine.purchasePrice))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Boire dès')),
+          DataCell(Text(intOrDash(wine.drinkFromYear))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Boire jusqu\'à')),
+          DataCell(Text(intOrDash(wine.drinkUntilYear))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Notes dégustation')),
+          DataCell(Text(valueOrDash(wine.tastingNotes))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Description IA')),
+          DataCell(Text(valueOrDash(wine.description))),
+        ],
+      ),
       DataRow(
         cells: [
           DataCell(const Text('Infos à compléter')),
@@ -1337,25 +1419,82 @@ $rowsText
     String doubleOrDash(double? value) => value?.toStringAsFixed(2) ?? '—';
 
     return [
-      DataRow(cells: [DataCell(const Text('Nom')), DataCell(Text(valueOrDash(row.name)))]),
-      DataRow(cells: [DataCell(const Text('Appellation')), DataCell(Text(valueOrDash(row.appellation)))]),
-      DataRow(cells: [DataCell(const Text('Producteur')), DataCell(Text(valueOrDash(row.producer)))]),
-      DataRow(cells: [DataCell(const Text('Région')), DataCell(Text(valueOrDash(row.region)))]),
-      DataRow(cells: [DataCell(const Text('Pays')), DataCell(Text(valueOrDash(row.country)))]),
-      DataRow(cells: [DataCell(const Text('Couleur')), DataCell(Text(valueOrDash(row.color)))]),
-      DataRow(cells: [DataCell(const Text('Millésime')), DataCell(Text(intOrDash(row.vintage)))]),
+      DataRow(
+        cells: [
+          DataCell(const Text('Nom')),
+          DataCell(Text(valueOrDash(row.name))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Appellation')),
+          DataCell(Text(valueOrDash(row.appellation))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Producteur')),
+          DataCell(Text(valueOrDash(row.producer))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Région')),
+          DataCell(Text(valueOrDash(row.region))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Pays')),
+          DataCell(Text(valueOrDash(row.country))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Couleur')),
+          DataCell(Text(valueOrDash(row.color))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Millésime')),
+          DataCell(Text(intOrDash(row.vintage))),
+        ],
+      ),
       DataRow(
         cells: [
           DataCell(const Text('Cépages')),
-          DataCell(Text(
-            row.grapeVarieties.isEmpty ? '—' : row.grapeVarieties.join(', '),
-          )),
+          DataCell(
+            Text(
+              row.grapeVarieties.isEmpty ? '—' : row.grapeVarieties.join(', '),
+            ),
+          ),
         ],
       ),
-      DataRow(cells: [DataCell(const Text('Quantité')), DataCell(Text(intOrDash(row.quantity)))]),
-      DataRow(cells: [DataCell(const Text('Prix achat (€)')), DataCell(Text(doubleOrDash(row.purchasePrice)))]),
-      DataRow(cells: [DataCell(const Text('Localisation')), DataCell(Text(valueOrDash(row.location)))]),
-      DataRow(cells: [DataCell(const Text('Notes')), DataCell(Text(valueOrDash(row.notes)))]),
+      DataRow(
+        cells: [
+          DataCell(const Text('Quantité')),
+          DataCell(Text(intOrDash(row.quantity))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Prix achat (€)')),
+          DataCell(Text(doubleOrDash(row.purchasePrice))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Localisation')),
+          DataCell(Text(valueOrDash(row.location))),
+        ],
+      ),
+      DataRow(
+        cells: [
+          DataCell(const Text('Notes')),
+          DataCell(Text(valueOrDash(row.notes))),
+        ],
+      ),
     ];
   }
 
@@ -1377,9 +1516,7 @@ $rowsText
                 child: CircularProgressIndicator(strokeWidth: 3),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(message),
-              ),
+              Expanded(child: Text(message)),
               const SizedBox(width: 8),
               const Text('⏳', style: TextStyle(fontSize: 20)),
             ],
@@ -1602,10 +1739,7 @@ class _BidirectionalScrollableDataTableState
             child: SingleChildScrollView(
               controller: _horizontalController,
               scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: widget.columns,
-                rows: widget.rows,
-              ),
+              child: DataTable(columns: widget.columns, rows: widget.rows),
             ),
           ),
         ),

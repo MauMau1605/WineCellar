@@ -1,7 +1,7 @@
 # Architecture — Wine Cellar
 
 > Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 15 mars 2026.
+> Dernière mise à jour : 16 mars 2026.
 
 ---
 
@@ -16,10 +16,11 @@
 7. [Feature `wine_cellar/`](#feature-wine_cellar)
 8. [Feature `ai_assistant/`](#feature-ai_assistant)
 9. [Feature `settings/`](#feature-settings)
-10. [Injection de dépendances](#injection-de-dépendances)
-11. [Flux de données — Exemples concrets](#flux-de-données--exemples-concrets)
-12. [Conventions de nommage](#conventions-de-nommage)
-13. [Points d'évolution identifiés](#points-dévolution-identifiés)
+10. [Feature `user_manual/`](#feature-user_manual)
+11. [Injection de dépendances](#injection-de-dépendances)
+12. [Flux de données — Exemples concrets](#flux-de-données--exemples-concrets)
+13. [Conventions de nommage](#conventions-de-nommage)
+14. [Points d'évolution identifiés](#points-dévolution-identifiés)
 
 ---
 
@@ -159,6 +160,11 @@ lib/
 │           └── screens/
 │               └── settings_screen.dart
 │
+│   └── user_manual/                   # Feature manuel utilisateur
+│       └── presentation/
+│           └── screens/
+│               └── user_manual_screen.dart
+│
 └── l10n/                              # Localisation FR / EN
     ├── app_localizations.dart
     ├── app_localizations_en.dart
@@ -240,7 +246,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 
 ### `router.dart`
 - Configuration GoRouter avec `ShellRoute` pour la navigation bottom bar/rail
-- 4 routes principales : `/cellar`, `/chat`, `/cellars`, `/settings`
+- 5 routes principales : `/cellar`, `/chat`, `/cellars`, `/settings`, `/manual`
 - Sous-routes : `/cellar/add`, `/cellar/wine/:id`, `/cellar/wine/:id/edit`, `/cellars/:id`
 
 ### `theme.dart` — `AppTheme`
@@ -578,6 +584,17 @@ Interface d'extraction OCR pour les photos d'étiquette :
 - Bouton « Enregistrer » → persiste dans flutter_secure_storage
 - Bouton « Tester la connexion » → via `TestAiConnectionUseCase`
 - Section « À propos »
+
+---
+
+## Feature `user_manual/`
+
+### `presentation/screens/user_manual_screen.dart` — `UserManualScreen`
+- Manuel utilisateur global en onglets (vue d'ensemble, imports/exports, CSV détaillé, IA, accords, cave virtuelle, tokens IA)
+- Route dédiée `/manual` (hors shell de navigation)
+- Paramètre de route optionnel `section` pour ouvrir directement une section (ex: `/manual?section=ai-tokens`)
+- Point d'entrée global depuis l'écran cave (icône `?` dans l'AppBar)
+- Point d'entrée ciblé depuis Paramètres vers la section tokens/appairage IA
 
 ---
 

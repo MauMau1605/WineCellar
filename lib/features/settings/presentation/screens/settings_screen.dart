@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
@@ -55,11 +56,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _apiKeyController.text = apiKey ?? '';
       _geminiApiKeyController.text = geminiApiKey ?? '';
       _mistralApiKeyController.text = mistralApiKey ?? '';
-      _ollamaUrlController.text =
-          ollamaUrl ?? AppConstants.defaultOllamaUrl;
+      _ollamaUrlController.text = ollamaUrl ?? AppConstants.defaultOllamaUrl;
       _modelController.text = model ?? '';
-      _visionProviderOverride =
-          parsedVisionProvider.isEmpty ? null : parsedVisionProvider.first;
+      _visionProviderOverride = parsedVisionProvider.isEmpty
+          ? null
+          : parsedVisionProvider.first;
       _visionModelController.text = visionModel ?? '';
       _visionApiKeyController.text = visionApiKey ?? '';
     });
@@ -85,9 +86,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paramètres'),
-      ),
+      appBar: AppBar(title: const Text('Paramètres')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -100,6 +99,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Aide: creation de token API'),
+              subtitle: const Text(
+                'Guide pas a pas pour appairer un modele IA.',
+              ),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => context.go('/manual?section=ai-tokens'),
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: RadioGroup<AiProvider>(
               groupValue: currentProvider,
@@ -114,14 +125,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: AiProvider.values.map((provider) {
                   return RadioListTile<AiProvider>(
                     title: Text(provider.label),
-                    subtitle: Text(
-                      switch (provider) {
-                        AiProvider.openai => 'GPT-4o-mini recommandé. Nécessite une clé API.',
-                        AiProvider.gemini => 'Gemini 2.0 Flash gratuit. Nécessite une clé API Google.',
-                        AiProvider.mistral => 'Mistral Small performant. Nécessite une clé API Mistral.',
-                        AiProvider.ollama => 'Gratuit, fonctionne hors-ligne. Nécessite Ollama installé.',
-                      },
-                    ),
+                    subtitle: Text(switch (provider) {
+                      AiProvider.openai =>
+                        'GPT-4o-mini recommandé. Nécessite une clé API.',
+                      AiProvider.gemini =>
+                        'Gemini 2.0 Flash gratuit. Nécessite une clé API Google.',
+                      AiProvider.mistral =>
+                        'Mistral Small performant. Nécessite une clé API Mistral.',
+                      AiProvider.ollama =>
+                        'Gratuit, fonctionne hors-ligne. Nécessite Ollama installé.',
+                    }),
                     value: provider,
                   );
                 }).toList(),
@@ -175,7 +188,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'Recommandé : gpt-4o-mini (pas cher et efficace)',
                       ),
                     ),
-                    if (visionModel.hasValue && visionModel.value != null) ...[  
+                    if (visionModel.hasValue && visionModel.value != null) ...[
                       const SizedBox(height: 12),
                       _VisionModelChip(modelName: visionModel.value!),
                     ],
@@ -225,8 +238,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         labelText: 'Modèle',
                         hintText: 'gemini-2.5-flash-lite',
                         prefixIcon: Icon(Icons.smart_toy),
-                        helperText:
-                            'Recommandé : gemini-2.5-flash-lite',
+                        helperText: 'Recommandé : gemini-2.5-flash-lite',
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -286,7 +298,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'Recommandé : mistral-small-latest (bon rapport qualité/prix)',
                       ),
                     ),
-                    if (visionModel.hasValue && visionModel.value != null) ...[  
+                    if (visionModel.hasValue && visionModel.value != null) ...[
                       const SizedBox(height: 8),
                       _VisionModelChip(modelName: visionModel.value!),
                     ],
@@ -388,8 +400,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Fournisseur pour l\'analyse d\'image',
                         prefixIcon: Icon(Icons.hub_outlined),
-                        helperText:
-                            'Par défaut: même fournisseur que le chat.',
+                        helperText: 'Par défaut: même fournisseur que le chat.',
                       ),
                       items: [
                         const DropdownMenuItem<AiProvider?>(
@@ -483,7 +494,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         )
                       : const Icon(Icons.network_check),
                   label: Text(
-                      _testingConnection ? 'Test...' : 'Tester la connexion'),
+                    _testingConnection ? 'Test...' : 'Tester la connexion',
+                  ),
                 ),
               ),
             ],
@@ -517,17 +529,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     await ref
         .read(openAiApiKeyProvider.notifier)
-        .setValue(_apiKeyController.text.isNotEmpty ? _apiKeyController.text : null);
+        .setValue(
+          _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
+        );
 
     await ref
         .read(geminiApiKeyProvider.notifier)
-        .setValue(_geminiApiKeyController.text.isNotEmpty ? _geminiApiKeyController.text : null);
+        .setValue(
+          _geminiApiKeyController.text.isNotEmpty
+              ? _geminiApiKeyController.text
+              : null,
+        );
 
     await ref
         .read(mistralApiKeyProvider.notifier)
-        .setValue(_mistralApiKeyController.text.isNotEmpty ? _mistralApiKeyController.text : null);
+        .setValue(
+          _mistralApiKeyController.text.isNotEmpty
+              ? _mistralApiKeyController.text
+              : null,
+        );
 
-    await ref.read(ollamaUrlProvider.notifier).setValue(
+    await ref
+        .read(ollamaUrlProvider.notifier)
+        .setValue(
           _ollamaUrlController.text.isNotEmpty
               ? _ollamaUrlController.text
               : null,
@@ -539,29 +563,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       AiProvider.mistral => AppConstants.defaultMistralModel,
       AiProvider.ollama => AppConstants.defaultOllamaModel,
     };
-    await ref.read(selectedModelProvider.notifier).setValue(
-          _modelController.text.isNotEmpty ? _modelController.text : defaultModel,
+    await ref
+        .read(selectedModelProvider.notifier)
+        .setValue(
+          _modelController.text.isNotEmpty
+              ? _modelController.text
+              : defaultModel,
         );
 
     // Overrides vision (stockés que si non vides)
-    await ref.read(visionProviderOverrideProvider.notifier).setValue(
-        _visionProviderOverride?.name,
-      );
-    await ref.read(visionModelOverrideProvider.notifier).setValue(
+    await ref
+        .read(visionProviderOverrideProvider.notifier)
+        .setValue(_visionProviderOverride?.name);
+    await ref
+        .read(visionModelOverrideProvider.notifier)
+        .setValue(
           _visionModelController.text.isNotEmpty
               ? _visionModelController.text
               : null,
         );
-    await ref.read(visionApiKeyOverrideProvider.notifier).setValue(
+    await ref
+        .read(visionApiKeyOverrideProvider.notifier)
+        .setValue(
           _visionApiKeyController.text.isNotEmpty
               ? _visionApiKeyController.text
               : null,
         );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Paramètres enregistrés !')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Paramètres enregistrés !')));
     }
   }
 
@@ -630,9 +662,7 @@ class _VisionModelChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.secondaryContainer.withAlpha(100),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.secondary.withAlpha(60),
-        ),
+        border: Border.all(color: theme.colorScheme.secondary.withAlpha(60)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
