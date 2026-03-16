@@ -148,4 +148,47 @@ class BottlePlacementDao extends DatabaseAccessor<AppDatabase>
       await (delete(bottlePlacements)..where((p) => p.id.equals(placement.id))).go();
     }
   }
+
+  /// Move a bottle placement from its current position to a new position.
+  /// Returns the updated placement ID.
+  /// Throws [StateError] if the target slot is occupied or placement not found.
+  Future<int> moveBottlePlacement({
+    required int placementId,
+    required int newPositionX,
+    required int newPositionY,
+  }) async {
+    final placement = await (select(bottlePlacements)
+          ..where((p) => p.id.equals(placementId)))
+        .getSingleOrNull();
+
+    if (placement == null) {
+      throw StateError('Placement introuvable: $placementId');
+    }
+
+    final occupied = await isSlotOccupied(
+      cellarId: placement.cellarId,
+      positionX: newPositionX,
+      positionY: newPositionY,
+    );
+
+    if (occupied) {
+      throw StateError('Emplacement déjà occupé.');
+    }
+
+    // Update position
+    final success = await (update(bottlePlacements)
+          ..where((p) => p.id.equals(placementId)))
+        .write(
+          BottlePlacementsCompanion(
+            positionX: Value(newPositionX),
+            positionY: Value(newPositionY),
+          ),
+        );
+
+    if (success == 0) {
+      throw StateError('Impossible de mettre à jour le placement.');
+    }
+
+    return placementId;
+  }
 }

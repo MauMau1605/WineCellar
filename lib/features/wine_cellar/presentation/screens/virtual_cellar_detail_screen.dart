@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +12,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placemen
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/providers/bottle_move_state_provider.dart';
 
 class VirtualCellarDetailScreen extends ConsumerStatefulWidget {
   final int cellarId;
@@ -31,6 +35,7 @@ class _VirtualCellarDetailScreenState
   List<BottlePlacementEntity> _placedBottles = [];
   bool _loading = true;
   _PendingPlacement? _pendingPlacement;
+  _MoveUndoSnapshot? _lastMoveUndo;
   final Set<WineMaturity> _maturityFilters = <WineMaturity>{};
 
   @override
@@ -120,6 +125,159 @@ class _VirtualCellarDetailScreenState
     });
   }
 
+  /// Handle long press on a bottle placement.
+  void _onLongPressPlacement(int placementId) {
+    final moveNotifier =
+        ref.read(bottleMoveStateProvider(widget.cellarId).notifier);
+    final moveState = ref.read(bottleMoveStateProvider(widget.cellarId));
+
+    if (!moveState.isMovementMode) {
+      moveNotifier.startMoving(placementId);
+    } else {
+      moveNotifier.togglePlacementSelection(placementId);
+    }
+  }
+
+  /// Handle dropping selected placements using an anchor bottle translation.
+  Future<void> _onMovePlacement({
+    required int anchorPlacementId,
+    required int targetRow,
+    required int targetCol,
+    required List<BottlePlacementEntity> allPlacements,
+    required VirtualCellarEntity cellar,
+  }) async {
+    final moveState = ref.read(bottleMoveStateProvider(widget.cellarId));
+
+    if (moveState.selectedPlacementIds.isEmpty) {
+      return;
+    }
+
+    final anchor = allPlacements
+        .where((p) => p.id == anchorPlacementId)
+        .firstOrNull;
+    if (anchor == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bouteille d ancrage introuvable.')),
+        );
+      }
+      return;
+    }
+
+    final undoSnapshot = _MoveUndoSnapshot(
+      anchorPlacementId: anchorPlacementId,
+      oldAnchorX: anchor.positionX,
+      oldAnchorY: anchor.positionY,
+      movedPlacementIds: Set<int>.from(moveState.selectedPlacementIds),
+    );
+
+    try {
+      final result = await ref
+          .read(moveBottlesInCellarUseCaseProvider)
+          .call(
+            allPlacements: allPlacements,
+            selectedPlacementIds: moveState.selectedPlacementIds,
+            anchorPlacementId: anchorPlacementId,
+            targetAnchorX: targetCol,
+            targetAnchorY: targetRow,
+            maxColumns: cellar.columns,
+            maxRows: cellar.rows,
+          );
+
+      if (!mounted) return;
+
+      result.fold(
+        (failure) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Erreur: ${failure.message}'),
+              ),
+            );
+          }
+        },
+        (_) {
+          _lastMoveUndo = undoSnapshot;
+          if (context.mounted) {
+            final messenger = ScaffoldMessenger.of(context);
+            messenger
+              ..clearSnackBars()
+              ..showSnackBar(
+                SnackBar(
+                  content: const Text('Déplacement appliqué'),
+                  action: SnackBarAction(
+                    label: 'Annuler',
+                    onPressed: () {
+                      final snapshot = _lastMoveUndo;
+                      if (snapshot == null) return;
+                      _undoLastMove(snapshot, cellar);
+                    },
+                  ),
+                ),
+              );
+          }
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _undoLastMove(
+    _MoveUndoSnapshot snapshot,
+    VirtualCellarEntity cellar,
+  ) async {
+    try {
+      final latestPlacements = await ref
+          .read(virtualCellarRepositoryProvider)
+          .watchPlacementsByCellarId(widget.cellarId)
+          .first;
+
+      final result = await ref
+          .read(moveBottlesInCellarUseCaseProvider)
+          .call(
+            allPlacements: latestPlacements,
+            selectedPlacementIds: snapshot.movedPlacementIds,
+            anchorPlacementId: snapshot.anchorPlacementId,
+            targetAnchorX: snapshot.oldAnchorX,
+            targetAnchorY: snapshot.oldAnchorY,
+            maxColumns: cellar.columns,
+            maxRows: cellar.rows,
+          );
+
+      if (!mounted) return;
+      result.fold(
+        (failure) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Annulation impossible: ${failure.message}')),
+            );
+          }
+        },
+        (_) {
+          _lastMoveUndo = null;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Déplacement annulé')),
+            );
+          }
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur annulation: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -137,6 +295,47 @@ class _VirtualCellarDetailScreenState
       appBar: AppBar(
         title: Text(cellar.name),
         actions: [
+          Consumer(
+            builder: (context, ref, child) {
+              final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
+              final notifier =
+                  ref.read(bottleMoveStateProvider(widget.cellarId).notifier);
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (moveState.isMovementMode && moveState.hasSelection)
+                    IconButton(
+                      icon: Icon(
+                        moveState.isDragModeEnabled
+                            ? Icons.playlist_add_check_circle_outlined
+                            : Icons.open_with,
+                      ),
+                      tooltip: moveState.isDragModeEnabled
+                          ? 'Revenir au mode sélection'
+                          : 'Passer au mode déplacement',
+                      onPressed: () {
+                        if (moveState.isDragModeEnabled) {
+                          notifier.enableSelectionMode();
+                        } else {
+                          notifier.enableDragMode();
+                        }
+                      },
+                    ),
+                  IconButton(
+                    icon: Icon(
+                      moveState.isMovementMode ? Icons.cancel : Icons.pan_tool_outlined,
+                    ),
+                    tooltip: moveState.isMovementMode
+                        ? 'Annuler le mode déplacement'
+                        : 'Activer le mode déplacement',
+                    onPressed: () {
+                      notifier.toggleMovementMode();
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),
             tooltip: 'Modifier le cellier',
@@ -164,10 +363,25 @@ class _VirtualCellarDetailScreenState
               Expanded(
                 child: _CellarGridView(
                   cellar: cellar,
-                  placements: filteredPlacements,
+                  visiblePlacements: filteredPlacements,
+                  allPlacements: placements,
                   pendingPlacement: _pendingPlacement,
                   onSlotTap: (row, col) =>
                       _onSlotTap(context, cellar, placements, row, col),
+                  cellarId: widget.cellarId,
+                  onLongPressPlacement: _onLongPressPlacement,
+                  onMovePlacement: ({
+                    required anchorPlacementId,
+                    required targetRow,
+                    required targetCol,
+                    required allPlacements,
+                  }) => _onMovePlacement(
+                    anchorPlacementId: anchorPlacementId,
+                    targetRow: targetRow,
+                    targetCol: targetCol,
+                    allPlacements: allPlacements,
+                    cellar: cellar,
+                  ),
                 ),
               ),
             ],
@@ -198,30 +412,26 @@ class _VirtualCellarDetailScreenState
               'Filtrer par fenêtre de dégustation',
               style: Theme.of(context).textTheme.labelLarge,
             ),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: WineMaturity.values.map((maturity) {
-                  final selected = _maturityFilters.contains(maturity);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      selected: selected,
-                      label: Text('${maturity.emoji} ${maturity.label}'),
-                      onSelected: (value) {
-                        setState(() {
-                          if (value) {
-                            _maturityFilters.add(maturity);
-                          } else {
-                            _maturityFilters.remove(maturity);
-                          }
-                        });
-                      },
-                    ),
-                  );
-                }).toList(growable: false),
-              ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: WineMaturity.values.map((maturity) {
+                final selected = _maturityFilters.contains(maturity);
+                return FilterChip(
+                  label: Text(maturity.label),
+                  selected: selected,
+                  onSelected: (value) {
+                    setState(() {
+                      if (value) {
+                        _maturityFilters.add(maturity);
+                      } else {
+                        _maturityFilters.remove(maturity);
+                      }
+                    });
+                  },
+                );
+              }).toList(growable: false),
             ),
             if (_maturityFilters.isNotEmpty)
               Padding(
@@ -315,8 +525,10 @@ class _VirtualCellarDetailScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _infoRow('Cellier', cellarName),
-            _infoRow('Position',
-                'Rangée ${placement.positionY + 1}, Colonne ${placement.positionX + 1}'),
+            _infoRow(
+              'Position',
+              'Rangée ${placement.positionY + 1}, Colonne ${placement.positionX + 1}',
+            ),
             _infoRow('Couleur', '${wine.color.emoji} ${wine.color.label}'),
             if (wine.vintage != null) _infoRow('Millésime', '${wine.vintage}'),
             if (wine.drinkFromYear != null || wine.drinkUntilYear != null)
@@ -716,6 +928,30 @@ class _VirtualCellarDetailScreenState
 
                 Navigator.of(ctx).pop();
 
+                // Handle row insertion position if rows increased
+                int? rowInsertPosition;
+                if (rows > cellar.rows && context.mounted) {
+                  rowInsertPosition = await _showInsertPositionDialog(
+                    context,
+                    'Rangées',
+                    cellar.rows,
+                    rows - cellar.rows,
+                  );
+                  if (rowInsertPosition == null) return;
+                }
+
+                // Handle column insertion position if columns increased
+                int? colInsertPosition;
+                if (cols > cellar.columns && context.mounted) {
+                  colInsertPosition = await _showInsertPositionDialog(
+                    context,
+                    'Colonnes',
+                    cellar.columns,
+                    cols - cellar.columns,
+                  );
+                  if (colInsertPosition == null) return;
+                }
+
                 if (displaced.isNotEmpty && context.mounted) {
                   final confirm = await showDialog<bool>(
                     context: context,
@@ -743,6 +979,17 @@ class _VirtualCellarDetailScreenState
                         .read(removeBottlePlacementUseCaseProvider)
                         .call(p.id);
                   }
+                }
+
+                // Reindex placements if needed
+                if ((rowInsertPosition != null && rowInsertPosition != cellar.rows) ||
+                    (colInsertPosition != null && colInsertPosition != cellar.columns)) {
+                  await _reindexPlacementsAfterInsertion(
+                    rowInsertPosition,
+                    colInsertPosition,
+                    cellar.rows,
+                    cellar.columns,
+                  );
                 }
 
                 final result = await ref
@@ -773,6 +1020,129 @@ class _VirtualCellarDetailScreenState
     );
   }
 
+  /// Show dialog to ask user where to insert new rows/columns.
+  /// Returns the insertion position index, or null if cancelled.
+  Future<int?> _showInsertPositionDialog(
+    BuildContext context,
+    String type,
+    int currentCount,
+    int addCount,
+  ) async {
+    int selectedPosition = currentCount; // Default to end
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Où ajouter $addCount $type?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Sélectionnez la position d\'insertion pour les $addCount nouvelles $type:',
+              ),
+              const SizedBox(height: 16),
+              SingleChildScrollView(
+                child: Column(
+                  children: [
+                    RadioListTile<int>(
+                      title: const Text('Au début'),
+                      value: 0,
+                      groupValue: selectedPosition,
+                      onChanged: (v) {
+                        if (v != null) setState(() => selectedPosition = v);
+                      },
+                    ),
+                    if (currentCount > 0)
+                      ...List.generate(
+                        currentCount,
+                        (idx) => RadioListTile<int>(
+                          title: Text(
+                            'Entre ${type.toLowerCase()} ${idx + 1} et ${idx + 2}',
+                          ),
+                          value: idx + 1,
+                          groupValue: selectedPosition,
+                          onChanged: (v) {
+                            if (v != null) setState(() => selectedPosition = v);
+                          },
+                        ),
+                      ),
+                    RadioListTile<int>(
+                      title: const Text('À la fin'),
+                      value: currentCount,
+                      groupValue: selectedPosition,
+                      onChanged: (v) {
+                        if (v != null) setState(() => selectedPosition = v);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(selectedPosition),
+              child: const Text('Confirmer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return result;
+  }
+
+  /// Reindex placements when rows or columns are inserted at specific positions.
+  /// Shifts existing placements if insertion is not at the end.
+  Future<void> _reindexPlacementsAfterInsertion(
+    int? rowInsertPos,
+    int? colInsertPos,
+    int oldRows,
+    int oldCols,
+  ) async {
+    for (final placement in _placedBottles) {
+      int newY = placement.positionY;
+      int newX = placement.positionX;
+
+      // Shift Y if rows were inserted before this placement
+      if (rowInsertPos != null && rowInsertPos <= placement.positionY) {
+        newY = placement.positionY;
+      }
+
+      // Shift X if columns were inserted before this placement
+      if (colInsertPos != null && colInsertPos <= placement.positionX) {
+        newX = placement.positionX;
+      }
+
+      // Only update if position changed
+      if (newY != placement.positionY || newX != placement.positionX) {
+        final result = await ref
+            .read(virtualCellarRepositoryProvider)
+            .moveBottleInCellar(
+              placementId: placement.id,
+              newPositionX: newX,
+              newPositionY: newY,
+            );
+
+        result.fold(
+          (failure) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Erreur reindexation: ${failure.message}')),
+              );
+            }
+          },
+          (_) {},
+        );
+      }
+    }
+  }
+
   Widget _infoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -799,26 +1169,64 @@ class _VirtualCellarDetailScreenState
 const double _kCellWidth = 56;
 const double _kRowNumWidth = 28;
 
-class _CellarGridView extends StatefulWidget {
+class _GroupDragData {
+  final int anchorPlacementId;
+
+  const _GroupDragData({required this.anchorPlacementId});
+}
+
+class _MoveUndoSnapshot {
+  final int anchorPlacementId;
+  final int oldAnchorX;
+  final int oldAnchorY;
+  final Set<int> movedPlacementIds;
+
+  const _MoveUndoSnapshot({
+    required this.anchorPlacementId,
+    required this.oldAnchorX,
+    required this.oldAnchorY,
+    required this.movedPlacementIds,
+  });
+}
+
+class _CellarGridView extends ConsumerStatefulWidget {
   final VirtualCellarEntity cellar;
-  final List<BottlePlacementEntity> placements;
+  final List<BottlePlacementEntity> visiblePlacements;
+  final List<BottlePlacementEntity> allPlacements;
   final _PendingPlacement? pendingPlacement;
   final void Function(int row, int col) onSlotTap;
+  final int cellarId;
+  final void Function(int placementId) onLongPressPlacement;
+  final Future<void> Function({
+    required int anchorPlacementId,
+    required int targetRow,
+    required int targetCol,
+    required List<BottlePlacementEntity> allPlacements,
+  }) onMovePlacement;
 
   const _CellarGridView({
     required this.cellar,
-    required this.placements,
+    required this.visiblePlacements,
+    required this.allPlacements,
     required this.pendingPlacement,
     required this.onSlotTap,
+    required this.cellarId,
+    required this.onLongPressPlacement,
+    required this.onMovePlacement,
   });
 
   @override
-  State<_CellarGridView> createState() => _CellarGridViewState();
+  ConsumerState<_CellarGridView> createState() => _CellarGridViewState();
 }
 
-class _CellarGridViewState extends State<_CellarGridView> {
+class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
+  final GlobalKey _dragAreaKey = GlobalKey();
+
+  int? _dragAnchorPlacementId;
+  Set<(int, int)> _previewTargets = <(int, int)>{};
+  bool _previewValid = false;
 
   @override
   void dispose() {
@@ -827,12 +1235,123 @@ class _CellarGridViewState extends State<_CellarGridView> {
     super.dispose();
   }
 
+  void _startDrag(int anchorPlacementId) {
+    setState(() {
+      _dragAnchorPlacementId = anchorPlacementId;
+      _previewTargets = <(int, int)>{};
+      _previewValid = false;
+    });
+  }
+
+  void _updateDragHover(int targetRow, int targetCol) {
+    final anchorId = _dragAnchorPlacementId;
+    if (anchorId == null) return;
+
+    final allPlacements = widget.allPlacements;
+    final selectedIds =
+        ref.read(bottleMoveStateProvider(widget.cellarId)).selectedPlacementIds;
+    final anchor = allPlacements.where((p) => p.id == anchorId).firstOrNull;
+    if (anchor == null || selectedIds.isEmpty) return;
+
+    final selectedPlacements = allPlacements
+        .where((p) => selectedIds.contains(p.id))
+        .toList(growable: false);
+
+    final deltaX = targetCol - anchor.positionX;
+    final deltaY = targetRow - anchor.positionY;
+
+    final occupiedByOthers = <(int, int)>{
+      for (final p in allPlacements)
+        if (!selectedIds.contains(p.id)) (p.positionY, p.positionX),
+    };
+
+    var valid = true;
+    final preview = <(int, int)>{};
+
+    for (final placement in selectedPlacements) {
+      final newX = placement.positionX + deltaX;
+      final newY = placement.positionY + deltaY;
+      if (newX < 0 ||
+          newX >= widget.cellar.columns ||
+          newY < 0 ||
+          newY >= widget.cellar.rows) {
+        valid = false;
+        break;
+      }
+      if (occupiedByOthers.contains((newY, newX))) {
+        valid = false;
+      }
+      preview.add((newY, newX));
+    }
+
+    setState(() {
+      _previewTargets = preview;
+      _previewValid = valid;
+    });
+  }
+
+  Future<void> _acceptDrop(int targetRow, int targetCol) async {
+    final anchorId = _dragAnchorPlacementId;
+    if (anchorId == null) return;
+
+    await widget.onMovePlacement(
+      anchorPlacementId: anchorId,
+      targetRow: targetRow,
+      targetCol: targetCol,
+      allPlacements: widget.allPlacements,
+    );
+    _endDrag();
+  }
+
+  void _endDrag() {
+    if (!mounted) return;
+    setState(() {
+      _dragAnchorPlacementId = null;
+      _previewTargets = <(int, int)>{};
+      _previewValid = false;
+    });
+  }
+
+  void _handleDragPointerUpdate(Offset globalPosition) {
+    final ctx = _dragAreaKey.currentContext;
+    if (ctx == null) return;
+    final renderObject = ctx.findRenderObject();
+    if (renderObject is! RenderBox) return;
+
+    final local = renderObject.globalToLocal(globalPosition);
+    final size = renderObject.size;
+
+    const edgeSize = 44.0;
+    const scrollStep = 18.0;
+
+    if (_verticalController.hasClients) {
+      final current = _verticalController.offset;
+      final maxExtent = _verticalController.position.maxScrollExtent;
+      if (local.dy < edgeSize) {
+        _verticalController.jumpTo(math.max(0, current - scrollStep));
+      } else if (local.dy > size.height - edgeSize) {
+        _verticalController.jumpTo(math.min(maxExtent, current + scrollStep));
+      }
+    }
+
+    if (_horizontalController.hasClients) {
+      final current = _horizontalController.offset;
+      final maxExtent = _horizontalController.position.maxScrollExtent;
+      if (local.dx < edgeSize) {
+        _horizontalController.jumpTo(math.max(0, current - scrollStep));
+      } else if (local.dx > size.width - edgeSize) {
+        _horizontalController.jumpTo(math.min(maxExtent, current + scrollStep));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cellar = widget.cellar;
-    final placements = widget.placements;
+    final placements = widget.visiblePlacements;
     final pendingPlacement = widget.pendingPlacement;
     final onSlotTap = widget.onSlotTap;
+    final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
 
     final lookup = <(int, int), BottlePlacementEntity>{};
     for (final p in placements) {
@@ -885,22 +1404,24 @@ class _CellarGridViewState extends State<_CellarGridView> {
             ),
           ),
         Expanded(
-          child: Scrollbar(
-            controller: _verticalController,
-            thumbVisibility: true,
-            child: SingleChildScrollView(
+          child: Container(
+            key: _dragAreaKey,
+            child: Scrollbar(
               controller: _verticalController,
-              padding: const EdgeInsets.only(bottom: 80),
-              child: Scrollbar(
-                controller: _horizontalController,
-                thumbVisibility: true,
-                notificationPredicate: (notification) => notification.depth == 1,
-                scrollbarOrientation: ScrollbarOrientation.bottom,
-                child: SingleChildScrollView(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _verticalController,
+                padding: const EdgeInsets.only(bottom: 80),
+                child: Scrollbar(
                   controller: _horizontalController,
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  child: Column(
+                  thumbVisibility: true,
+                  notificationPredicate: (notification) => notification.depth == 1,
+                  scrollbarOrientation: ScrollbarOrientation.bottom,
+                  child: SingleChildScrollView(
+                    controller: _horizontalController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
@@ -947,11 +1468,44 @@ class _CellarGridViewState extends State<_CellarGridView> {
                             ),
                             ...List.generate(cellar.columns, (col) {
                               final placement = lookup[(row, col)];
+                              final isPreviewTarget = _previewTargets.contains((row, col));
+                              final hideBottleVisual = _dragAnchorPlacementId != null &&
+                                  placement != null &&
+                                  moveState.selectedPlacementIds.contains(placement.id) &&
+                                  !isPreviewTarget;
+                              final showDragGhost =
+                                  _dragAnchorPlacementId != null && isPreviewTarget;
                               return SizedBox(
                                 width: _kCellWidth,
-                                child: _SlotCell(
-                                  placement: placement,
-                                  onTap: () => onSlotTap(row, col),
+                                child: DragTarget<_GroupDragData>(
+                                  onWillAcceptWithDetails: (_) => true,
+                                  onMove: (_) => _updateDragHover(row, col),
+                                  onAcceptWithDetails: (_) => _acceptDrop(row, col),
+                                  onLeave: (_) {
+                                    if (_dragAnchorPlacementId == null) return;
+                                    setState(() {
+                                      _previewTargets = <(int, int)>{};
+                                      _previewValid = false;
+                                    });
+                                  },
+                                  builder: (context, candidateData, rejectedData) {
+                                    return _SlotCell(
+                                      placement: placement,
+                                      onTap: () => onSlotTap(row, col),
+                                      cellarId: widget.cellarId,
+                                      onLongPressPlacement: widget.onLongPressPlacement,
+                                      row: row,
+                                      col: col,
+                                      isPreviewTarget: isPreviewTarget,
+                                      previewIsValid: _previewValid,
+                                      selectedCount: moveState.selectedPlacementIds.length,
+                                      onDragStarted: _startDrag,
+                                      onDragEnded: _endDrag,
+                                      onDragPointerUpdate: _handleDragPointerUpdate,
+                                      hideBottleVisual: hideBottleVisual,
+                                      showDragGhost: showDragGhost,
+                                    );
+                                  },
                                 ),
                               );
                             }),
@@ -959,6 +1513,7 @@ class _CellarGridViewState extends State<_CellarGridView> {
                         );
                       }),
                     ],
+                    ),
                   ),
                 ),
               ),
@@ -971,61 +1526,154 @@ class _CellarGridViewState extends State<_CellarGridView> {
   }
 }
 
-class _SlotCell extends StatelessWidget {
+class _SlotCell extends ConsumerStatefulWidget {
   final BottlePlacementEntity? placement;
   final VoidCallback onTap;
+  final int cellarId;
+  final void Function(int) onLongPressPlacement;
+  final int row;
+  final int col;
+  final bool isPreviewTarget;
+  final bool previewIsValid;
+  final int selectedCount;
+  final void Function(int anchorPlacementId) onDragStarted;
+  final VoidCallback onDragEnded;
+  final void Function(Offset globalPosition) onDragPointerUpdate;
+  final bool hideBottleVisual;
+  final bool showDragGhost;
 
-  const _SlotCell({this.placement, required this.onTap});
+  const _SlotCell({
+    this.placement,
+    required this.onTap,
+    required this.cellarId,
+    required this.onLongPressPlacement,
+    required this.row,
+    required this.col,
+    required this.isPreviewTarget,
+    required this.previewIsValid,
+    required this.selectedCount,
+    required this.onDragStarted,
+    required this.onDragEnded,
+    required this.onDragPointerUpdate,
+    required this.hideBottleVisual,
+    required this.showDragGhost,
+  });
 
+  @override
+  ConsumerState<_SlotCell> createState() => _SlotCellState();
+}
+
+class _SlotCellState extends ConsumerState<_SlotCell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final wine = placement?.wine;
+    final wine = widget.placement?.wine;
     final hasWine = wine != null;
+    final visibleWine = hasWine && !widget.hideBottleVisual;
     final wineColor = hasWine ? AppTheme.colorForWine(wine.color.name) : null;
 
-    return GestureDetector(
-      onTap: onTap,
+    final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
+    final isSelected = widget.placement != null &&
+        moveState.isSelected(widget.placement!.id);
+    final isMovementMode = moveState.isMovementMode;
+    final isDragModeEnabled = moveState.isDragModeEnabled;
+
+    final content = GestureDetector(
+      onTap: () {
+        if (hasWine && isMovementMode && !isDragModeEnabled) {
+          // In movement mode, simple tap toggles selection.
+          widget.onLongPressPlacement(widget.placement!.id);
+          return;
+        }
+        if (!isMovementMode) {
+          widget.onTap();
+        }
+      },
+      onLongPress: () {
+        if (hasWine && !isMovementMode && widget.placement != null) {
+          // First long-press enters movement mode and selects the bottle.
+          widget.onLongPressPlacement(widget.placement!.id);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.all(2),
         height: 52,
         decoration: BoxDecoration(
-          color: hasWine
-              ? wineColor!.withValues(alpha: 0.18)
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          color: widget.isPreviewTarget
+              ? (widget.previewIsValid
+                  ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.55)
+                  : theme.colorScheme.errorContainer.withValues(alpha: 0.65))
+              : isSelected
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.25)
+                : visibleWine
+                  ? wineColor!.withValues(alpha: 0.18)
+                  : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
           border: Border.all(
-            color: hasWine
-                ? wineColor!.withValues(alpha: 0.6)
-                : theme.colorScheme.outlineVariant,
-            width: hasWine ? 1.5 : 1,
+            color: widget.isPreviewTarget
+                ? (widget.previewIsValid
+                    ? theme.colorScheme.secondary
+                    : theme.colorScheme.error)
+                : isSelected
+                ? Theme.of(context).colorScheme.primary
+                : visibleWine
+                    ? wineColor!.withValues(alpha: 0.6)
+                    : theme.colorScheme.outlineVariant,
+            width: widget.isPreviewTarget ? 2.5 : (isSelected ? 2.5 : (visibleWine ? 1.5 : 1)),
           ),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: hasWine
+        child: widget.showDragGhost
+            ? Center(
+                child: Icon(
+                  Icons.local_bar,
+                  size: 16,
+                  color: widget.previewIsValid
+                      ? theme.colorScheme.secondary
+                      : theme.colorScheme.error,
+                ),
+              )
+            : visibleWine
             ? Padding(
                 padding: const EdgeInsets.all(3),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Stack(
                   children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: wineColor,
-                        shape: BoxShape.circle,
-                      ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: wineColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          wine.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 8,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      wine.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontSize: 8,
-                        height: 1.1,
+                    if (isSelected)
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               )
@@ -1036,6 +1684,108 @@ class _SlotCell extends StatelessWidget {
                   color: theme.colorScheme.outlineVariant,
                 ),
               ),
+      ),
+    );
+
+    if (isMovementMode && hasWine && isSelected && widget.placement != null) {
+      final dragData = _GroupDragData(anchorPlacementId: widget.placement!.id);
+      final feedback = _DragSelectionFeedback(count: widget.selectedCount);
+      final childWhenDragging = Opacity(opacity: 0.35, child: content);
+
+      void onDragStarted() {
+        widget.onDragStarted(widget.placement!.id);
+      }
+
+      void onDragUpdate(DragUpdateDetails details) {
+        widget.onDragPointerUpdate(details.globalPosition);
+      }
+
+      final isDesktopPlatform = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.linux ||
+              defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.macOS);
+
+      if (isDesktopPlatform) {
+        if (!isDragModeEnabled) {
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: content,
+          );
+        }
+
+        return Draggable<_GroupDragData>(
+          data: dragData,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          maxSimultaneousDrags: 1,
+          onDragStarted: onDragStarted,
+          onDragUpdate: onDragUpdate,
+          onDragCompleted: widget.onDragEnded,
+          onDragEnd: (_) => widget.onDragEnded(),
+          feedback: feedback,
+          childWhenDragging: childWhenDragging,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.grab,
+            child: content,
+          ),
+        );
+      }
+
+      if (!isDragModeEnabled) {
+        return content;
+      }
+
+      return LongPressDraggable<_GroupDragData>(
+        data: dragData,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        maxSimultaneousDrags: 1,
+        onDragStarted: onDragStarted,
+        onDragUpdate: onDragUpdate,
+        onDragCompleted: widget.onDragEnded,
+        onDragEnd: (_) => widget.onDragEnded(),
+        onDraggableCanceled: (velocity, offset) => widget.onDragEnded(),
+        feedback: feedback,
+        childWhenDragging: childWhenDragging,
+        child: content,
+      );
+    }
+
+    return content;
+  }
+}
+
+class _DragSelectionFeedback extends StatelessWidget {
+  final int count;
+
+  const _DragSelectionFeedback({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(blurRadius: 8, offset: Offset(0, 3), color: Colors.black26),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.local_bar, size: 14, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(
+              '$count bouteille${count > 1 ? 's' : ''}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

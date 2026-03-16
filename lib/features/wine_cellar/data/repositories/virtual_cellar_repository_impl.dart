@@ -201,6 +201,24 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, Unit>> moveBottleInCellar({
+    required int placementId,
+    required int newPositionX,
+    required int newPositionY,
+  }) async {
+    try {
+      await _placementDao.moveBottlePlacement(
+        placementId: placementId,
+        newPositionX: newPositionX,
+        newPositionY: newPositionY,
+      );
+      return const Right(unit);
+    } catch (e) {
+      return Left(CacheFailure('Impossible de déplacer la bouteille.', cause: e));
+    }
+  }
+
   // ── Mapping ──────────────────────────────────────────────────────────────────
 
   VirtualCellarEntity _toEntity(VirtualCellar row) {

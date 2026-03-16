@@ -595,6 +595,39 @@ class _VirtualCellarTab extends StatelessWidget {
           'Placez une bouteille sur une position libre.',
           'Visualisez rapidement ou se trouve chaque vin.',
         ]),
+        _BlockTitle('Placer des bouteilles'),
+        _Paragraph(
+          'Pour ajouter une bouteille dans votre cellar, tapez sur une cellule vide. '
+          'Un formulaire vous permettra de selectionner le vin et sa quantite a placer.',
+        ),
+        _BlockTitle('Deplacer des bouteilles'),
+        _Paragraph(
+          'Utilisez le mode de deplacement pour reorganiser vos bouteilles rapidement.',
+        ),
+        _Bullets([
+          'Appuyez longtemps (2+ secondes) sur une bouteille pour entrer en mode deplacement. '
+          'La bouteille se surligne en bleu.',
+          'En mode deplacement, tapez simplement sur d autres bouteilles pour les ajouter a la selection (pas besoin de long press).',
+          'Pour deplacer la selection: faites un nouvel appui long sur une bouteille selectionnee, puis glissez vers la zone voulue.',
+          'Sur Linux, Windows et macOS, selectionnez d abord les bouteilles, puis appuyez sur le bouton deplacement en haut avant de cliquer-glisser a la souris.',
+          'Pendant le glisser, les positions cibles sont previsualisees en temps reel.',
+          'Pendant le glisser, la grille defile automatiquement si vous approchez les bords (auto-scroll).',
+          'Relachez pour deposer la selection. Si une case cible est deja occupee, le depot est refuse.',
+          'Apres un depot reussi, utilisez le bouton "Annuler" dans le message pour revenir en arriere.',
+          'Utilisez le bouton menu (icone main) en haut pour basculer le mode deplacement on/off.',
+          'Le principe de non-superposition est applique au relachement (drop).',
+        ]),
+        _BlockTitle('Redimensionner votre cave'),
+        _Paragraph(
+          'Vous pouvez augmenter le nombre de lignes et colonnes. Lors de l ajout, vous serez '
+          'demande a quel endroit les inserer.',
+        ),
+        _Bullets([
+          'Appuyez sur le bouton editer (icone crayon) en haut a droite.',
+          'Modifiez les dimensions souhaitees.',
+          'Si vous augmentez les lignes ou colonnes, selectionnez leur position d insertion.',
+          'Les positions d insertion peuvent etre au debut, a la fin, ou entre deux lignes/colonnes existantes.',
+        ]),
         _BlockTitle('Comportement pendant les imports'),
         _Bullets([
           'Import CSV: n ecrase pas les placements existants.',

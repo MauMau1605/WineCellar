@@ -58,4 +58,12 @@ abstract class VirtualCellarRepository {
     required int wineId,
     required int maxPlacements,
   });
+
+  /// Move a bottle placement to a new position in the cellar.
+  /// Returns failure if the target slot is occupied.
+  Future<Either<Failure, Unit>> moveBottleInCellar({
+    required int placementId,
+    required int newPositionX,
+    required int newPositionY,
+  });
 }

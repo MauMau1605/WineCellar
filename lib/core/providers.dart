@@ -26,6 +26,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_virtual_
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_cellar.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/remove_bottle_placement.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_placements.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/move_bottles_in_cellar.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/image_text_extractor.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
@@ -457,6 +458,11 @@ final removeBottlePlacementUseCaseProvider =
 final getWinePlacementsUseCaseProvider =
     Provider<GetWinePlacementsUseCase>((ref) {
   return GetWinePlacementsUseCase(ref.watch(virtualCellarRepositoryProvider));
+});
+
+final moveBottlesInCellarUseCaseProvider =
+    Provider<MoveBottlesInCellar>((ref) {
+  return MoveBottlesInCellar(ref.watch(virtualCellarRepositoryProvider));
 });
 
 // ============ Use Cases — AI ============
