@@ -1589,12 +1589,14 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
           widget.onTap();
         }
       },
-      onLongPress: () {
-        if (hasWine && !isMovementMode && widget.placement != null) {
-          // First long-press enters movement mode and selects the bottle.
-          widget.onLongPressPlacement(widget.placement!.id);
-        }
-      },
+      // Keep this handler disabled once movement mode is active so
+      // LongPressDraggable can win the gesture arena on touch devices.
+      onLongPress: hasWine && !isMovementMode && widget.placement != null
+          ? () {
+              // First long-press enters movement mode and selects the bottle.
+              widget.onLongPressPlacement(widget.placement!.id);
+            }
+          : null,
       child: Container(
         margin: const EdgeInsets.all(2),
         height: 52,

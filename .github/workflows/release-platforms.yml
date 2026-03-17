@@ -1,16 +1,15 @@
-name: Build Windows
+name: Release Platforms
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  test-migration:
+  release-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -37,15 +36,58 @@ jobs:
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: Run database migration test
-        run: flutter test test/database/app_database_migration_test.dart
-
       - name: Run JSON import compatibility test
         run: flutter test test/features/wine_cellar/data/repositories/wine_repository_impl_test.dart
 
-  build-windows:
+  release-android:
+    runs-on: ubuntu-latest
+    needs: release-checks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Cache build_runner
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-runner-
+
+      - name: Generate code (build_runner)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build Android release APK
+        run: flutter build apk --release
+
+      - name: Rename release APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk wine-cellar-android-${{ github.ref_name }}.apk
+
+      - name: Publish Android release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wine-cellar-android-${{ github.ref_name }}.apk
+          generate_release_notes: true
+
+  release-windows:
     runs-on: windows-latest
-    needs: test-migration
+    needs: release-checks
 
     steps:
       - name: Checkout
@@ -80,9 +122,12 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+      - name: Archive release folder
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath wine-cellar-windows-${{ github.ref_name }}.zip
+
+      - name: Publish Windows release asset
+        uses: softprops/action-gh-release@v2
         with:
-          name: wine-cellar-windows-release
-          path: build/windows/x64/runner/Release/
-          if-no-files-found: error
+          files: wine-cellar-windows-${{ github.ref_name }}.zip

@@ -1,4 +1,4 @@
-name: Build Android
+name: Build Platforms
 
 on:
   workflow_dispatch:
@@ -83,12 +83,56 @@ jobs:
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: Build Android debug APK
-        run: flutter build apk --debug
+      - name: Build Android release APK
+        run: flutter build apk --release
 
-      - name: Upload Android debug artifact
+      - name: Upload Android release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wine-cellar-android-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: wine-cellar-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    needs: test-migration
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Cache build_runner
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/build
+          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-runner-
+
+      - name: Generate code (build_runner)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Generate Windows host project (if missing)
+        run: flutter create --platforms=windows .
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-cellar-windows-release
+          path: build/windows/x64/runner/Release/
           if-no-files-found: error
