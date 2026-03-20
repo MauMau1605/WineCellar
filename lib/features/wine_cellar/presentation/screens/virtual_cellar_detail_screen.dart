@@ -1222,6 +1222,9 @@ class _CellarGridView extends ConsumerStatefulWidget {
 }
 
 class _CellarGridViewState extends ConsumerState<_CellarGridView> {
+  static const double _kMinZoom = 0.7;
+  static const double _kMaxZoom = 2.0;
+
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
   final GlobalKey _dragAreaKey = GlobalKey();
@@ -1229,6 +1232,8 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   int? _dragAnchorPlacementId;
   Set<(int, int)> _previewTargets = <(int, int)>{};
   bool _previewValid = false;
+  double _zoomLevel = 1.0;
+  double _zoomStart = 1.0;
 
   @override
   void dispose() {
@@ -1321,6 +1326,23 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     });
   }
 
+  void _setZoom(double value) {
+    setState(() {
+      _zoomLevel = value.clamp(_kMinZoom, _kMaxZoom);
+    });
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _zoomStart = _zoomLevel;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount < 2) {
+      return;
+    }
+    _setZoom(_zoomStart * details.scale);
+  }
+
   void _handleDragPointerUpdate(Offset globalPosition) {
     final ctx = _dragAreaKey.currentContext;
     if (ctx == null) return;
@@ -1376,6 +1398,9 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
 
     final occupied = lookup.length;
     final total = cellar.totalSlots;
+    final cellWidth = _kCellWidth * _zoomLevel;
+    final cellHeight = _kCellHeight * _zoomLevel;
+    final rowNumWidth = _kRowNumWidth * _zoomLevel;
 
     return Column(
       children: [
@@ -1390,6 +1415,28 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                 ),
               ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.zoom_out),
+                tooltip: 'Dézoomer',
+                onPressed: _zoomLevel <= _kMinZoom
+                    ? null
+                    : () => _setZoom(_zoomLevel - 0.1),
+              ),
+              SizedBox(
+                width: 52,
+                child: Text(
+                  '${(_zoomLevel * 100).round()}%',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.zoom_in),
+                tooltip: 'Zoomer',
+                onPressed: _zoomLevel >= _kMaxZoom
+                    ? null
+                    : () => _setZoom(_zoomLevel + 0.1),
+              ),
               Text(
                 '$occupied / $total emplacement${total > 1 ? 's' : ''} occupé${occupied > 1 ? 's' : ''}',
                 style: Theme.of(context).textTheme.bodySmall,
@@ -1418,61 +1465,39 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
             ),
           ),
         Expanded(
-          child: Container(
-            key: _dragAreaKey,
-            child: Scrollbar(
-              controller: _verticalController,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
+          child: GestureDetector(
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: _onScaleUpdate,
+            child: Container(
+              key: _dragAreaKey,
+              child: Scrollbar(
                 controller: _verticalController,
-                padding: const EdgeInsets.only(bottom: 80),
-                child: Scrollbar(
-                  controller: _horizontalController,
-                  thumbVisibility: true,
-                  notificationPredicate: (notification) =>
-                      notification.depth == 1,
-                  scrollbarOrientation: ScrollbarOrientation.bottom,
-                  child: SingleChildScrollView(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _verticalController,
+                  padding: const EdgeInsets.only(bottom: 80),
+                  child: Scrollbar(
                     controller: _horizontalController,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const SizedBox(width: _kRowNumWidth),
-                            ...List.generate(cellar.columns, (col) {
-                              return SizedBox(
-                                width: _kCellWidth,
-                                child: Center(
-                                  child: Text(
-                                    '${col + 1}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outline,
-                                        ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        ...List.generate(cellar.rows, (row) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: _kRowNumWidth,
+                    thumbVisibility: true,
+                    notificationPredicate: (notification) =>
+                        notification.depth == 1,
+                    scrollbarOrientation: ScrollbarOrientation.bottom,
+                    child: SingleChildScrollView(
+                      controller: _horizontalController,
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              SizedBox(width: rowNumWidth),
+                              ...List.generate(cellar.columns, (col) {
+                                return SizedBox(
+                                  width: cellWidth,
                                   child: Center(
                                     child: Text(
-                                      _rowLabel(row),
+                                      '${col + 1}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
@@ -1483,79 +1508,107 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                                           ),
                                     ),
                                   ),
-                                ),
-                                ...List.generate(cellar.columns, (col) {
-                                  final placement = lookup[(row, col)];
-                                  final isEmptyCell = cellar.isCellEmpty(
-                                    oneBasedRow: row + 1,
-                                    oneBasedCol: col + 1,
-                                  );
-                                  final isPreviewTarget = _previewTargets
-                                      .contains((row, col));
-                                  final hideBottleVisual =
-                                      _dragAnchorPlacementId != null &&
-                                      placement != null &&
-                                      moveState.selectedPlacementIds.contains(
-                                        placement.id,
-                                      ) &&
-                                      !isPreviewTarget;
-                                  final showDragGhost =
-                                      _dragAnchorPlacementId != null &&
-                                      isPreviewTarget;
-                                  return SizedBox(
-                                    width: _kCellWidth,
-                                    height: _kCellHeight,
-                                    child: DragTarget<_GroupDragData>(
-                                      onWillAcceptWithDetails: (_) => true,
-                                      onMove: (_) => _updateDragHover(row, col),
-                                      onAcceptWithDetails: (_) =>
-                                          _acceptDrop(row, col),
-                                      onLeave: (_) {
-                                        if (_dragAnchorPlacementId == null) {
-                                          return;
-                                        }
-                                        setState(() {
-                                          _previewTargets = <(int, int)>{};
-                                          _previewValid = false;
-                                        });
-                                      },
-                                      builder:
-                                          (
-                                            context,
-                                            candidateData,
-                                            rejectedData,
-                                          ) {
-                                            return _SlotCell(
-                                              placement: placement,
-                                              onTap: () => onSlotTap(row, col),
-                                              cellarId: widget.cellarId,
-                                              onLongPressPlacement:
-                                                  widget.onLongPressPlacement,
-                                              row: row,
-                                              col: col,
-                                              isEmptyCell: isEmptyCell,
-                                              isPreviewTarget: isPreviewTarget,
-                                              previewIsValid: _previewValid,
-                                              selectedCount: moveState
-                                                  .selectedPlacementIds
-                                                  .length,
-                                              onDragStarted: _startDrag,
-                                              onDragEnded: _endDrag,
-                                              onDragPointerUpdate:
-                                                  _handleDragPointerUpdate,
-                                              hideBottleVisual:
-                                                  hideBottleVisual,
-                                              showDragGhost: showDragGhost,
-                                            );
-                                          },
+                                );
+                              }),
+                            ],
+                          ),
+                          SizedBox(height: 6 * _zoomLevel),
+                          ...List.generate(cellar.rows, (row) {
+                            return Padding(
+                              padding: EdgeInsets.only(bottom: 6 * _zoomLevel),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: rowNumWidth,
+                                    child: Center(
+                                      child: Text(
+                                        _rowLabel(row),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.outline,
+                                            ),
+                                      ),
                                     ),
-                                  );
-                                }),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
+                                  ),
+                                  ...List.generate(cellar.columns, (col) {
+                                    final placement = lookup[(row, col)];
+                                    final isEmptyCell = cellar.isCellEmpty(
+                                      oneBasedRow: row + 1,
+                                      oneBasedCol: col + 1,
+                                    );
+                                    final isPreviewTarget = _previewTargets
+                                        .contains((row, col));
+                                    final hideBottleVisual =
+                                        _dragAnchorPlacementId != null &&
+                                        placement != null &&
+                                        moveState.selectedPlacementIds.contains(
+                                          placement.id,
+                                        ) &&
+                                        !isPreviewTarget;
+                                    final showDragGhost =
+                                        _dragAnchorPlacementId != null &&
+                                        isPreviewTarget;
+                                    return SizedBox(
+                                      width: cellWidth,
+                                      height: cellHeight,
+                                      child: DragTarget<_GroupDragData>(
+                                        onWillAcceptWithDetails: (_) => true,
+                                        onMove: (_) =>
+                                            _updateDragHover(row, col),
+                                        onAcceptWithDetails: (_) =>
+                                            _acceptDrop(row, col),
+                                        onLeave: (_) {
+                                          if (_dragAnchorPlacementId == null) {
+                                            return;
+                                          }
+                                          setState(() {
+                                            _previewTargets = <(int, int)>{};
+                                            _previewValid = false;
+                                          });
+                                        },
+                                        builder:
+                                            (
+                                              context,
+                                              candidateData,
+                                              rejectedData,
+                                            ) {
+                                              return _SlotCell(
+                                                placement: placement,
+                                                onTap: () => onSlotTap(row, col),
+                                                cellarId: widget.cellarId,
+                                                onLongPressPlacement:
+                                                    widget.onLongPressPlacement,
+                                                row: row,
+                                                col: col,
+                                                isEmptyCell: isEmptyCell,
+                                                isPreviewTarget:
+                                                    isPreviewTarget,
+                                                previewIsValid: _previewValid,
+                                                selectedCount: moveState
+                                                    .selectedPlacementIds
+                                                    .length,
+                                                onDragStarted: _startDrag,
+                                                onDragEnded: _endDrag,
+                                                onDragPointerUpdate:
+                                                    _handleDragPointerUpdate,
+                                                hideBottleVisual:
+                                                    hideBottleVisual,
+                                                showDragGhost: showDragGhost,
+                                              );
+                                            },
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
                     ),
                   ),
                 ),
