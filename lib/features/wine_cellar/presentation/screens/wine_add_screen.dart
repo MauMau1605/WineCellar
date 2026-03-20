@@ -62,8 +62,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
   }
 
   Future<void> _loadFoodCategories() async {
-    final categories =
-        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    final categories = await ref
+        .read(foodCategoryRepositoryProvider)
+        .getAllCategories();
     if (!mounted) return;
     setState(() {
       _allPairingCategories = categories;
@@ -108,9 +109,7 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
         'Vous devez au minimum renseigner le nom du vin et son millésime.';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ajouter un vin'),
-      ),
+      appBar: AppBar(title: const Text('Ajouter un vin')),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -150,10 +149,12 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                   prefixIcon: Icon(Icons.palette),
                 ),
                 items: WineColor.values
-                    .map((c) => DropdownMenuItem(
-                          value: c,
-                          child: Text('${c.emoji} ${c.label}'),
-                        ))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c,
+                        child: Text('${c.emoji} ${c.label}'),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -250,7 +251,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                       .where((c) => _selectedPairingIds.contains(c.id))
                       .map(
                         (pairing) => Chip(
-                          label: Text('${pairing.icon ?? '🍽️'} ${pairing.name}'),
+                          label: Text(
+                            '${pairing.icon ?? '🍽️'} ${pairing.name}',
+                          ),
                         ),
                       )
                       .toList(),
@@ -281,10 +284,13 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                         labelText: 'Prix d\'achat (€)',
                         prefixIcon: Icon(Icons.euro),
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,2}'),
+                        ),
                       ],
                     ),
                   ),
@@ -309,8 +315,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                         prefixIcon: Icon(Icons.straighten),
                         helperText: 'Coordonnée plan (optionnel)',
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -322,8 +329,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                         prefixIcon: Icon(Icons.straighten),
                         helperText: 'Coordonnée plan (optionnel)',
                       ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                   ),
                 ],
@@ -479,9 +487,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     return Text(
       title,
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+        fontWeight: FontWeight.bold,
+        color: Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 
@@ -508,7 +516,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       if (choice == _DuplicateChoice.incrementExisting) {
         if (duplicate.id == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Impossible de mettre à jour ce vin.')),
+            const SnackBar(
+              content: Text('Impossible de mettre à jour ce vin.'),
+            ),
           );
           return;
         }
@@ -516,7 +526,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
         setState(() => _saving = true);
 
         final updatedQuantity = duplicate.quantity + entity.quantity;
-        final result = await ref.read(updateWineQuantityUseCaseProvider).call(
+        final result = await ref
+            .read(updateWineQuantityUseCaseProvider)
+            .call(
               UpdateQuantityParams(
                 wineId: duplicate.id!,
                 newQuantity: updatedQuantity,
@@ -527,9 +539,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
           (failure) {
             if (!mounted) return;
             setState(() => _saving = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(failure.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
           },
           (_) {
             if (!mounted) return;
@@ -553,20 +565,20 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       (failure) {
         if (!mounted) return;
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (newId) {
         if (!mounted) return;
         setState(() => _saving = false);
-        _askPlaceInCellar(context, newId);
+        _askPlaceInCellar(newId);
       },
     );
   }
 
-  Future<void> _askPlaceInCellar(BuildContext context, int wineId) async {
-    if (!context.mounted) return;
+  Future<void> _askPlaceInCellar(int wineId) async {
+    if (!mounted) return;
 
     final wantsToPlace = await showDialog<bool>(
       context: context,
@@ -595,8 +607,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       return;
     }
 
-    final cellarsResult =
-        await ref.read(virtualCellarRepositoryProvider).getAll();
+    final cellarsResult = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
     if (!mounted) return;
 
     final cellars = cellarsResult.getOrElse((_) => const []);
@@ -699,15 +712,14 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
               child: const Text('Annuler'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                _DuplicateChoice.createNew,
-              ),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(_DuplicateChoice.createNew),
               child: const Text('Créer une nouvelle référence'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                _DuplicateChoice.incrementExisting,
-              ),
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_DuplicateChoice.incrementExisting),
               child: const Text('Incrémenter la quantité'),
             ),
           ],
@@ -925,7 +937,9 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                         value: selected.contains(category.id),
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        title: Text('${category.icon ?? '🍽️'} ${category.name}'),
+                        title: Text(
+                          '${category.icon ?? '🍽️'} ${category.name}',
+                        ),
                         onChanged: (checked) {
                           setDialogState(() {
                             if (checked == true) {

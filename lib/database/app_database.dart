@@ -19,7 +19,13 @@ import 'daos/bottle_placement_dao.dart';
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [Wines, FoodCategories, WineFoodPairings, VirtualCellars, BottlePlacements],
+  tables: [
+    Wines,
+    FoodCategories,
+    WineFoodPairings,
+    VirtualCellars,
+    BottlePlacements,
+  ],
   daos: [WineDao, FoodCategoryDao, VirtualCellarDao, BottlePlacementDao],
 )
 class AppDatabase extends _$AppDatabase {
@@ -94,6 +100,11 @@ class AppDatabase extends _$AppDatabase {
       () => m.createTable(virtualCellars),
     );
     await _addColumnIfMissing(
+      tableName: 'virtual_cellars',
+      columnName: 'empty_cells',
+      addColumn: () => m.addColumn(virtualCellars, virtualCellars.emptyCells),
+    );
+    await _addColumnIfMissing(
       tableName: 'wines',
       columnName: 'cellar_id',
       addColumn: () => m.addColumn(wines, wines.cellarId),
@@ -147,19 +158,14 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> _tableExists(String tableName) async {
     final result = await customSelect(
       'SELECT 1 FROM sqlite_master WHERE type = ? AND name = ? LIMIT 1',
-      variables: [
-        const Variable<String>('table'),
-        Variable<String>(tableName),
-      ],
+      variables: [const Variable<String>('table'), Variable<String>(tableName)],
     ).getSingleOrNull();
 
     return result != null;
   }
 
   Future<bool> _columnExists(String tableName, String columnName) async {
-    final result = await customSelect(
-      "PRAGMA table_info('$tableName')",
-    ).get();
+    final result = await customSelect("PRAGMA table_info('$tableName')").get();
 
     return result.any((row) => row.read<String>('name') == columnName);
   }
@@ -197,13 +203,17 @@ LazyDatabase _openConnection() {
 
 Future<File> _resolveDatabaseFile() async {
   final documentsDir = await getApplicationDocumentsDirectory();
-  final documentsFile = File(p.join(documentsDir.path, AppConstants.databaseName));
+  final documentsFile = File(
+    p.join(documentsDir.path, AppConstants.databaseName),
+  );
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     final installDir = await _findWritableInstallDirectory();
 
     if (installDir != null) {
-      final installFile = File(p.join(installDir.path, AppConstants.databaseName));
+      final installFile = File(
+        p.join(installDir.path, AppConstants.databaseName),
+      );
 
       if (!await installFile.exists() && await documentsFile.exists()) {
         try {

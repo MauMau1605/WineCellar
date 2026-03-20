@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/screens/expert_cellar_editor_screen.dart';
 
 /// Screen listing all virtual cellars. Accessible via /cellars.
 class VirtualCellarListScreen extends ConsumerWidget {
@@ -16,9 +17,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
         .watch();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mes Celliers'),
-      ),
+      appBar: AppBar(title: const Text('Mes Celliers')),
       body: StreamBuilder<List<VirtualCellarEntity>>(
         stream: cellarsStream,
         builder: (context, snapshot) {
@@ -32,7 +31,9 @@ class VirtualCellarListScreen extends ConsumerWidget {
           final cellars = snapshot.data ?? [];
 
           if (cellars.isEmpty) {
-            return _EmptyState(onCreateTap: () => _showCreateDialog(context, ref));
+            return _EmptyState(
+              onCreateTap: () => _showCreateDialog(context, ref),
+            );
           }
 
           return ListView.builder(
@@ -44,6 +45,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
                 cellar: cellar,
                 onTap: () => context.push('/cellars/${cellar.id}'),
                 onEdit: () => _showEditDialog(context, ref, cellar),
+                onEditExpert: () => _openExpertEditor(
+                  context,
+                  name: cellar.name,
+                  rows: cellar.rows,
+                  cols: cellar.columns,
+                  sourceCellar: cellar,
+                ),
                 onDelete: () => _confirmDelete(context, ref, cellar),
               );
             },
@@ -63,20 +71,18 @@ class VirtualCellarListScreen extends ConsumerWidget {
       context: context,
       title: 'Nouveau cellier',
       confirmLabel: 'Créer',
+      enableModeSelection: true,
       onConfirm: (name, rows, cols) async {
         final result = await ref
             .read(createVirtualCellarUseCaseProvider)
             .call(VirtualCellarEntity(name: name, rows: rows, columns: cols));
-        result.fold(
-          (failure) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(failure.message)),
-              );
-            }
-          },
-          (_) {},
-        );
+        result.fold((failure) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
+          }
+        }, (_) {});
       },
     );
   }
@@ -97,16 +103,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
         final result = await ref
             .read(updateVirtualCellarUseCaseProvider)
             .call(cellar.copyWith(name: name, rows: rows, columns: cols));
-        result.fold(
-          (failure) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(failure.message)),
-              );
-            }
-          },
-          (_) {},
-        );
+        result.fold((failure) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
+          }
+        }, (_) {});
       },
     );
   }
@@ -144,16 +147,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
       final result = await ref
           .read(deleteVirtualCellarUseCaseProvider)
           .call(cellar.id!);
-      result.fold(
-        (failure) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(failure.message)),
-            );
-          }
-        },
-        (_) {},
-      );
+      result.fold((failure) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(failure.message)));
+        }
+      }, (_) {});
     }
   }
 
@@ -164,11 +164,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
     int? initialRows,
     int? initialColumns,
     required String confirmLabel,
+    bool enableModeSelection = false,
     required Future<void> Function(String name, int rows, int cols) onConfirm,
   }) async {
     final nameCtrl = TextEditingController(text: initialName ?? '');
     var rows = initialRows ?? 5;
     var cols = initialColumns ?? 5;
+    var mode = _CellarCreationMode.simplified;
 
     await showDialog<void>(
       context: context,
@@ -180,6 +182,29 @@ class VirtualCellarListScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (enableModeSelection) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Mode de creation',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _CreationModeSelector(
+                      selectedMode: mode,
+                      onModeChanged: (newMode) {
+                        setDialogState(() {
+                          mode = newMode;
+                          if (mode == _CellarCreationMode.simplified) {
+                            rows = rows.clamp(1, 12);
+                            cols = cols.clamp(1, 16);
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   TextField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(
@@ -189,21 +214,56 @@ class VirtualCellarListScreen extends ConsumerWidget {
                     textCapitalization: TextCapitalization.sentences,
                   ),
                   const SizedBox(height: 20),
-                  _DimensionStepper(
-                    label: 'Rangées (hauteur)',
-                    value: rows,
-                    min: 1,
-                    max: 20,
-                    onChanged: (v) => setDialogState(() => rows = v),
-                  ),
-                  const SizedBox(height: 12),
-                  _DimensionStepper(
-                    label: 'Colonnes (largeur)',
-                    value: cols,
-                    min: 1,
-                    max: 30,
-                    onChanged: (v) => setDialogState(() => cols = v),
-                  ),
+                  if (mode == _CellarCreationMode.simplified) ...[
+                    _DimensionStepper(
+                      label: 'Rangées (hauteur)',
+                      value: rows,
+                      min: 1,
+                      max: 12,
+                      onChanged: (v) => setDialogState(() => rows = v),
+                    ),
+                    const SizedBox(height: 12),
+                    _DimensionStepper(
+                      label: 'Colonnes (largeur)',
+                      value: cols,
+                      min: 1,
+                      max: 16,
+                      onChanged: (v) => setDialogState(() => cols = v),
+                    ),
+                    const SizedBox(height: 14),
+                    _SimpleWavePreview(rows: rows, cols: cols),
+                  ] else ...[
+                    _DimensionStepper(
+                      label: 'Rangées (hauteur)',
+                      value: rows,
+                      min: 1,
+                      max: 30,
+                      onChanged: (v) => setDialogState(() => rows = v),
+                    ),
+                    const SizedBox(height: 12),
+                    _DimensionStepper(
+                      label: 'Colonnes (largeur)',
+                      value: cols,
+                      min: 1,
+                      max: 30,
+                      onChanged: (v) => setDialogState(() => cols = v),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Le mode expert permet de marquer des zones vides et modifier finement la grille.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -216,6 +276,18 @@ class VirtualCellarListScreen extends ConsumerWidget {
                 onPressed: () async {
                   final name = nameCtrl.text.trim();
                   if (name.isEmpty) return;
+
+                  if (mode == _CellarCreationMode.advanced) {
+                    Navigator.of(ctx).pop();
+                    await _openExpertEditor(
+                      context,
+                      name: name,
+                      rows: rows,
+                      cols: cols,
+                    );
+                    return;
+                  }
+
                   Navigator.of(ctx).pop();
                   await onConfirm(name, rows, cols);
                 },
@@ -227,6 +299,25 @@ class VirtualCellarListScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _openExpertEditor(
+    BuildContext context, {
+    required String name,
+    required int rows,
+    required int cols,
+    VirtualCellarEntity? sourceCellar,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<bool>(
+        builder: (_) => ExpertCellarEditorScreen(
+          initialName: name,
+          initialRows: rows,
+          initialColumns: cols,
+          sourceCellar: sourceCellar,
+        ),
+      ),
+    );
+  }
 }
 
 // ── Internal widgets ──────────────────────────────────────────────────────────
@@ -235,12 +326,14 @@ class _CellarCard extends StatelessWidget {
   final VirtualCellarEntity cellar;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final VoidCallback onEditExpert;
   final VoidCallback onDelete;
 
   const _CellarCard({
     required this.cellar,
     required this.onTap,
     required this.onEdit,
+    required this.onEditExpert,
     required this.onDelete,
   });
 
@@ -276,10 +369,15 @@ class _CellarCard extends StatelessWidget {
         trailing: PopupMenuButton<String>(
           onSelected: (v) {
             if (v == 'edit') onEdit();
+            if (v == 'expert') onEditExpert();
             if (v == 'delete') onDelete();
           },
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'edit', child: Text('Modifier')),
+            PopupMenuItem(
+              value: 'expert',
+              child: Text('Ouvrir en mode expert'),
+            ),
             PopupMenuItem(value: 'delete', child: Text('Supprimer')),
           ],
         ),
@@ -299,13 +397,13 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.grid_view_outlined,
-              size: 80, color: theme.colorScheme.outline),
-          const SizedBox(height: 16),
-          Text(
-            'Aucun cellier créé',
-            style: theme.textTheme.titleMedium,
+          Icon(
+            Icons.grid_view_outlined,
+            size: 80,
+            color: theme.colorScheme.outline,
           ),
+          const SizedBox(height: 16),
+          Text('Aucun cellier créé', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(
             'Créez votre premier cellier virtuel pour placer\nvos bouteilles et les retrouver facilement.',
@@ -365,6 +463,154 @@ class _DimensionStepper extends StatelessWidget {
           onPressed: value < max ? () => onChanged(value + 1) : null,
         ),
       ],
+    );
+  }
+}
+
+enum _CellarCreationMode { simplified, advanced }
+
+class _CreationModeSelector extends StatelessWidget {
+  final _CellarCreationMode selectedMode;
+  final ValueChanged<_CellarCreationMode> onModeChanged;
+
+  const _CreationModeSelector({
+    required this.selectedMode,
+    required this.onModeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ModeChip(
+            title: 'Simplifie',
+            subtitle: 'Format vague',
+            icon: Icons.waves,
+            selected: selectedMode == _CellarCreationMode.simplified,
+            enabled: true,
+            onTap: () => onModeChanged(_CellarCreationMode.simplified),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _ModeChip(
+            title: 'Avance',
+            subtitle: 'Grille libre',
+            icon: Icons.tune,
+            selected: selectedMode == _CellarCreationMode.advanced,
+            enabled: true,
+            onTap: () => onModeChanged(_CellarCreationMode.advanced),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _ModeChip({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cardColor = selected
+        ? theme.colorScheme.primaryContainer
+        : theme.colorScheme.surfaceContainerLow;
+    final borderColor = selected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.outlineVariant;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: enabled ? onTap : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.6,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18),
+              const SizedBox(height: 8),
+              Text(title, style: theme.textTheme.labelLarge),
+              const SizedBox(height: 2),
+              Text(subtitle, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SimpleWavePreview extends StatelessWidget {
+  final int rows;
+  final int cols;
+
+  const _SimpleWavePreview({required this.rows, required this.cols});
+
+  @override
+  Widget build(BuildContext context) {
+    final previewRows = rows.clamp(1, 5);
+    final previewCols = cols.clamp(1, 8);
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Apercu du format simplifie',
+            style: theme.textTheme.labelMedium,
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(previewRows, (_) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(previewCols, (_) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.water_drop_outlined,
+                      size: 12,
+                      color: theme.colorScheme.outline,
+                    ),
+                  );
+                }),
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 }

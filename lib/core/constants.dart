@@ -8,7 +8,7 @@ class AppConstants {
 
   // Database
   static const String databaseName = 'wine_cellar.db';
-  static const int databaseVersion = 5;
+  static const int databaseVersion = 6;
 
   // AI defaults
   static const String defaultOllamaUrl = 'http://localhost:11434';
@@ -29,12 +29,18 @@ class AppConstants {
   /// Fournisseur dédié à l'analyse d'image (optionnel).
   /// Si absent, le fournisseur principal est utilisé.
   static const String keyVisionProviderOverride = 'vision_provider_override';
+
   /// Modèle dédié à l'analyse d'image (optionnel — remplace le modèle principal)
   static const String keyVisionModel = 'vision_model';
+
   /// Clé API dédiée à l'analyse d'image (optionnel — remplace la clé principale)
   static const String keyVisionApiKeyOverride = 'vision_api_key_override';
+
   /// Si true, utilise l'OCR local (MLKit) au lieu de l'analyse IA multimodale
   static const String keyUseOcrForImages = 'use_ocr_for_images';
+
+  // Expert cellar editor
+  static const String keyExpertCellarDraft = 'expert_cellar_draft';
 
   // Wine defaults
   static const int maxRating = 5;

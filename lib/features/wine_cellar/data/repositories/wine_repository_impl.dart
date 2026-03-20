@@ -34,8 +34,8 @@ class WineRepositoryImpl implements WineRepository {
   @override
   Stream<List<WineEntity>> watchAllWines() {
     return _wineDao.watchAllWines().map(
-          (wines) => wines.map(_mapToEntity).toList(),
-        );
+      (wines) => wines.map(_mapToEntity).toList(),
+    );
   }
 
   @override
@@ -44,33 +44,33 @@ class WineRepositoryImpl implements WineRepository {
 
     // For text search
     if (filter.searchQuery != null && filter.searchQuery!.isNotEmpty) {
-      return _wineDao.searchWines(filter.searchQuery!).map(
-            (wines) => wines.map(_mapToEntity).toList(),
-          );
+      return _wineDao
+          .searchWines(filter.searchQuery!)
+          .map((wines) => wines.map(_mapToEntity).toList());
     }
 
     // For color filter
     if (filter.color != null) {
-      return _wineDao.watchWinesByColor(filter.color!.name).map(
-            (wines) => wines.map(_mapToEntity).toList(),
-          );
+      return _wineDao
+          .watchWinesByColor(filter.color!.name)
+          .map((wines) => wines.map(_mapToEntity).toList());
     }
 
     // For food category filter
     if (filter.foodCategoryId != null) {
-      return _wineDao.watchWinesByFoodCategory(filter.foodCategoryId!).map(
-            (wines) => wines.map(_mapToEntity).toList(),
-          );
+      return _wineDao
+          .watchWinesByFoodCategory(filter.foodCategoryId!)
+          .map((wines) => wines.map(_mapToEntity).toList());
     }
 
     // For maturity filter - we need to filter in-memory
     if (filter.maturity != null) {
       return _wineDao.watchAllWines().map(
-            (wines) => wines
-                .map(_mapToEntity)
-                .where((w) => w.maturity == filter.maturity)
-                .toList(),
-          );
+        (wines) => wines
+            .map(_mapToEntity)
+            .where((w) => w.maturity == filter.maturity)
+            .toList(),
+      );
     }
 
     return watchAllWines();
@@ -81,9 +81,9 @@ class WineRepositoryImpl implements WineRepository {
     final result = await _wineDao.getWineWithPairings(id);
     if (result == null) return null;
 
-    return _mapToEntity(result.wine).copyWith(
-      foodCategoryIds: result.foodPairings.map((p) => p.id).toList(),
-    );
+    return _mapToEntity(
+      result.wine,
+    ).copyWith(foodCategoryIds: result.foodPairings.map((p) => p.id).toList());
   }
 
   @override
@@ -94,7 +94,9 @@ class WineRepositoryImpl implements WineRepository {
 
   @override
   Future<void> updateWine(WineEntity wine) async {
-    if (wine.id == null) throw ArgumentError('Wine ID cannot be null for update');
+    if (wine.id == null) {
+      throw ArgumentError('Wine ID cannot be null for update');
+    }
     final companion = _mapToCompanion(wine).copyWith(id: Value(wine.id!));
     await _wineDao.updateWineWithPairings(companion, wine.foodCategoryIds);
   }
@@ -131,7 +133,9 @@ class WineRepositoryImpl implements WineRepository {
   Future<String> exportToJson() async {
     final wines = await _wineDao.getAllWines();
     final cellars = await _virtualCellarDao.getAll();
-    final placements = await _wineDao.db.select(_wineDao.db.bottlePlacements).get();
+    final placements = await _wineDao.db
+        .select(_wineDao.db.bottlePlacements)
+        .get();
     final entities = wines.map(_mapToEntity).toList();
     final jsonList = entities.map((w) => w.toJson()).toList();
     final cellarList = cellars.map(_mapCellarToJson).toList();
@@ -154,35 +158,52 @@ class WineRepositoryImpl implements WineRepository {
     final rows = <List<dynamic>>[
       // Header
       [
-        'Nom', 'Appellation', 'Producteur', 'Région', 'Pays', 'Couleur',
-        'Millésime', 'Cépages', 'Quantité', 'Prix achat',
-        'Boire à partir de', 'Boire jusqu\'à', 'Notes', 'Note (/5)',
-        'Localisation', 'Position cave X', 'Position cave Y',
-        'IA: accords mets-vins', 'IA: boire dès', 'IA: boire jusqu\'à',
+        'Nom',
+        'Appellation',
+        'Producteur',
+        'Région',
+        'Pays',
+        'Couleur',
+        'Millésime',
+        'Cépages',
+        'Quantité',
+        'Prix achat',
+        'Boire à partir de',
+        'Boire jusqu\'à',
+        'Notes',
+        'Note (/5)',
+        'Localisation',
+        'Position cave X',
+        'Position cave Y',
+        'IA: accords mets-vins',
+        'IA: boire dès',
+        'IA: boire jusqu\'à',
       ],
       // Data rows
-      ...entities.map((w) => [
-            w.name,
-            w.appellation ?? '',
-            w.producer ?? '',
-            w.region ?? '',
-            w.country,
-            w.color.label,
-            w.vintage?.toString() ?? '',
-            w.grapeVarieties.join(', '),
-            w.quantity,
-            w.purchasePrice?.toStringAsFixed(2) ?? '',
-            w.drinkFromYear?.toString() ?? '',
-            w.drinkUntilYear?.toString() ?? '',
-            w.tastingNotes ?? '',
-            w.rating?.toString() ?? '',
-            w.location ?? '',
-            w.cellarPositionX?.toString() ?? '',
-            w.cellarPositionY?.toString() ?? '',
-            w.aiSuggestedFoodPairings ? 'true' : 'false',
-            w.aiSuggestedDrinkFromYear ? 'true' : 'false',
-            w.aiSuggestedDrinkUntilYear ? 'true' : 'false',
-          ]),
+      ...entities.map(
+        (w) => [
+          w.name,
+          w.appellation ?? '',
+          w.producer ?? '',
+          w.region ?? '',
+          w.country,
+          w.color.label,
+          w.vintage?.toString() ?? '',
+          w.grapeVarieties.join(', '),
+          w.quantity,
+          w.purchasePrice?.toStringAsFixed(2) ?? '',
+          w.drinkFromYear?.toString() ?? '',
+          w.drinkUntilYear?.toString() ?? '',
+          w.tastingNotes ?? '',
+          w.rating?.toString() ?? '',
+          w.location ?? '',
+          w.cellarPositionX?.toString() ?? '',
+          w.cellarPositionY?.toString() ?? '',
+          w.aiSuggestedFoodPairings ? 'true' : 'false',
+          w.aiSuggestedDrinkFromYear ? 'true' : 'false',
+          w.aiSuggestedDrinkUntilYear ? 'true' : 'false',
+        ],
+      ),
     ];
 
     return const ListToCsvConverter().convert(rows);
@@ -209,7 +230,8 @@ class WineRepositoryImpl implements WineRepository {
     final cellarsList = (data['virtualCellars'] as List<dynamic>? ?? const []);
     final placementsList =
         (data['bottlePlacements'] as List<dynamic>? ?? const []);
-    final isFullSnapshot = data['snapshotType'] == 'full_cellar' ||
+    final isFullSnapshot =
+        data['snapshotType'] == 'full_cellar' ||
         data.containsKey('virtualCellars');
 
     if (isFullSnapshot) {
@@ -260,10 +282,10 @@ class WineRepositoryImpl implements WineRepository {
       final grapes = grapeValue == null
           ? const <String>[]
           : grapeValue
-              .split(RegExp(r'[,;/]'))
-              .map((value) => value.trim())
-              .where((value) => value.isNotEmpty)
-              .toList();
+                .split(RegExp(r'[,;/]'))
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toList();
 
       parsedRows.add(
         CsvImportRow(
@@ -277,7 +299,9 @@ class WineRepositoryImpl implements WineRepository {
           region: _readCsvValue(row, mapping.region),
           country: _readCsvValue(row, mapping.country),
           grapeVarieties: grapes,
-          purchasePrice: _parseDouble(_readCsvValue(row, mapping.purchasePrice)),
+          purchasePrice: _parseDouble(
+            _readCsvValue(row, mapping.purchasePrice),
+          ),
           location: _readCsvValue(row, mapping.location),
           notes: _readCsvValue(row, mapping.notes),
         ),
@@ -293,11 +317,7 @@ class WineRepositoryImpl implements WineRepository {
     CsvColumnMapping mapping, {
     bool hasHeader = true,
   }) async {
-    final rows = await parseCsvRows(
-      csvString,
-      mapping,
-      hasHeader: hasHeader,
-    );
+    final rows = await parseCsvRows(csvString, mapping, hasHeader: hasHeader);
 
     var importedCount = 0;
     for (final row in rows) {
@@ -355,6 +375,7 @@ class WineRepositoryImpl implements WineRepository {
             name: cellar.name,
             rows: Value(cellar.rows),
             columns: Value(cellar.columns),
+            emptyCells: Value(cellar.emptyCellsStorage),
             createdAt: Value(cellar.createdAt ?? DateTime.now()),
             updatedAt: Value(cellar.updatedAt ?? DateTime.now()),
           ),
@@ -456,6 +477,7 @@ class WineRepositoryImpl implements WineRepository {
       'name': row.name,
       'rows': row.rows,
       'columns': row.columns,
+      'emptyCells': row.emptyCells,
       'createdAt': row.createdAt.toIso8601String(),
       'updatedAt': row.updatedAt.toIso8601String(),
     };
@@ -479,7 +501,10 @@ class WineRepositoryImpl implements WineRepository {
     final cellarId = _asInt(rawJson['cellarId']);
     final positionX = _asInt(rawJson['positionX']);
     final positionY = _asInt(rawJson['positionY']);
-    if (wineId == null || cellarId == null || positionX == null || positionY == null) {
+    if (wineId == null ||
+        cellarId == null ||
+        positionX == null ||
+        positionY == null) {
       return null;
     }
 
@@ -496,15 +521,17 @@ class WineRepositoryImpl implements WineRepository {
   VirtualCellarEntity? _mapCellarFromJsonCompat(dynamic rawJson) {
     if (rawJson is! Map<String, dynamic>) return null;
 
-    final name = _asString(rawJson['name']) ??
-        _asString(rawJson['nom']) ??
-        'Cellier';
+    final name =
+        _asString(rawJson['name']) ?? _asString(rawJson['nom']) ?? 'Cellier';
 
     return VirtualCellarEntity(
       id: _asInt(rawJson['id']),
       name: name,
       rows: _asInt(rawJson['rows']) ?? 5,
       columns: _asInt(rawJson['columns']) ?? 5,
+      emptyCells: VirtualCellarEntity.parseEmptyCells(
+        _asString(rawJson['emptyCells']),
+      ),
       createdAt: _asDateTime(rawJson['createdAt']),
       updatedAt: _asDateTime(rawJson['updatedAt']),
     );
@@ -522,28 +549,40 @@ class WineRepositoryImpl implements WineRepository {
       id: _asInt(rawJson['id']),
       name: name,
       appellation: _asString(rawJson['appellation']),
-      producer: _asString(rawJson['producer']) ?? _asString(rawJson['producteur']),
+      producer:
+          _asString(rawJson['producer']) ?? _asString(rawJson['producteur']),
       region: _asString(rawJson['region']),
-      country: _asString(rawJson['country']) ?? _asString(rawJson['pays']) ?? 'France',
-      color: _parseColor(_asString(rawJson['color']) ?? _asString(rawJson['couleur'])),
+      country:
+          _asString(rawJson['country']) ??
+          _asString(rawJson['pays']) ??
+          'France',
+      color: _parseColor(
+        _asString(rawJson['color']) ?? _asString(rawJson['couleur']),
+      ),
       vintage: _asInt(rawJson['vintage']) ?? _asInt(rawJson['millesime']),
-      grapeVarieties: _asStringList(rawJson['grapeVarieties'])
-          .isNotEmpty
+      grapeVarieties: _asStringList(rawJson['grapeVarieties']).isNotEmpty
           ? _asStringList(rawJson['grapeVarieties'])
           : _asStringList(rawJson['cepages']),
       quantity: quantity <= 0 ? 1 : quantity,
-      purchasePrice: _asDouble(rawJson['purchasePrice']) ?? _asDouble(rawJson['prixAchat']),
+      purchasePrice:
+          _asDouble(rawJson['purchasePrice']) ??
+          _asDouble(rawJson['prixAchat']),
       purchaseDate: _asDateTime(rawJson['purchaseDate']),
-      drinkFromYear: _asInt(rawJson['drinkFromYear']) ?? _asInt(rawJson['boireAPartirDe']),
+      drinkFromYear:
+          _asInt(rawJson['drinkFromYear']) ?? _asInt(rawJson['boireAPartirDe']),
       aiSuggestedDrinkFromYear: _asBool(rawJson['aiSuggestedDrinkFromYear']),
-      drinkUntilYear: _asInt(rawJson['drinkUntilYear']) ?? _asInt(rawJson['boireJusqua']),
+      drinkUntilYear:
+          _asInt(rawJson['drinkUntilYear']) ?? _asInt(rawJson['boireJusqua']),
       aiSuggestedDrinkUntilYear: _asBool(rawJson['aiSuggestedDrinkUntilYear']),
-      tastingNotes: _asString(rawJson['tastingNotes']) ?? _asString(rawJson['notesDegustation']),
+      tastingNotes:
+          _asString(rawJson['tastingNotes']) ??
+          _asString(rawJson['notesDegustation']),
       rating: _asInt(rawJson['rating']),
       photoPath: _asString(rawJson['photoPath']),
       aiDescription: _asString(rawJson['aiDescription']),
       aiSuggestedFoodPairings: _asBool(rawJson['aiSuggestedFoodPairings']),
-      location: _asString(rawJson['location']) ?? _asString(rawJson['localisation']),
+      location:
+          _asString(rawJson['location']) ?? _asString(rawJson['localisation']),
       cellarId: _asInt(rawJson['cellarId']),
       cellarPositionX: _asDouble(rawJson['cellarPositionX']),
       cellarPositionY: _asDouble(rawJson['cellarPositionY']),
@@ -609,10 +648,7 @@ class WineRepositoryImpl implements WineRepository {
   List<String> _asStringList(dynamic value) {
     if (value == null) return const [];
     if (value is List) {
-      return value
-          .map((e) => _asString(e))
-          .whereType<String>()
-          .toList();
+      return value.map((e) => _asString(e)).whereType<String>().toList();
     }
     if (value is String) {
       return value
@@ -729,7 +765,9 @@ class WineRepositoryImpl implements WineRepository {
 
   double? _parseDouble(String? value) {
     if (value == null) return null;
-    final normalized = value.replaceAll(',', '.').replaceAll(RegExp(r'[^0-9.-]'), '');
+    final normalized = value
+        .replaceAll(',', '.')
+        .replaceAll(RegExp(r'[^0-9.-]'), '');
     return double.tryParse(normalized);
   }
 
@@ -749,7 +787,9 @@ class WineRepositoryImpl implements WineRepository {
         value.contains('sparkling')) {
       return WineColor.sparkling;
     }
-    if (value.contains('moelleux') || value.contains('doux') || value == 'sweet') {
+    if (value.contains('moelleux') ||
+        value.contains('doux') ||
+        value == 'sweet') {
       return WineColor.sweet;
     }
     return WineColor.red;

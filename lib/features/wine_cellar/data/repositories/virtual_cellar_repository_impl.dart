@@ -22,9 +22,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
 
   @override
   Stream<List<VirtualCellarEntity>> watchAll() {
-    return _dao.watchAll().map(
-      (list) => list.map(_toEntity).toList(),
-    );
+    return _dao.watchAll().map((list) => list.map(_toEntity).toList());
   }
 
   @override
@@ -33,7 +31,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       final list = await _dao.getAll();
       return Right(list.map(_toEntity).toList());
     } catch (e) {
-      return Left(CacheFailure('Impossible de charger les celliers.', cause: e));
+      return Left(
+        CacheFailure('Impossible de charger les celliers.', cause: e),
+      );
     }
   }
 
@@ -57,6 +57,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
           name: cellar.name,
           rows: Value(cellar.rows),
           columns: Value(cellar.columns),
+          emptyCells: Value(cellar.emptyCellsStorage),
         ),
       );
       return Right(id);
@@ -68,7 +69,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
   @override
   Future<Either<Failure, Unit>> update(VirtualCellarEntity cellar) async {
     if (cellar.id == null) {
-      return Left(const CacheFailure('ID du cellier manquant pour la mise à jour.'));
+      return Left(
+        const CacheFailure('ID du cellier manquant pour la mise à jour.'),
+      );
     }
     try {
       await _dao.updateCellar(
@@ -77,11 +80,14 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
           name: Value(cellar.name),
           rows: Value(cellar.rows),
           columns: Value(cellar.columns),
+          emptyCells: Value(cellar.emptyCellsStorage),
         ),
       );
       return const Right(unit);
     } catch (e) {
-      return Left(CacheFailure('Impossible de mettre à jour le cellier.', cause: e));
+      return Left(
+        CacheFailure('Impossible de mettre à jour le cellier.', cause: e),
+      );
     }
   }
 
@@ -92,7 +98,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       await _dao.deleteCellar(id);
       return const Right(unit);
     } catch (e) {
-      return Left(CacheFailure('Impossible de supprimer le cellier.', cause: e));
+      return Left(
+        CacheFailure('Impossible de supprimer le cellier.', cause: e),
+      );
     }
   }
 
@@ -100,7 +108,8 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
 
   @override
   Future<Either<Failure, List<WineEntity>>> getWinesByCellarId(
-      int cellarId) async {
+    int cellarId,
+  ) async {
     try {
       final placements = await _placementDao
           .watchPlacementsByCellarId(cellarId)
@@ -111,7 +120,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       }
       return Right(byWine.values.toList());
     } catch (e) {
-      return Left(CacheFailure('Impossible de charger les vins du cellier.', cause: e));
+      return Left(
+        CacheFailure('Impossible de charger les vins du cellier.', cause: e),
+      );
     }
   }
 
@@ -141,7 +152,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       final rows = await _placementDao.getPlacementsByWineId(wineId);
       return Right(rows.map(_placementToEntity).toList());
     } catch (e) {
-      return Left(CacheFailure('Impossible de charger les placements.', cause: e));
+      return Left(
+        CacheFailure('Impossible de charger les placements.', cause: e),
+      );
     }
   }
 
@@ -151,7 +164,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       final count = await _placementDao.getPlacedBottleCountForWine(wineId);
       return Right(count);
     } catch (e) {
-      return Left(CacheFailure('Impossible de compter les placements.', cause: e));
+      return Left(
+        CacheFailure('Impossible de compter les placements.', cause: e),
+      );
     }
   }
 
@@ -181,7 +196,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       await _placementDao.removePlacement(placementId);
       return const Right(unit);
     } catch (e) {
-      return Left(CacheFailure('Impossible de retirer la bouteille.', cause: e));
+      return Left(
+        CacheFailure('Impossible de retirer la bouteille.', cause: e),
+      );
     }
   }
 
@@ -197,7 +214,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       );
       return const Right(unit);
     } catch (e) {
-      return Left(CacheFailure('Impossible d\'ajuster les placements.', cause: e));
+      return Left(
+        CacheFailure('Impossible d\'ajuster les placements.', cause: e),
+      );
     }
   }
 
@@ -215,7 +234,9 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       );
       return const Right(unit);
     } catch (e) {
-      return Left(CacheFailure('Impossible de déplacer la bouteille.', cause: e));
+      return Left(
+        CacheFailure('Impossible de déplacer la bouteille.', cause: e),
+      );
     }
   }
 
@@ -227,6 +248,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       name: row.name,
       rows: row.rows,
       columns: row.columns,
+      emptyCells: VirtualCellarEntity.parseEmptyCells(row.emptyCells),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );

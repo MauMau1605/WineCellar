@@ -34,8 +34,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Future<void> _loadWine() async {
-    final result =
-        await ref.read(getWineByIdUseCaseProvider).call(widget.wineId);
+    final result = await ref
+        .read(getWineByIdUseCaseProvider)
+        .call(widget.wineId);
     if (mounted) {
       result.fold(
         (failure) => setState(() {
@@ -59,8 +60,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Future<void> _loadWineWithPairings(WineEntity wine) async {
-    final categories =
-        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    final categories = await ref
+        .read(foodCategoryRepositoryProvider)
+        .getAllCategories();
 
     final explicitPairings = categories
         .where((category) => wine.foodCategoryIds.contains(category.id))
@@ -81,7 +83,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     final placementsResult = await ref
         .read(getWinePlacementsUseCaseProvider)
         .call(wineId);
-    final cellarsResult = await ref.read(virtualCellarRepositoryProvider).getAll();
+    final cellarsResult = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
 
     if (!mounted) return;
 
@@ -103,9 +107,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     final theme = Theme.of(context);
 
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final wine = _wine;
@@ -146,135 +148,122 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             const SizedBox(height: 24),
 
             // Wine details sections
-            _buildSection(
-              context,
-              'Informations',
-              [
-                _buildInfoRow('Appellation', _displayValue(wine.appellation)),
-                _buildInfoRow('Producteur', _displayValue(wine.producer)),
-                _buildInfoRow('Région', _displayValue(wine.region)),
-                _buildInfoRow('Pays', wine.country),
-                _buildInfoRow(
-                    'Couleur', '${wine.color.emoji} ${wine.color.label}'),
-                _buildInfoRow('Millésime', _displayInt(wine.vintage)),
-                _buildInfoRow('Cépages',
-                    wine.grapeVarieties.isEmpty ? '' : wine.grapeVarieties.join(', ')),
-              ],
-            ),
+            _buildSection(context, 'Informations', [
+              _buildInfoRow('Appellation', _displayValue(wine.appellation)),
+              _buildInfoRow('Producteur', _displayValue(wine.producer)),
+              _buildInfoRow('Région', _displayValue(wine.region)),
+              _buildInfoRow('Pays', wine.country),
+              _buildInfoRow(
+                'Couleur',
+                '${wine.color.emoji} ${wine.color.label}',
+              ),
+              _buildInfoRow('Millésime', _displayInt(wine.vintage)),
+              _buildInfoRow(
+                'Cépages',
+                wine.grapeVarieties.isEmpty
+                    ? ''
+                    : wine.grapeVarieties.join(', '),
+              ),
+            ]),
 
-            _buildSection(
-              context,
-              'Garde',
-              [
-                _buildInfoRow(
-                  'À boire à partir de',
-                  _displayInt(wine.drinkFromYear),
-                  aiSuggested:
-                      _isAiSuggestedGuardValue(wine, wine.drinkFromYear),
+            _buildSection(context, 'Garde', [
+              _buildInfoRow(
+                'À boire à partir de',
+                _displayInt(wine.drinkFromYear),
+                aiSuggested: _isAiSuggestedGuardValue(wine, wine.drinkFromYear),
+              ),
+              _buildInfoRow(
+                'À boire jusqu\'à',
+                _displayInt(wine.drinkUntilYear),
+                aiSuggested: _isAiSuggestedGuardValue(
+                  wine,
+                  wine.drinkUntilYear,
                 ),
-                _buildInfoRow(
-                  'À boire jusqu\'à',
-                  _displayInt(wine.drinkUntilYear),
-                  aiSuggested:
-                      _isAiSuggestedGuardValue(wine, wine.drinkUntilYear),
-                ),
-                _buildInfoRow(
-                  'Statut',
-                  '${wine.maturity.emoji} ${wine.maturity.label}',
-                ),
-                if (_isAiGuardInfoPresent(wine))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '🤖 = information proposée par l\'IA',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-
-            _buildCellarSection(context, wine),
-            _buildSection(
-              context,
-              'Accords mets-vins',
-              [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _editFoodPairings(wine),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Modifier les accords'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_pairings.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4),
-                    child: Text('Aucune proposition disponible.'),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _pairings
-                          .map(
-                            (pairing) => Chip(
-                              label: Text(
-                                '${pairing.icon ?? '🍽️'} ${pairing.name}${wine.aiSuggestedFoodPairings ? ' 🤖' : ''}',
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                if (wine.aiSuggestedFoodPairings && _pairings.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '🤖 = accord proposé par l\'IA',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-
-            _buildSection(
-              context,
-              'Notes de dégustation',
-              [
+              ),
+              _buildInfoRow(
+                'Statut',
+                '${wine.maturity.emoji} ${wine.maturity.label}',
+              ),
+              if (_isAiGuardInfoPresent(wine))
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    _displayValue(wine.tastingNotes),
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-
-            _buildSection(
-              context,
-              'Description IA',
-              [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    _displayValue(wine.aiDescription),
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    '🤖 = information proposée par l\'IA',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
                 ),
-              ],
-            ),
+            ]),
+
+            _buildCellarSection(context, wine),
+            _buildSection(context, 'Accords mets-vins', [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => _editFoodPairings(wine),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Modifier les accords'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_pairings.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Text('Aucune proposition disponible.'),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _pairings
+                        .map(
+                          (pairing) => Chip(
+                            label: Text(
+                              '${pairing.icon ?? '🍽️'} ${pairing.name}${wine.aiSuggestedFoodPairings ? ' 🤖' : ''}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              if (wine.aiSuggestedFoodPairings && _pairings.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '🤖 = accord proposé par l\'IA',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+            ]),
+
+            _buildSection(context, 'Notes de dégustation', [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  _displayValue(wine.tastingNotes),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ]),
+
+            _buildSection(context, 'Description IA', [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  _displayValue(wine.aiDescription),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ]),
           ],
         ),
       ),
@@ -320,8 +309,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: AppTheme.colorForWine(wine.color.name)
-                    .withValues(alpha: 0.2),
+                color: AppTheme.colorForWine(
+                  wine.color.name,
+                ).withValues(alpha: 0.2),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: AppTheme.colorForWine(wine.color.name),
@@ -350,8 +340,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                     Text(
                       'Millésime ${wine.vintage}',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                 ],
@@ -364,7 +355,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Widget _buildSection(
-      BuildContext context, String title, List<Widget> children) {
+    BuildContext context,
+    String title,
+    List<Widget> children,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -373,9 +367,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const Divider(),
           ...children,
@@ -384,11 +378,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(
-    String label,
-    String value, {
-    bool aiSuggested = false,
-  }) {
+  Widget _buildInfoRow(String label, String value, {bool aiSuggested = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -440,8 +430,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             ),
           ),
           const Divider(),
-          _buildInfoRow('Quantité',
-              '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}'),
+          _buildInfoRow(
+            'Quantité',
+            '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}',
+          ),
           _buildInfoRow(
             'Prix d\'achat',
             wine.purchasePrice != null
@@ -469,8 +461,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                       : 'Afficher les emplacements en cave',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
-                    fontStyle:
-                        placedCount == 0 ? FontStyle.italic : FontStyle.normal,
+                    fontStyle: placedCount == 0
+                        ? FontStyle.italic
+                        : FontStyle.normal,
                   ),
                 ),
               ),
@@ -487,7 +480,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _showPlaceInCellarFlow(context, wine),
+                onPressed: () => _showPlaceInCellarFlow(wine),
                 icon: const Icon(Icons.grid_view_outlined),
                 label: Text(
                   unplacedCount == wine.quantity
@@ -502,11 +495,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
   }
 
-  Future<void> _showPlaceInCellarFlow(
-    BuildContext context,
-    WineEntity wine,
-  ) async {
-    final cellarsResult = await ref.read(virtualCellarRepositoryProvider).getAll();
+  Future<void> _showPlaceInCellarFlow(WineEntity wine) async {
+    final cellarsResult = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
     if (!mounted) return;
 
     final cellars = cellarsResult.getOrElse((_) => const []);
@@ -530,7 +522,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       return;
     }
 
-    if (!context.mounted) return;
+    if (!mounted) return;
     final selectedCellar = await showDialog<VirtualCellarEntity>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -562,7 +554,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       ),
     );
 
-    if (selectedCellar == null || selectedCellar.id == null || !context.mounted) {
+    if (!mounted || selectedCellar == null || selectedCellar.id == null) {
       return;
     }
 
@@ -577,7 +569,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
 
     final placementsByCellar = <int, List<BottlePlacementEntity>>{};
     for (final placement in _placements) {
-      placementsByCellar.putIfAbsent(placement.cellarId, () => []).add(placement);
+      placementsByCellar
+          .putIfAbsent(placement.cellarId, () => [])
+          .add(placement);
     }
 
     await showDialog<void>(
@@ -609,7 +603,8 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () => context.push('/cellars/${cellar.id}'),
+                            onPressed: () =>
+                                context.push('/cellars/${cellar.id}'),
                             child: const Text('Ouvrir le cellier'),
                           ),
                         ],
@@ -671,10 +666,8 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 decoration: BoxDecoration(
                   color: occupied
                       ? wineColor.withValues(alpha: 0.25)
-                      : Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.35),
+                      : Theme.of(context).colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.35),
                   border: Border.all(
                     color: occupied
                         ? wineColor
@@ -689,6 +682,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       ),
     );
   }
+
   bool _isAiSuggestedGuardValue(WineEntity wine, int? value) {
     if (value == null) return false;
     return (value == wine.drinkFromYear && wine.aiSuggestedDrinkFromYear) ||
@@ -701,17 +695,16 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Future<void> _navigateToEdit(WineEntity wine) async {
-    final updated = await context.push<bool>(
-      '/cellar/wine/${wine.id}/edit',
-    );
+    final updated = await context.push<bool>('/cellar/wine/${wine.id}/edit');
     if (updated == true) {
       await _loadWine();
     }
   }
 
   Future<void> _editFoodPairings(WineEntity wine) async {
-    final categories =
-        await ref.read(foodCategoryRepositoryProvider).getAllCategories();
+    final categories = await ref
+        .read(foodCategoryRepositoryProvider)
+        .getAllCategories();
     if (!mounted) return;
 
     final selected = wine.foodCategoryIds.toSet();
@@ -734,7 +727,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                         value: selected.contains(category.id),
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        title: Text('${category.icon ?? '🍽️'} ${category.name}'),
+                        title: Text(
+                          '${category.icon ?? '🍽️'} ${category.name}',
+                        ),
                         onChanged: (checked) {
                           setDialogState(() {
                             if (checked == true) {
@@ -795,9 +790,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (_) async {
         await _loadWine();
@@ -866,16 +861,16 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       result.fold(
         (failure) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(failure.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
           }
         },
         (_) {
           if (mounted && action == 'delete') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Vin supprimé')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Vin supprimé')));
             context.go('/cellar');
             return;
           }
@@ -909,7 +904,8 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             itemBuilder: (context, index) {
               final placement = _placements[index];
               final cellarName =
-                  _cellarsById[placement.cellarId]?.name ?? 'Cellier ${placement.cellarId}';
+                  _cellarsById[placement.cellarId]?.name ??
+                  'Cellier ${placement.cellarId}';
               return ListTile(
                 leading: const Icon(Icons.place_outlined),
                 title: Text(cellarName),
@@ -936,8 +932,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Supprimer ce vin ?'),
-        content:
-            Text('Voulez-vous vraiment supprimer "${wine.displayName}" ?'),
+        content: Text('Voulez-vous vraiment supprimer "${wine.displayName}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -957,16 +952,16 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       result.fold(
         (failure) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(failure.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(failure.message)));
           }
         },
         (_) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Vin supprimé')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Vin supprimé')));
             context.go('/cellar');
           }
         },

@@ -7,8 +7,7 @@ class VirtualCellars extends Table {
   TextColumn get name => text().withLength(min: 1, max: 100)();
   IntColumn get rows => integer().withDefault(const Constant(5))();
   IntColumn get columns => integer().withDefault(const Constant(5))();
-  DateTimeColumn get createdAt =>
-      dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get updatedAt =>
-      dateTime().withDefault(currentDateAndTime)();
+  TextColumn get emptyCells => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

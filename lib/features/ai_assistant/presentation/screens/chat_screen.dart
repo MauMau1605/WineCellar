@@ -154,9 +154,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                         const SizedBox(width: 12),
-                        Text(_searchMode
-                            ? 'L\'IA cherche dans votre cave...'
-                            : 'L\'IA analyse votre vin...'),
+                        Text(
+                          _searchMode
+                              ? 'L\'IA cherche dans votre cave...'
+                              : 'L\'IA analyse votre vin...',
+                        ),
                       ],
                     ),
                   );
@@ -231,8 +233,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   // Send button
                   IconButton.filled(
                     icon: const Icon(Icons.send),
-                    onPressed:
-                        isConfigured && !_isLoading ? _sendMessage : null,
+                    onPressed: isConfigured && !_isLoading
+                        ? _sendMessage
+                        : null,
                   ),
                 ],
               ),
@@ -261,7 +264,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Configurez votre clé API avant d\'utiliser la caméra.'),
+              'Configurez votre clé API avant d\'utiliser la caméra.',
+            ),
           ),
         );
         return;
@@ -306,16 +310,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _analyzeWithOcr(String imagePath) async {
     final extractUseCase = ref.read(extractTextFromWineImageUseCaseProvider);
     final either = await extractUseCase(
-        ExtractTextFromWineImageParams(imagePath: imagePath));
+      ExtractTextFromWineImageParams(imagePath: imagePath),
+    );
 
     if (!mounted) return;
 
     either.fold(
       (failure) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (extractedText) async {
         setState(() => _isLoading = false);
@@ -344,10 +349,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final mimeType = _guessMimeTypeFromPath(imagePath);
     final history = _messages
         .where((m) => m.role != ChatRole.system)
-        .map((m) => {
-              'role': m.role == ChatRole.user ? 'user' : 'assistant',
-              'content': m.content,
-            })
+        .map(
+          (m) => {
+            'role': m.role == ChatRole.user ? 'user' : 'assistant',
+            'content': m.content,
+          },
+        )
         .toList();
 
     final either = await analyzeImageUseCase(
@@ -365,9 +372,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     either.fold(
       (failure) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(failure.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
       },
       (result) {
         _chatLogger.logAiResponse(result.textResponse);
@@ -399,12 +406,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         content: const Text('Sélectionnez la source de l\'image à analyser.'),
         actions: [
           TextButton.icon(
-            onPressed: () => Navigator.of(dialogContext).pop(ImageSource.gallery),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(ImageSource.gallery),
             icon: const Icon(Icons.photo_library_outlined),
             label: const Text('Galerie'),
           ),
           TextButton.icon(
-            onPressed: () => Navigator.of(dialogContext).pop(ImageSource.camera),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(ImageSource.camera),
             icon: const Icon(Icons.photo_camera_outlined),
             label: const Text('Caméra'),
           ),
@@ -433,12 +442,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (analyzeUseCase == null) return;
 
     setState(() {
-      _messages.add(ChatMessage(
-        id: _uuid.v4(),
-        content: trimmed,
-        role: ChatRole.user,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(
+          id: _uuid.v4(),
+          content: trimmed,
+          role: ChatRole.user,
+          timestamp: DateTime.now(),
+        ),
+      );
       _isLoading = true;
     });
     _textController.clear();
@@ -446,10 +457,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final history = _messages
         .where((m) => m.role != ChatRole.system)
-        .map((m) => {
-              'role': m.role == ChatRole.user ? 'user' : 'assistant',
-              'content': m.content,
-            })
+        .map(
+          (m) => {
+            'role': m.role == ChatRole.user ? 'user' : 'assistant',
+            'content': m.content,
+          },
+        )
         .toList();
 
     if (history.isNotEmpty) history.removeLast();
@@ -468,22 +481,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _chatLogger.logUserMessage(trimmed);
 
-    final either = await analyzeUseCase(AnalyzeWineParams(
-      userMessage: messageToSend,
-      conversationHistory: history,
-    ));
+    final either = await analyzeUseCase(
+      AnalyzeWineParams(
+        userMessage: messageToSend,
+        conversationHistory: history,
+      ),
+    );
 
     either.fold(
       (failure) {
         _chatLogger.logError(failure.message);
         setState(() {
           _isLoading = false;
-          _messages.add(ChatMessage(
-            id: _uuid.v4(),
-            content: failure.message,
-            role: ChatRole.assistant,
-            timestamp: DateTime.now(),
-          ));
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: failure.message,
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
         });
       },
       (result) {
@@ -496,12 +513,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             : result.textResponse;
         setState(() {
           _isLoading = false;
-          _messages.add(ChatMessage(
-            id: _uuid.v4(),
-            content: assistantText,
-            role: ChatRole.assistant,
-            timestamp: DateTime.now(),
-          ));
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: assistantText,
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
 
           if (result.wineDataList.isNotEmpty) {
             _currentWineDataList = result.wineDataList;
@@ -541,7 +560,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (wine.id == null) continue;
       final normalizedDisplayName = _normalizeForDuplicate(wine.displayName);
       final normalizedName = _normalizeForDuplicate(wine.name);
-      final isMentioned = normalizedDisplayName.isNotEmpty &&
+      final isMentioned =
+          normalizedDisplayName.isNotEmpty &&
               normalizedResponse.contains(normalizedDisplayName) ||
           (normalizedName.isNotEmpty &&
               normalizedResponse.contains(normalizedName));
@@ -555,9 +575,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final uniqueById = <int, WineEntity>{
       for (final wine in matched) wine.id!: wine,
     };
-    final links = uniqueById.values.take(5).map((wine) {
-      return '- [${wine.displayName}](/cellar/wine/${wine.id})';
-    }).join('\n');
+    final links = uniqueById.values
+        .take(5)
+        .map((wine) {
+          return '- [${wine.displayName}](/cellar/wine/${wine.id})';
+        })
+        .join('\n');
 
     return '$responseText\n\nAcces rapide aux fiches des vins proposes :\n$links';
   }
@@ -597,7 +620,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .where((w) => w.isComplete)
         .toList();
     final allAdded = _addedWineIndices.length >= completeWines.length;
-    if (_currentWineDataList.length > 1 && completeWines.isNotEmpty && !allAdded) {
+    if (_currentWineDataList.length > 1 &&
+        completeWines.isNotEmpty &&
+        !allAdded) {
       cards.add(
         Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -639,7 +664,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     for (var i = 0; i < _currentWineDataList.length; i++) {
-      if (!_addedWineIndices.contains(i) && _currentWineDataList[i].isComplete) {
+      if (!_addedWineIndices.contains(i) &&
+          _currentWineDataList[i].isComplete) {
         await _addWineToCellar(context, i, askManualEditBeforeAdd: false);
       }
     }
@@ -667,7 +693,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Informations incomplètes. Continuez la conversation pour compléter.'),
+            'Informations incomplètes. Continuez la conversation pour compléter.',
+          ),
         ),
       );
       return;
@@ -681,7 +708,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final matchedCategoryIds = <int>[];
     for (final pairingName in data.suggestedFoodPairings) {
       final match = allCategories.where(
-        (c) => c.name.toLowerCase().contains(pairingName.toLowerCase()) ||
+        (c) =>
+            c.name.toLowerCase().contains(pairingName.toLowerCase()) ||
             pairingName.toLowerCase().contains(c.name.toLowerCase()),
       );
       if (match.isNotEmpty) {
@@ -706,8 +734,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       drinkFromYear: data.drinkFromYear,
       aiSuggestedDrinkFromYear: !manuallyEdited && data.drinkFromYear != null,
       drinkUntilYear: data.drinkUntilYear,
-      aiSuggestedDrinkUntilYear:
-          !manuallyEdited && data.drinkUntilYear != null,
+      aiSuggestedDrinkUntilYear: !manuallyEdited && data.drinkUntilYear != null,
       tastingNotes: data.tastingNotes,
       aiDescription: data.description,
       aiSuggestedFoodPairings: !manuallyEdited && matchedCategoryIds.isNotEmpty,
@@ -736,7 +763,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           return;
         }
 
-        final updateResult = await ref.read(updateWineQuantityUseCaseProvider).call(
+        final updateResult = await ref
+            .read(updateWineQuantityUseCaseProvider)
+            .call(
               UpdateQuantityParams(
                 wineId: duplicate.id!,
                 newQuantity: duplicate.quantity + wine.quantity,
@@ -745,15 +774,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         updateResult.fold(
           (failure) {
-            _chatLogger.logError('Erreur mise à jour quantité: ${failure.message}');
+            _chatLogger.logError(
+              'Erreur mise à jour quantité: ${failure.message}',
+            );
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(failure.message)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(failure.message)));
             }
           },
           (_) {
-            _chatLogger.logWineAdded('${wine.displayName} (quantité incrémentée)');
+            _chatLogger.logWineAdded(
+              '${wine.displayName} (quantité incrémentée)',
+            );
             setState(() {
               _addedWineIndices.add(wineIndex);
             });
@@ -783,9 +816,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       (failure) {
         _chatLogger.logError('Erreur ajout vin: ${failure.message}');
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(failure.message)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(failure.message)));
         }
       },
       (newId) {
@@ -794,19 +827,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _addedWineIndices.add(wineIndex);
         });
         _cacheConversationState();
-        if (context.mounted) {
-          _askPlaceInCellar(context, newId, wine.displayName);
+        if (mounted) {
+          _askPlaceInCellar(newId, wine.displayName);
         }
       },
     );
   }
 
-  Future<void> _askPlaceInCellar(
-    BuildContext context,
-    int wineId,
-    String wineName,
-  ) async {
-    if (!context.mounted) return;
+  Future<void> _askPlaceInCellar(int wineId, String wineName) async {
+    if (!mounted) return;
 
     final wantsToPlace = await showDialog<bool>(
       context: context,
@@ -830,8 +859,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (!mounted || wantsToPlace != true) return;
 
-    final cellarsResult =
-        await ref.read(virtualCellarRepositoryProvider).getAll();
+    final cellarsResult = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
     if (!mounted) return;
 
     final cellars = cellarsResult.getOrElse((_) => const []);
@@ -877,7 +907,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
 
-    if (selectedCellar == null || selectedCellar.id == null || !context.mounted) {
+    if (!mounted || selectedCellar == null || selectedCellar.id == null) {
       return;
     }
 
@@ -899,7 +929,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(_PreAddChoice.edit),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_PreAddChoice.edit),
             child: const Text('Modifier manuellement'),
           ),
           FilledButton(
@@ -918,14 +949,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final original = _currentWineDataList[wineIndex];
 
     final nameCtrl = TextEditingController(text: original.name ?? '');
-    final appellationCtrl = TextEditingController(text: original.appellation ?? '');
+    final appellationCtrl = TextEditingController(
+      text: original.appellation ?? '',
+    );
     final producerCtrl = TextEditingController(text: original.producer ?? '');
     final regionCtrl = TextEditingController(text: original.region ?? '');
-    final countryCtrl = TextEditingController(text: original.country ?? 'France');
+    final countryCtrl = TextEditingController(
+      text: original.country ?? 'France',
+    );
     final vintageCtrl = TextEditingController(
       text: original.vintage?.toString() ?? '',
     );
-    final grapesCtrl = TextEditingController(text: original.grapeVarieties.join(', '));
+    final grapesCtrl = TextEditingController(
+      text: original.grapeVarieties.join(', '),
+    );
     final quantityCtrl = TextEditingController(
       text: (original.quantity ?? 1).toString(),
     );
@@ -938,7 +975,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final drinkUntilCtrl = TextEditingController(
       text: original.drinkUntilYear?.toString() ?? '',
     );
-    final tastingCtrl = TextEditingController(text: original.tastingNotes ?? '');
+    final tastingCtrl = TextEditingController(
+      text: original.tastingNotes ?? '',
+    );
 
     var selectedColorName = original.color ?? WineColor.red.name;
 
@@ -962,7 +1001,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         initialValue: selectedColorName,
-                        decoration: const InputDecoration(labelText: 'Couleur *'),
+                        decoration: const InputDecoration(
+                          labelText: 'Couleur *',
+                        ),
                         items: WineColor.values
                             .map(
                               (color) => DropdownMenuItem<String>(
@@ -979,13 +1020,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: appellationCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Appellation'),
+                        decoration: const InputDecoration(
+                          labelText: 'Appellation',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: producerCtrl,
-                        decoration: const InputDecoration(labelText: 'Producteur'),
+                        decoration: const InputDecoration(
+                          labelText: 'Producteur',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1001,7 +1045,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       TextField(
                         controller: vintageCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Millésime'),
+                        decoration: const InputDecoration(
+                          labelText: 'Millésime',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1014,28 +1060,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       TextField(
                         controller: quantityCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Quantité'),
+                        decoration: const InputDecoration(
+                          labelText: 'Quantité',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: priceCtrl,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Prix (€)'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Prix (€)',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: drinkFromCtrl,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(labelText: 'À boire dès'),
+                        decoration: const InputDecoration(
+                          labelText: 'À boire dès',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: drinkUntilCtrl,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(labelText: 'À boire jusqu\'à'),
+                        decoration: const InputDecoration(
+                          labelText: 'À boire jusqu\'à',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1056,9 +1109,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
                 FilledButton(
                   onPressed: () {
-                    final parsedQuantity = int.tryParse(quantityCtrl.text.trim()) ??
+                    final parsedQuantity =
+                        int.tryParse(quantityCtrl.text.trim()) ??
                         (original.quantity ?? 1);
-                    final safeQuantity = parsedQuantity <= 0 ? 1 : parsedQuantity;
+                    final safeQuantity = parsedQuantity <= 0
+                        ? 1
+                        : parsedQuantity;
                     final safeName = nameCtrl.text.trim();
                     if (safeName.isEmpty) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
@@ -1088,7 +1144,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         quantity: safeQuantity,
                         purchasePrice: double.tryParse(priceCtrl.text.trim()),
                         drinkFromYear: int.tryParse(drinkFromCtrl.text.trim()),
-                        drinkUntilYear: int.tryParse(drinkUntilCtrl.text.trim()),
+                        drinkUntilYear: int.tryParse(
+                          drinkUntilCtrl.text.trim(),
+                        ),
                         tastingNotes: _emptyToNull(tastingCtrl.text),
                         suggestedFoodPairings: original.suggestedFoodPairings,
                         description: original.description,
@@ -1127,9 +1185,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _cacheConversationState();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Fiche mise à jour.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Fiche mise à jour.')));
   }
 
   Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {
@@ -1176,15 +1234,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: const Text('Annuler'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                _DuplicateChoice.createNew,
-              ),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(_DuplicateChoice.createNew),
               child: const Text('Créer une nouvelle référence'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(
-                _DuplicateChoice.incrementExisting,
-              ),
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_DuplicateChoice.incrementExisting),
               child: const Text('Incrémenter la quantité'),
             ),
           ],
@@ -1347,23 +1404,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _searchMode = searchMode;
       _currentWineDataList = [];
       _addedWineIndices.clear();
-      _messages.add(ChatMessage(
-        id: _uuid.v4(),
-        content: searchMode
-            ? '🔍 **Mode accord mets-vin activé**\n'
-              'Décrivez votre repas et je chercherai le meilleur vin '
-              'dans votre cave. Les vins à boire prochainement seront '
-              'privilégiés.\n\n'
-              'Exemples :\n'
-              '• "Je prépare un gigot d\'agneau"\n'
-              '• "Plateau de fromages ce soir"\n'
-              '• "Sushi et cuisine japonaise"'
-            : '🍷 **Mode ajout de vin activé**\n'
-              'Décrivez-moi les vins que vous souhaitez ajouter à '
-              'votre cave.',
-        role: ChatRole.assistant,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(
+          id: _uuid.v4(),
+          content: searchMode
+              ? '🔍 **Mode accord mets-vin activé**\n'
+                    'Décrivez votre repas et je chercherai le meilleur vin '
+                    'dans votre cave. Les vins à boire prochainement seront '
+                    'privilégiés.\n\n'
+                    'Exemples :\n'
+                    '• "Je prépare un gigot d\'agneau"\n'
+                    '• "Plateau de fromages ce soir"\n'
+                    '• "Sushi et cuisine japonaise"'
+              : '🍷 **Mode ajout de vin activé**\n'
+                    'Décrivez-moi les vins que vous souhaitez ajouter à '
+                    'votre cave.',
+          role: ChatRole.assistant,
+          timestamp: DateTime.now(),
+        ),
+      );
     });
     _cacheConversationState();
     _scrollToBottom();
@@ -1383,7 +1442,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final currentYear = DateTime.now().year;
     final buffer = StringBuffer();
     buffer.writeln(
-        '${available.length} vin(s) disponible(s) (année actuelle : $currentYear) :');
+      '${available.length} vin(s) disponible(s) (année actuelle : $currentYear) :',
+    );
     buffer.writeln();
 
     for (final w in available) {
@@ -1398,7 +1458,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       buffer.write('  Quantité : ${w.quantity}');
       if (w.drinkFromYear != null || w.drinkUntilYear != null) {
         buffer.write(
-            ' | À boire : ${w.drinkFromYear ?? "?"} → ${w.drinkUntilYear ?? "?"}');
+          ' | À boire : ${w.drinkFromYear ?? "?"} → ${w.drinkUntilYear ?? "?"}',
+        );
       }
       buffer.writeln();
       if (w.tastingNotes != null && w.tastingNotes!.isNotEmpty) {
@@ -1438,16 +1499,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Dossier :',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text('Dossier :', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 4),
               SelectableText(
                 logsPath,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 16),
               Text(
