@@ -6,6 +6,8 @@ import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/usecases/usecase.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
 /// Settings screen for AI provider configuration
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -472,6 +474,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // Section: Visual Theme
+          _VisualThemeSection(),
+
+          const SizedBox(height: 24),
+
           // Save & Test buttons
           Row(
             children: [
@@ -683,6 +690,71 @@ class _VisionModelChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Section letting the user pick a global visual theme for the app.
+class _VisualThemeSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentTheme = ref.watch(appVisualThemeProvider);
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Thème visuel',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Le thème choisi s\'applique à l\'ensemble de l\'interface. '
+          'Les celliers thémés l\'activent automatiquement pendant la consultation.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: RadioGroup<VirtualCellarTheme?>(
+              groupValue: currentTheme,
+              onChanged: (value) {
+                ref.read(appVisualThemeProvider.notifier).setTheme(value);
+              },
+              child: Column(
+                children: [
+                  // Default choice
+                  RadioListTile<VirtualCellarTheme?>(
+                    title: const Text('Classique'),
+                    subtitle:
+                        const Text('Thème clair vin & crème par défaut'),
+                    secondary: const Icon(Icons.wb_sunny_outlined),
+                    value: null,
+                  ),
+                  // Dynamic entries from VirtualCellarTheme where an override exists
+                  ...VirtualCellarTheme.values
+                      .where((t) =>
+                          t != VirtualCellarTheme.classic &&
+                          t != VirtualCellarTheme.wineFridge)
+                      .map((t) => RadioListTile<VirtualCellarTheme?>(
+                            title: Text(t.label),
+                            subtitle: Text(
+                                descriptionForVirtualCellarTheme(t)),
+                            secondary:
+                                Icon(iconForVirtualCellarTheme(t)),
+                            value: t,
+                          )),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

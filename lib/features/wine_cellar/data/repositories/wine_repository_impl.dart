@@ -10,6 +10,7 @@ import 'package:wine_cellar/database/daos/food_category_dao.dart';
 import 'package:wine_cellar/database/daos/virtual_cellar_dao.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_column_mapping.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_import_row.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
@@ -376,6 +377,7 @@ class WineRepositoryImpl implements WineRepository {
             rows: Value(cellar.rows),
             columns: Value(cellar.columns),
             emptyCells: Value(cellar.emptyCellsStorage),
+            theme: Value(cellar.theme.storageValue),
             createdAt: Value(cellar.createdAt ?? DateTime.now()),
             updatedAt: Value(cellar.updatedAt ?? DateTime.now()),
           ),
@@ -478,6 +480,7 @@ class WineRepositoryImpl implements WineRepository {
       'rows': row.rows,
       'columns': row.columns,
       'emptyCells': row.emptyCells,
+      'theme': row.theme,
       'createdAt': row.createdAt.toIso8601String(),
       'updatedAt': row.updatedAt.toIso8601String(),
     };
@@ -532,6 +535,7 @@ class WineRepositoryImpl implements WineRepository {
       emptyCells: VirtualCellarEntity.parseEmptyCells(
         _asString(rawJson['emptyCells']),
       ),
+      theme: VirtualCellarTheme.fromStorage(_asString(rawJson['theme'])),
       createdAt: _asDateTime(rawJson['createdAt']),
       updatedAt: _asDateTime(rawJson['updatedAt']),
     );

@@ -8,6 +8,8 @@ import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/cellar_cell_position.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
 enum _SelectionType { none, cells, row, column }
 
@@ -15,6 +17,7 @@ class ExpertCellarEditorScreen extends ConsumerStatefulWidget {
   final String initialName;
   final int initialRows;
   final int initialColumns;
+  final VirtualCellarTheme initialTheme;
   final VirtualCellarEntity? sourceCellar;
 
   const ExpertCellarEditorScreen({
@@ -22,6 +25,7 @@ class ExpertCellarEditorScreen extends ConsumerStatefulWidget {
     required this.initialName,
     required this.initialRows,
     required this.initialColumns,
+    required this.initialTheme,
     this.sourceCellar,
   });
 
@@ -38,6 +42,8 @@ class _ExpertCellarEditorScreenState
   late final TextEditingController _nameCtrl;
   late final TextEditingController _rowsCtrl;
   late final TextEditingController _colsCtrl;
+  final ScrollController _toolbarScrollController = ScrollController();
+  late VirtualCellarTheme _theme;
 
   List<List<bool>> _grid = <List<bool>>[];
   _SelectionType _selectionType = _SelectionType.none;
@@ -62,6 +68,7 @@ class _ExpertCellarEditorScreenState
     _nameCtrl = TextEditingController(text: widget.initialName);
     _rowsCtrl = TextEditingController(text: widget.initialRows.toString());
     _colsCtrl = TextEditingController(text: widget.initialColumns.toString());
+    _theme = widget.sourceCellar?.theme ?? widget.initialTheme;
     _grid = _buildInitialGrid();
     _loadDraftIfAny();
     _periodicSave = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -81,6 +88,7 @@ class _ExpertCellarEditorScreenState
     _nameCtrl.dispose();
     _rowsCtrl.dispose();
     _colsCtrl.dispose();
+    _toolbarScrollController.dispose();
     super.dispose();
   }
 
@@ -426,6 +434,7 @@ class _ExpertCellarEditorScreenState
       rows: rows,
       columns: cols,
       emptyCells: emptyCells,
+      theme: _theme,
       createdAt: base?.createdAt,
       updatedAt: DateTime.now(),
     );
@@ -512,53 +521,76 @@ class _ExpertCellarEditorScreenState
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nom',
-                      isDense: true,
+            child: Scrollbar(
+              controller: _toolbarScrollController,
+              thumbVisibility: true,
+              scrollbarOrientation: ScrollbarOrientation.bottom,
+              child: SingleChildScrollView(
+                controller: _toolbarScrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 280,
+                      child: TextField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nom',
+                          isDense: true,
+                        ),
+                        onChanged: (_) => _scheduleDraftSave(),
+                      ),
                     ),
-                    onChanged: (_) => _scheduleDraftSave(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 76,
-                  child: TextField(
-                    controller: _rowsCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Lignes',
-                      isDense: true,
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 320,
+                      child: VirtualCellarThemeSelector(
+                        selectedTheme: _theme,
+                        onChanged: (theme) {
+                          setState(() {
+                            _theme = theme;
+                          });
+                        },
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 90,
-                  child: TextField(
-                    controller: _colsCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Colonnes',
-                      isDense: true,
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 76,
+                      child: TextField(
+                        controller: _rowsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Lignes',
+                          isDense: true,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 90,
+                      child: TextField(
+                        controller: _colsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Colonnes',
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: _applyDimensionsReset,
+                      child: const Text('Remise a zero grille'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _validateAndSave,
+                      child: const Text('Valider'),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _applyDimensionsReset,
-                  child: const Text('Remise a zero grille'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _validateAndSave,
-                  child: const Text('Valider'),
-                ),
-              ],
+              ),
             ),
           ),
           Padding(

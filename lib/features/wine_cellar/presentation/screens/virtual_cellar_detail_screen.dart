@@ -5,14 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:wine_cellar/core/cellar_theme_data.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placement_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_move_state_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_cellar.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/bottle_move_state_provider.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_screen_background.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_wrapper.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
 class VirtualCellarDetailScreen extends ConsumerStatefulWidget {
   final int cellarId;
@@ -44,6 +50,15 @@ class _VirtualCellarDetailScreenState
     _loadCellar();
   }
 
+  @override
+  void dispose() {
+    // Clear immersive theme when leaving this screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(immersiveCellarThemeProvider.notifier).state = null;
+    });
+    super.dispose();
+  }
+
   Future<void> _loadCellar() async {
     final result = await ref
         .read(virtualCellarRepositoryProvider)
@@ -53,12 +68,23 @@ class _VirtualCellarDetailScreenState
         _cellar = cellar;
         _loading = false;
       });
+      if (cellar != null) {
+        _applyImmersiveTheme(cellar.theme);
+      }
       if (widget.preSelectedWineId != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _startPreSelectedPlacement(widget.preSelectedWineId!);
         });
       }
     });
+  }
+
+  void _applyImmersiveTheme(VirtualCellarTheme theme) {
+    if (CellarThemeData.overridesAppTheme(theme)) {
+      ref.read(immersiveCellarThemeProvider.notifier).state = theme;
+    } else {
+      ref.read(immersiveCellarThemeProvider.notifier).state = null;
+    }
   }
 
   Future<void> _startPreSelectedPlacement(int wineId) async {
@@ -276,6 +302,35 @@ class _VirtualCellarDetailScreenState
     }
   }
 
+  Future<void> _updateCellarTheme(VirtualCellarTheme theme) async {
+    final cellar = _cellar;
+    if (cellar == null || cellar.theme == theme) {
+      return;
+    }
+
+    final updated = cellar.copyWith(theme: theme);
+    final result = await ref
+        .read(updateVirtualCellarUseCaseProvider)
+        .call(updated);
+    if (!mounted) {
+      return;
+    }
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+      (_) {
+        setState(() {
+          _cellar = updated;
+        });
+        _applyImmersiveTheme(theme);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -293,6 +348,33 @@ class _VirtualCellarDetailScreenState
       appBar: AppBar(
         title: Text(cellar.name),
         actions: [
+          PopupMenuButton<VirtualCellarTheme>(
+            tooltip: 'Changer la representation',
+            icon: Icon(iconForVirtualCellarTheme(cellar.theme)),
+            onSelected: _updateCellarTheme,
+            itemBuilder: (context) {
+              return VirtualCellarTheme.values
+                  .map((theme) {
+                    return PopupMenuItem<VirtualCellarTheme>(
+                      value: theme,
+                      child: Row(
+                        children: [
+                          Icon(iconForVirtualCellarTheme(theme), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(theme.label)),
+                          if (theme == cellar.theme)
+                            Icon(
+                              Icons.check,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                        ],
+                      ),
+                    );
+                  })
+                  .toList(growable: false);
+            },
+          ),
           Consumer(
             builder: (context, ref, child) {
               final moveState = ref.watch(
@@ -346,7 +428,11 @@ class _VirtualCellarDetailScreenState
           ),
         ],
       ),
-      body: StreamBuilder<List<BottlePlacementEntity>>(
+      body: Stack(
+        children: [
+          if (cellar.theme == VirtualCellarTheme.premiumCave)
+            const PremiumCaveScreenBackground(),
+          StreamBuilder<List<BottlePlacementEntity>>(
         stream: ref
             .watch(virtualCellarRepositoryProvider)
             .watchPlacementsByCellarId(widget.cellarId),
@@ -391,6 +477,8 @@ class _VirtualCellarDetailScreenState
             ],
           );
         },
+      ),
+        ],
       ),
     );
   }
@@ -884,6 +972,7 @@ class _VirtualCellarDetailScreenState
     final nameCtrl = TextEditingController(text: cellar.name);
     var rows = cellar.rows;
     var cols = cellar.columns;
+    var theme = cellar.theme;
 
     await showDialog<void>(
       context: context,
@@ -897,6 +986,13 @@ class _VirtualCellarDetailScreenState
                 TextField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(labelText: 'Nom'),
+                ),
+                const SizedBox(height: 16),
+                VirtualCellarThemeSelector(
+                  selectedTheme: theme,
+                  onChanged: (newTheme) {
+                    setDialogState(() => theme = newTheme);
+                  },
                 ),
                 const SizedBox(height: 16),
                 _StepperRow(
@@ -1002,7 +1098,12 @@ class _VirtualCellarDetailScreenState
                 final result = await ref
                     .read(updateVirtualCellarUseCaseProvider)
                     .call(
-                      cellar.copyWith(name: name, rows: rows, columns: cols),
+                      cellar.copyWith(
+                        name: name,
+                        rows: rows,
+                        columns: cols,
+                        theme: theme,
+                      ),
                     );
                 result.fold(
                   (failure) {
@@ -1017,6 +1118,7 @@ class _VirtualCellarDetailScreenState
                       name: name,
                       rows: rows,
                       columns: cols,
+                      theme: theme,
                     ),
                   ),
                 );
@@ -1228,12 +1330,14 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
   final GlobalKey _dragAreaKey = GlobalKey();
+  final Map<int, Offset> _activePointers = <int, Offset>{};
 
   int? _dragAnchorPlacementId;
   Set<(int, int)> _previewTargets = <(int, int)>{};
   bool _previewValid = false;
   double _zoomLevel = 1.0;
-  double _zoomStart = 1.0;
+  double _pinchStartZoom = 1.0;
+  double? _pinchStartDistance;
 
   @override
   void dispose() {
@@ -1332,15 +1436,53 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     });
   }
 
-  void _onScaleStart(ScaleStartDetails details) {
-    _zoomStart = _zoomLevel;
+  void _handlePointerDown(PointerDownEvent event) {
+    _activePointers[event.pointer] = event.position;
+    if (_activePointers.length == 2) {
+      _pinchStartDistance = _currentPinchDistance();
+      _pinchStartZoom = _zoomLevel;
+    }
   }
 
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (details.pointerCount < 2) {
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (!_activePointers.containsKey(event.pointer)) {
       return;
     }
-    _setZoom(_zoomStart * details.scale);
+
+    _activePointers[event.pointer] = event.position;
+
+    if (_activePointers.length < 2) {
+      return;
+    }
+
+    final startDistance = _pinchStartDistance;
+    final currentDistance = _currentPinchDistance();
+    if (startDistance == null ||
+        startDistance <= 0 ||
+        currentDistance == null) {
+      return;
+    }
+
+    _setZoom(_pinchStartZoom * (currentDistance / startDistance));
+  }
+
+  void _handlePointerEnd(PointerEvent event) {
+    _activePointers.remove(event.pointer);
+    if (_activePointers.length < 2) {
+      _pinchStartDistance = null;
+      _pinchStartZoom = _zoomLevel;
+    }
+  }
+
+  double? _currentPinchDistance() {
+    if (_activePointers.length < 2) {
+      return null;
+    }
+
+    final positions = _activePointers.values.take(2).toList(growable: false);
+    final dx = positions[0].dx - positions[1].dx;
+    final dy = positions[0].dy - positions[1].dy;
+    return math.sqrt((dx * dx) + (dy * dy));
   }
 
   void _handleDragPointerUpdate(Offset globalPosition) {
@@ -1401,6 +1543,9 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     final cellWidth = _kCellWidth * _zoomLevel;
     final cellHeight = _kCellHeight * _zoomLevel;
     final rowNumWidth = _kRowNumWidth * _zoomLevel;
+    final isWineFridge = cellar.theme == VirtualCellarTheme.wineFridge;
+    final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
+    final rowGap = 6 * _zoomLevel;
 
     return Column(
       children: [
@@ -1465,9 +1610,12 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
             ),
           ),
         Expanded(
-          child: GestureDetector(
-            onScaleStart: _onScaleStart,
-            onScaleUpdate: _onScaleUpdate,
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _handlePointerDown,
+            onPointerMove: _handlePointerMove,
+            onPointerUp: _handlePointerEnd,
+            onPointerCancel: _handlePointerEnd,
             child: Container(
               key: _dragAreaKey,
               child: Scrollbar(
@@ -1486,128 +1634,84 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                       controller: _horizontalController,
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              SizedBox(width: rowNumWidth),
-                              ...List.generate(cellar.columns, (col) {
-                                return SizedBox(
-                                  width: cellWidth,
-                                  child: Center(
-                                    child: Text(
-                                      '${col + 1}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.outline,
-                                          ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
-                          ),
-                          SizedBox(height: 6 * _zoomLevel),
-                          ...List.generate(cellar.rows, (row) {
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: 6 * _zoomLevel),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: rowNumWidth,
-                                    child: Center(
-                                      child: Text(
-                                        _rowLabel(row),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.outline,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                  ...List.generate(cellar.columns, (col) {
-                                    final placement = lookup[(row, col)];
-                                    final isEmptyCell = cellar.isCellEmpty(
-                                      oneBasedRow: row + 1,
-                                      oneBasedCol: col + 1,
-                                    );
-                                    final isPreviewTarget = _previewTargets
-                                        .contains((row, col));
-                                    final hideBottleVisual =
-                                        _dragAnchorPlacementId != null &&
-                                        placement != null &&
-                                        moveState.selectedPlacementIds.contains(
-                                          placement.id,
-                                        ) &&
-                                        !isPreviewTarget;
-                                    final showDragGhost =
-                                        _dragAnchorPlacementId != null &&
-                                        isPreviewTarget;
-                                    return SizedBox(
-                                      width: cellWidth,
-                                      height: cellHeight,
-                                      child: DragTarget<_GroupDragData>(
-                                        onWillAcceptWithDetails: (_) => true,
-                                        onMove: (_) =>
-                                            _updateDragHover(row, col),
-                                        onAcceptWithDetails: (_) =>
-                                            _acceptDrop(row, col),
-                                        onLeave: (_) {
-                                          if (_dragAnchorPlacementId == null) {
-                                            return;
-                                          }
-                                          setState(() {
-                                            _previewTargets = <(int, int)>{};
-                                            _previewValid = false;
-                                          });
-                                        },
-                                        builder:
-                                            (
-                                              context,
-                                              candidateData,
-                                              rejectedData,
-                                            ) {
-                                              return _SlotCell(
-                                                placement: placement,
-                                                onTap: () => onSlotTap(row, col),
-                                                cellarId: widget.cellarId,
-                                                onLongPressPlacement:
-                                                    widget.onLongPressPlacement,
-                                                row: row,
-                                                col: col,
-                                                isEmptyCell: isEmptyCell,
-                                                isPreviewTarget:
-                                                    isPreviewTarget,
-                                                previewIsValid: _previewValid,
-                                                selectedCount: moveState
-                                                    .selectedPlacementIds
-                                                    .length,
-                                                onDragStarted: _startDrag,
-                                                onDragEnded: _endDrag,
-                                                onDragPointerUpdate:
-                                                    _handleDragPointerUpdate,
-                                                hideBottleVisual:
-                                                    hideBottleVisual,
-                                                showDragGhost: showDragGhost,
-                                              );
-                                            },
-                                      ),
-                                    );
-                                  }),
-                                ],
+                      child: isPremiumCave
+                          ? PremiumCaveWrapper(
+                              columns: cellar.columns,
+                              rows: cellar.rows,
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              rowNumWidth: rowNumWidth,
+                              rowGap: rowGap,
+                              gridChild: _buildGridContent(
+                                context,
+                                cellar: cellar,
+                                lookup: lookup,
+                                cellWidth: cellWidth,
+                                cellHeight: cellHeight,
+                                rowNumWidth: rowNumWidth,
+                                rowGap: rowGap,
+                                onSlotTap: onSlotTap,
+                                moveState: moveState,
                               ),
-                            );
-                          }),
-                        ],
+                            )
+                          : Container(
+                        padding: EdgeInsets.fromLTRB(
+                          10 * _zoomLevel,
+                          10 * _zoomLevel,
+                          12 * _zoomLevel,
+                          12 * _zoomLevel,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            isWineFridge ? 18 : 14,
+                          ),
+                          gradient: isWineFridge
+                              ? LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerLow,
+                                  ],
+                                )
+                              : null,
+                          color: isWineFridge
+                              ? null
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerLowest,
+                          border: Border.all(
+                            color: isWineFridge
+                                ? Theme.of(context).colorScheme.outlineVariant
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHigh,
+                          ),
+                          boxShadow: isWineFridge
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: _buildGridContent(
+                                context,
+                                cellar: cellar,
+                                lookup: lookup,
+                                cellWidth: cellWidth,
+                                cellHeight: cellHeight,
+                                rowNumWidth: rowNumWidth,
+                                rowGap: rowGap,
+                                onSlotTap: onSlotTap,
+                                moveState: moveState,
+                              ),
                       ),
                     ),
                   ),
@@ -1630,6 +1734,117 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     final second = rowIndex % 26;
     return '${String.fromCharCode(base + first)}${String.fromCharCode(base + second)}';
   }
+
+  Widget _buildGridContent(
+    BuildContext context, {
+    required VirtualCellarEntity cellar,
+    required Map<(int, int), BottlePlacementEntity> lookup,
+    required double cellWidth,
+    required double cellHeight,
+    required double rowNumWidth,
+    required double rowGap,
+    required void Function(int row, int col) onSlotTap,
+    required BottleMoveStateEntity moveState,
+  }) {
+    final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
+    final labelColor = isPremiumCave
+        ? const Color(0xCCA8C8E0)
+        : Theme.of(context).colorScheme.outline;
+    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: labelColor,
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            SizedBox(width: rowNumWidth),
+            ...List.generate(cellar.columns, (col) {
+              return SizedBox(
+                width: cellWidth,
+                child: Center(
+                  child: Text('${col + 1}', style: labelStyle),
+                ),
+              );
+            }),
+          ],
+        ),
+        SizedBox(height: rowGap),
+        ...List.generate(cellar.rows, (row) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: rowGap),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: rowNumWidth,
+                  child: Center(
+                    child: Text(_rowLabel(row), style: labelStyle),
+                  ),
+                ),
+                ...List.generate(cellar.columns, (col) {
+                  final placement = lookup[(row, col)];
+                  final isEmptyCell = cellar.isCellEmpty(
+                    oneBasedRow: row + 1,
+                    oneBasedCol: col + 1,
+                  );
+                  final isPreviewTarget =
+                      _previewTargets.contains((row, col));
+                  final hideBottleVisual =
+                      _dragAnchorPlacementId != null &&
+                      placement != null &&
+                      moveState.selectedPlacementIds
+                          .contains(placement.id) &&
+                      !isPreviewTarget;
+                  final showDragGhost =
+                      _dragAnchorPlacementId != null && isPreviewTarget;
+                  return SizedBox(
+                    width: cellWidth,
+                    height: cellHeight,
+                    child: DragTarget<_GroupDragData>(
+                      onWillAcceptWithDetails: (_) => true,
+                      onMove: (_) => _updateDragHover(row, col),
+                      onAcceptWithDetails: (_) => _acceptDrop(row, col),
+                      onLeave: (_) {
+                        if (_dragAnchorPlacementId == null) return;
+                        setState(() {
+                          _previewTargets = <(int, int)>{};
+                          _previewValid = false;
+                        });
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        return _SlotCell(
+                          placement: placement,
+                          onTap: () => onSlotTap(row, col),
+                          cellarId: widget.cellarId,
+                          onLongPressPlacement:
+                              widget.onLongPressPlacement,
+                          row: row,
+                          col: col,
+                          cellarTheme: cellar.theme,
+                          isEmptyCell: isEmptyCell,
+                          isPreviewTarget: isPreviewTarget,
+                          previewIsValid: _previewValid,
+                          selectedCount:
+                              moveState.selectedPlacementIds.length,
+                          onDragStarted: _startDrag,
+                          onDragEnded: _endDrag,
+                          onDragPointerUpdate:
+                              _handleDragPointerUpdate,
+                          hideBottleVisual: hideBottleVisual,
+                          showDragGhost: showDragGhost,
+                        );
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
 }
 
 class _SlotCell extends ConsumerStatefulWidget {
@@ -1639,6 +1854,7 @@ class _SlotCell extends ConsumerStatefulWidget {
   final void Function(int) onLongPressPlacement;
   final int row;
   final int col;
+  final VirtualCellarTheme cellarTheme;
   final bool isEmptyCell;
   final bool isPreviewTarget;
   final bool previewIsValid;
@@ -1656,6 +1872,7 @@ class _SlotCell extends ConsumerStatefulWidget {
     required this.onLongPressPlacement,
     required this.row,
     required this.col,
+    required this.cellarTheme,
     required this.isEmptyCell,
     required this.isPreviewTarget,
     required this.previewIsValid,
@@ -1684,6 +1901,8 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
     final hasWine = wine != null;
     final visibleWine = hasWine && !widget.hideBottleVisual;
     final wineColor = hasWine ? AppTheme.colorForWine(wine.color.name) : null;
+    final isWineFridge = widget.cellarTheme == VirtualCellarTheme.wineFridge;
+    final isPremiumCave = widget.cellarTheme == VirtualCellarTheme.premiumCave;
 
     final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
     final isSelected =
@@ -1705,6 +1924,10 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
         ? (widget.previewIsValid
               ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.35)
               : theme.colorScheme.errorContainer.withValues(alpha: 0.4))
+        : isPremiumCave
+        ? Colors.transparent
+        : isWineFridge
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7)
         : Colors.transparent;
 
     final content = GestureDetector(
@@ -1730,58 +1953,158 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           color: slotBackgroundColor,
-          borderRadius: BorderRadius.circular(10),
-          border: null,
+          borderRadius: BorderRadius.circular(
+              isPremiumCave ? 0 : (isWineFridge ? 12 : 10)),
+          border: isWineFridge
+              ? Border.all(
+                  color: slotStrokeColor.withValues(alpha: 0.7),
+                  width: widget.isPreviewTarget || isSelected ? 1.8 : 1.2,
+                )
+              : null,
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned(
-              bottom: 8,
-              child: CustomPaint(
-                size: const Size(42, 18),
-                painter: _WaveSlotPainter(
-                  color: slotStrokeColor,
-                  strokeWidth: widget.isPreviewTarget || isSelected ? 2.6 : 2,
-                ),
-              ),
-            ),
-            if (visibleWine)
-              Positioned(
-                top: 6,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: wineColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : Colors.white,
-                      width: isSelected ? 2 : 1.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.14),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+            if (isPremiumCave)
+              // Premium cave: no decorative wave or bar – bottles sit on
+              // the painted shelf rails. Show only a subtle selection ring
+              // or preview border.
+              if (widget.isPreviewTarget || isSelected)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.isPreviewTarget
+                            ? (widget.previewIsValid
+                                  ? theme.colorScheme.secondary
+                                  : theme.colorScheme.error)
+                            : theme.colorScheme.primary,
+                        width: 1.5,
                       ),
-                    ],
+                    ),
+                  ),
+                )
+              else
+                const SizedBox.shrink()
+            else if (isWineFridge)
+              Positioned(
+                bottom: 8,
+                left: 8,
+                right: 8,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: slotStrokeColor.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(99),
                   ),
                 ),
               )
+            else
+              Positioned(
+                bottom: 8,
+                child: CustomPaint(
+                  size: const Size(42, 18),
+                  painter: _WaveSlotPainter(
+                    color: slotStrokeColor,
+                    strokeWidth: widget.isPreviewTarget || isSelected ? 2.6 : 2,
+                  ),
+                ),
+              ),
+            if (visibleWine)
+              Positioned(
+                top: isPremiumCave ? 2 : (isWineFridge ? 5 : 6),
+                child: isPremiumCave
+                    ? CustomPaint(
+                        size: const Size(28, 28),
+                        painter: _BottleFacePainter(
+                          wineColor: wineColor!,
+                          isSelected: isSelected,
+                        ),
+                      )
+                    : isWineFridge
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: wineColor!.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          Container(
+                            width: 13,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  wineColor.withValues(alpha: 0.85),
+                                  wineColor,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : Colors.white.withValues(alpha: 0.75),
+                                width: isSelected ? 1.8 : 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.14),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: wineColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.white,
+                            width: isSelected ? 2 : 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.14),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+              )
             else if (!widget.showDragGhost)
               Positioned(
-                top: 8,
-                child: Container(
-                  width: 6,
-                  height: 6,
+                top: isPremiumCave ? 6 : (isWineFridge ? 11 : 8),
+                child: isPremiumCave
+                    ? CustomPaint(
+                        size: const Size(24, 24),
+                        painter: _EmptySlotDashedPainter(),
+                      )
+                    : Container(
+                  width: isWineFridge ? 8 : 6,
+                  height: isWineFridge ? 14 : 6,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.outlineVariant.withValues(
                       alpha: 0.55,
                     ),
-                    shape: BoxShape.circle,
+                    borderRadius: isWineFridge
+                        ? BorderRadius.circular(8)
+                        : null,
+                    shape: isWineFridge ? BoxShape.rectangle : BoxShape.circle,
                   ),
                 ),
               ),
@@ -1897,6 +2220,127 @@ class _WaveSlotPainter extends CustomPainter {
   bool shouldRepaint(covariant _WaveSlotPainter oldDelegate) {
     return oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
   }
+}
+
+/// Draws a wine bottle seen end-on (circle with glass-depth) for premium cave.
+class _BottleFacePainter extends CustomPainter {
+  final Color wineColor;
+  final bool isSelected;
+
+  const _BottleFacePainter({required this.wineColor, required this.isSelected});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = math.min(cx, cy);
+    final p = Paint();
+
+    // Selection ring
+    if (isSelected) {
+      p.color = Colors.white.withValues(alpha: 0.6);
+      p.style = PaintingStyle.stroke;
+      p.strokeWidth = 1.5;
+      canvas.drawCircle(Offset(cx, cy), r, p);
+      p.style = PaintingStyle.fill;
+    }
+
+    // Outer glow
+    final glowR = r - 1;
+    p.shader = RadialGradient(
+      colors: [wineColor.withValues(alpha: 0.3), const Color(0x00000000)],
+    ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: glowR + 4));
+    canvas.drawCircle(Offset(cx, cy), glowR + 4, p);
+    p.shader = null;
+
+    // Body
+    p.color = wineColor;
+    canvas.drawCircle(Offset(cx, cy), glowR, p);
+
+    // Glass-depth gradient
+    final darker = Color.lerp(wineColor, Colors.black, 0.6)!;
+    final lighter = Color.lerp(wineColor, Colors.white, 0.25)!;
+    p.shader = RadialGradient(
+      center: const Alignment(-0.35, -0.35),
+      radius: 1.0,
+      colors: [
+        lighter.withValues(alpha: 0.55),
+        wineColor,
+        darker.withValues(alpha: 0.6),
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: glowR));
+    canvas.drawCircle(Offset(cx, cy), glowR, p);
+    p.shader = null;
+
+    // Collet ring
+    p.color = lighter;
+    p.style = PaintingStyle.stroke;
+    p.strokeWidth = 1.8;
+    canvas.drawCircle(Offset(cx, cy), glowR * 0.48, p);
+    p.style = PaintingStyle.fill;
+
+    // Neck disc
+    p.color = darker;
+    canvas.drawCircle(Offset(cx, cy), glowR * 0.38, p);
+
+    // Cork
+    p.shader = RadialGradient(
+      center: const Alignment(-0.3, -0.3),
+      colors: const [Color(0xFFE0B850), Color(0xFFA07828)],
+    ).createShader(
+        Rect.fromCircle(center: Offset(cx, cy), radius: glowR * 0.24));
+    canvas.drawCircle(Offset(cx, cy), glowR * 0.24, p);
+    p.shader = null;
+
+    // Specular highlight
+    p.shader = RadialGradient(
+      center: const Alignment(-0.55, -0.55),
+      colors: [Colors.white.withValues(alpha: 0.22), const Color(0x00000000)],
+    ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: glowR));
+    canvas.drawCircle(Offset(cx, cy), glowR, p);
+    p.shader = null;
+
+    // Glint
+    p.color = Colors.white.withValues(alpha: 0.4);
+    canvas.save();
+    canvas.translate(cx - glowR * 0.35, cy - glowR * 0.35);
+    canvas.rotate(-0.6);
+    canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: glowR * 0.3, height: glowR * 0.18), p);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BottleFacePainter old) =>
+      old.wineColor != wineColor || old.isSelected != isSelected;
+}
+
+/// Draws a dashed circle for empty slots in premium cave theme.
+class _EmptySlotDashedPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = math.min(cx, cy);
+    final p = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7;
+    for (int i = 0; i < 8; i++) {
+      final start = i * math.pi / 4;
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: r - 1),
+        start,
+        math.pi / 6,
+        false,
+        p,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EmptySlotDashedPainter old) => false;
 }
 
 class _DragSelectionFeedback extends StatelessWidget {

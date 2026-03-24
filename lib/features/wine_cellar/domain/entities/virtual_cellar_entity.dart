@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:wine_cellar/features/wine_cellar/domain/entities/cellar_cell_position.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 
 /// Domain entity representing a virtual wine cellar (rack / storage unit).
 ///
@@ -20,6 +21,7 @@ class VirtualCellarEntity {
   /// Cells that are physically unavailable in the cellar shape.
   /// Coordinates are 1-based.
   final Set<CellarCellPosition> emptyCells;
+  final VirtualCellarTheme theme;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -30,6 +32,7 @@ class VirtualCellarEntity {
     required this.rows,
     required this.columns,
     this.emptyCells = const <CellarCellPosition>{},
+    this.theme = VirtualCellarTheme.classic,
     this.createdAt,
     this.updatedAt,
   });
@@ -90,6 +93,7 @@ class VirtualCellarEntity {
     int? rows,
     int? columns,
     Set<CellarCellPosition>? emptyCells,
+    VirtualCellarTheme? theme,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -99,6 +103,7 @@ class VirtualCellarEntity {
       rows: rows ?? this.rows,
       columns: columns ?? this.columns,
       emptyCells: emptyCells ?? this.emptyCells,
+      theme: theme ?? this.theme,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -117,5 +122,5 @@ class VirtualCellarEntity {
   @override
   String toString() =>
       'VirtualCellarEntity(id: $id, name: $name, '
-      'rows: $rows, columns: $columns)';
+      'rows: $rows, columns: $columns, theme: ${theme.storageValue})';
 }

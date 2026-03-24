@@ -11,7 +11,9 @@ void main() {
     late File dbFile;
 
     setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('wine_cellar_migration_test_');
+      tempDir = await Directory.systemTemp.createTemp(
+        'wine_cellar_migration_test_',
+      );
       dbFile = File('${tempDir.path}/migration_test.db');
       _createLegacyV2Database(dbFile);
     });
@@ -34,23 +36,35 @@ void main() {
           .getSingle();
       expect(pairingsCountRow.read<int>('c'), 1);
 
-      final columns = await appDb.customSelect("PRAGMA table_info('wines')").get();
-      final columnNames = columns.map((row) => row.read<String>('name')).toSet();
+      final columns = await appDb
+          .customSelect("PRAGMA table_info('wines')")
+          .get();
+      final columnNames = columns
+          .map((row) => row.read<String>('name'))
+          .toSet();
 
       expect(columnNames, contains('ai_suggested_drink_from_year'));
       expect(columnNames, contains('ai_suggested_drink_until_year'));
       expect(columnNames, contains('ai_suggested_food_pairings'));
-        expect(columnNames, contains('cellar_id'));
+      expect(columnNames, contains('cellar_id'));
       expect(columnNames, contains('cellar_position_x'));
       expect(columnNames, contains('cellar_position_y'));
       expect(columnNames, contains('notes'));
 
-        final tables = await appDb
+      final virtualCellarColumns = await appDb
+          .customSelect("PRAGMA table_info('virtual_cellars')")
+          .get();
+      final virtualCellarColumnNames = virtualCellarColumns
+          .map((row) => row.read<String>('name'))
+          .toSet();
+      expect(virtualCellarColumnNames, contains('theme'));
+
+      final tables = await appDb
           .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
           .get();
-        final tableNames = tables.map((row) => row.read<String>('name')).toSet();
-        expect(tableNames, contains('virtual_cellars'));
-        expect(tableNames, contains('bottle_placements'));
+      final tableNames = tables.map((row) => row.read<String>('name')).toSet();
+      expect(tableNames, contains('virtual_cellars'));
+      expect(tableNames, contains('bottle_placements'));
 
       final categories = await appDb.select(appDb.foodCategories).get();
       expect(categories.any((c) => c.name == 'Categorie legacy'), isTrue);

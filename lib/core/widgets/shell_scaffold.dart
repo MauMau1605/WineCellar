@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:wine_cellar/core/cellar_theme_data.dart';
+import 'package:wine_cellar/core/providers.dart';
+
 /// Shell scaffold with bottom navigation bar (mobile) or navigation rail (desktop)
-class ShellScaffold extends StatelessWidget {
+class ShellScaffold extends ConsumerWidget {
   final Widget child;
 
   const ShellScaffold({super.key, required this.child});
@@ -29,9 +33,14 @@ class ShellScaffold extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final index = _currentIndex(context);
     final isWide = MediaQuery.of(context).size.width > 800;
+
+    final immersive = ref.watch(immersiveCellarThemeProvider);
+    final globalVisual = ref.watch(appVisualThemeProvider);
+    final isImmersive =
+        CellarThemeData.overridesAppTheme(immersive ?? globalVisual);
 
     if (isWide) {
       // Desktop layout with NavigationRail
@@ -77,7 +86,14 @@ class ShellScaffold extends StatelessWidget {
               ],
             ),
             const VerticalDivider(thickness: 1, width: 1),
-            Expanded(child: child),
+            Expanded(
+              child: isImmersive
+                  ? Container(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      child: child,
+                    )
+                  : child,
+            ),
           ],
         ),
       );

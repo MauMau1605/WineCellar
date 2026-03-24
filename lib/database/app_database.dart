@@ -105,6 +105,11 @@ class AppDatabase extends _$AppDatabase {
       addColumn: () => m.addColumn(virtualCellars, virtualCellars.emptyCells),
     );
     await _addColumnIfMissing(
+      tableName: 'virtual_cellars',
+      columnName: 'theme',
+      addColumn: () => m.addColumn(virtualCellars, virtualCellars.theme),
+    );
+    await _addColumnIfMissing(
       tableName: 'wines',
       columnName: 'cellar_id',
       addColumn: () => m.addColumn(wines, wines.cellarId),

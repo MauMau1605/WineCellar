@@ -42,6 +42,9 @@ class AppConstants {
   // Expert cellar editor
   static const String keyExpertCellarDraft = 'expert_cellar_draft';
 
+  // Visual theme
+  static const String keyAppVisualTheme = 'app_visual_theme';
+
   // Wine defaults
   static const int maxRating = 5;
   static const int defaultQuantity = 1;

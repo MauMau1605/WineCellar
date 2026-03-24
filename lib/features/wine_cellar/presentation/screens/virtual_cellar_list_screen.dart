@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/expert_cellar_editor_screen.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
 /// Screen listing all virtual cellars. Accessible via /cellars.
 class VirtualCellarListScreen extends ConsumerWidget {
@@ -50,6 +52,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
                   name: cellar.name,
                   rows: cellar.rows,
                   cols: cellar.columns,
+                  initialTheme: cellar.theme,
                   sourceCellar: cellar,
                 ),
                 onDelete: () => _confirmDelete(context, ref, cellar),
@@ -72,10 +75,17 @@ class VirtualCellarListScreen extends ConsumerWidget {
       title: 'Nouveau cellier',
       confirmLabel: 'Créer',
       enableModeSelection: true,
-      onConfirm: (name, rows, cols) async {
+      onConfirm: (name, rows, cols, theme) async {
         final result = await ref
             .read(createVirtualCellarUseCaseProvider)
-            .call(VirtualCellarEntity(name: name, rows: rows, columns: cols));
+            .call(
+              VirtualCellarEntity(
+                name: name,
+                rows: rows,
+                columns: cols,
+                theme: theme,
+              ),
+            );
         result.fold((failure) {
           if (context.mounted) {
             ScaffoldMessenger.of(
@@ -98,11 +108,19 @@ class VirtualCellarListScreen extends ConsumerWidget {
       initialName: cellar.name,
       initialRows: cellar.rows,
       initialColumns: cellar.columns,
+      initialTheme: cellar.theme,
       confirmLabel: 'Enregistrer',
-      onConfirm: (name, rows, cols) async {
+      onConfirm: (name, rows, cols, theme) async {
         final result = await ref
             .read(updateVirtualCellarUseCaseProvider)
-            .call(cellar.copyWith(name: name, rows: rows, columns: cols));
+            .call(
+              cellar.copyWith(
+                name: name,
+                rows: rows,
+                columns: cols,
+                theme: theme,
+              ),
+            );
         result.fold((failure) {
           if (context.mounted) {
             ScaffoldMessenger.of(
@@ -163,14 +181,22 @@ class VirtualCellarListScreen extends ConsumerWidget {
     String? initialName,
     int? initialRows,
     int? initialColumns,
+    VirtualCellarTheme initialTheme = VirtualCellarTheme.classic,
     required String confirmLabel,
     bool enableModeSelection = false,
-    required Future<void> Function(String name, int rows, int cols) onConfirm,
+    required Future<void> Function(
+      String name,
+      int rows,
+      int cols,
+      VirtualCellarTheme theme,
+    )
+    onConfirm,
   }) async {
     final nameCtrl = TextEditingController(text: initialName ?? '');
     var rows = initialRows ?? 5;
     var cols = initialColumns ?? 5;
     var mode = _CellarCreationMode.simplified;
+    var theme = initialTheme;
 
     await showDialog<void>(
       context: context,
@@ -212,6 +238,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
                       hintText: 'Ex : Cave principale',
                     ),
                     textCapitalization: TextCapitalization.sentences,
+                  ),
+                  const SizedBox(height: 16),
+                  VirtualCellarThemeSelector(
+                    selectedTheme: theme,
+                    onChanged: (newTheme) {
+                      setDialogState(() => theme = newTheme);
+                    },
                   ),
                   const SizedBox(height: 20),
                   if (mode == _CellarCreationMode.simplified) ...[
@@ -284,12 +317,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
                       name: name,
                       rows: rows,
                       cols: cols,
+                      initialTheme: theme,
                     );
                     return;
                   }
 
                   Navigator.of(ctx).pop();
-                  await onConfirm(name, rows, cols);
+                  await onConfirm(name, rows, cols, theme);
                 },
                 child: Text(confirmLabel),
               ),
@@ -305,6 +339,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
     required String name,
     required int rows,
     required int cols,
+    required VirtualCellarTheme initialTheme,
     VirtualCellarEntity? sourceCellar,
   }) async {
     await Navigator.of(context).push(
@@ -313,6 +348,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
           initialName: name,
           initialRows: rows,
           initialColumns: cols,
+          initialTheme: initialTheme,
           sourceCellar: sourceCellar,
         ),
       ),
@@ -351,7 +387,10 @@ class _CellarCard extends StatelessWidget {
             color: theme.colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.grid_view, color: theme.colorScheme.primary),
+          child: Icon(
+            iconForVirtualCellarTheme(cellar.theme),
+            color: theme.colorScheme.primary,
+          ),
         ),
         title: Text(
           cellar.name,
@@ -362,7 +401,7 @@ class _CellarCard extends StatelessWidget {
         subtitle: Text(
           '${cellar.rows} rangée${cellar.rows > 1 ? 's' : ''} × '
           '${cellar.columns} colonne${cellar.columns > 1 ? 's' : ''} '
-          '(${cellar.totalSlots} emplacements)',
+          '(${cellar.totalSlots} emplacements) • ${cellar.theme.label}',
           style: theme.textTheme.bodySmall,
         ),
         onTap: onTap,

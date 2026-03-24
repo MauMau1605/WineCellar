@@ -8,6 +8,7 @@ import 'package:wine_cellar/database/daos/virtual_cellar_dao.dart';
 import 'package:wine_cellar/database/app_database.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placement_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/virtual_cellar_repository.dart';
 
@@ -58,6 +59,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
           rows: Value(cellar.rows),
           columns: Value(cellar.columns),
           emptyCells: Value(cellar.emptyCellsStorage),
+          theme: Value(cellar.theme.storageValue),
         ),
       );
       return Right(id);
@@ -81,6 +83,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
           rows: Value(cellar.rows),
           columns: Value(cellar.columns),
           emptyCells: Value(cellar.emptyCellsStorage),
+          theme: Value(cellar.theme.storageValue),
         ),
       );
       return const Right(unit);
@@ -249,6 +252,7 @@ class VirtualCellarRepositoryImpl implements VirtualCellarRepository {
       rows: row.rows,
       columns: row.columns,
       emptyCells: VirtualCellarEntity.parseEmptyCells(row.emptyCells),
+      theme: VirtualCellarTheme.fromStorage(row.theme),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );

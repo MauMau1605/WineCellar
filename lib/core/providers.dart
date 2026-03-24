@@ -38,6 +38,7 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_servic
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/ollama_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mlkit_image_text_extractor.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 
 // ============ Database ============
 
@@ -75,6 +76,50 @@ final virtualCellarRepositoryProvider = Provider<VirtualCellarRepository>((ref) 
   final db = ref.watch(databaseProvider);
   return VirtualCellarRepositoryImpl(db.virtualCellarDao, db.bottlePlacementDao);
 });
+
+// ============ Visual Theme ============
+
+/// Transient theme override set by the cellar detail screen.
+/// When non-null, the entire app adopts this cellar's visual identity.
+final immersiveCellarThemeProvider = StateProvider<VirtualCellarTheme?>((ref) {
+  return null;
+});
+
+/// Persistent global visual theme chosen in Settings.
+/// When non-null and no immersive override is active, the app uses this theme.
+final appVisualThemeProvider =
+    StateNotifierProvider<AppVisualThemeNotifier, VirtualCellarTheme?>((ref) {
+  return AppVisualThemeNotifier(ref.watch(secureStorageProvider));
+});
+
+class AppVisualThemeNotifier extends StateNotifier<VirtualCellarTheme?> {
+  final FlutterSecureStorage _storage;
+
+  AppVisualThemeNotifier(this._storage) : super(null) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final value =
+        await _storage.read(key: AppConstants.keyAppVisualTheme);
+    if (value != null && value.isNotEmpty) {
+      state = VirtualCellarTheme.values.cast<VirtualCellarTheme?>().firstWhere(
+            (t) => t?.name == value,
+            orElse: () => null,
+          );
+    }
+  }
+
+  Future<void> setTheme(VirtualCellarTheme? theme) async {
+    state = theme;
+    if (theme != null) {
+      await _storage.write(
+          key: AppConstants.keyAppVisualTheme, value: theme.name);
+    } else {
+      await _storage.delete(key: AppConstants.keyAppVisualTheme);
+    }
+  }
+}
 
 // ============ Settings ============
 
