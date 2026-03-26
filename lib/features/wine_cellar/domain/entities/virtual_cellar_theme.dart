@@ -1,7 +1,8 @@
 enum VirtualCellarTheme {
   classic,
-  wineFridge,
-  premiumCave;
+  premiumCave,
+  stoneCave,
+  garageIndustrial;
 
   String get storageValue => name;
 
@@ -9,10 +10,12 @@ enum VirtualCellarTheme {
     switch (this) {
       case VirtualCellarTheme.classic:
         return 'Cave classique';
-      case VirtualCellarTheme.wineFridge:
-        return 'Frigo a vin';
       case VirtualCellarTheme.premiumCave:
         return 'Cave premium';
+      case VirtualCellarTheme.stoneCave:
+        return 'Cave en pierre';
+      case VirtualCellarTheme.garageIndustrial:
+        return 'Garage industriel';
     }
   }
 

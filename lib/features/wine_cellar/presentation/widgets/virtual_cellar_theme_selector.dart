@@ -6,10 +6,12 @@ IconData iconForVirtualCellarTheme(VirtualCellarTheme theme) {
   switch (theme) {
     case VirtualCellarTheme.classic:
       return Icons.waves;
-    case VirtualCellarTheme.wineFridge:
-      return Icons.kitchen_outlined;
     case VirtualCellarTheme.premiumCave:
       return Icons.wine_bar;
+    case VirtualCellarTheme.stoneCave:
+      return Icons.castle_outlined;
+    case VirtualCellarTheme.garageIndustrial:
+      return Icons.garage_outlined;
   }
 }
 
@@ -17,10 +19,12 @@ String descriptionForVirtualCellarTheme(VirtualCellarTheme theme) {
   switch (theme) {
     case VirtualCellarTheme.classic:
       return 'Slots en vague comme la representation actuelle';
-    case VirtualCellarTheme.wineFridge:
-      return 'Casier type cave de service / frigo a vin';
     case VirtualCellarTheme.premiumCave:
       return 'Cave premium avec boiseries et éclairage ambiant';
+    case VirtualCellarTheme.stoneCave:
+      return 'Cave voûtée en pierre avec étagères en bois';
+    case VirtualCellarTheme.garageIndustrial:
+      return 'Étagères acier galvanisé sur mur de parpaings';
   }
 }
 

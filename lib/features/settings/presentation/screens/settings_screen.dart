@@ -739,8 +739,7 @@ class _VisualThemeSection extends ConsumerWidget {
                   // Dynamic entries from VirtualCellarTheme where an override exists
                   ...VirtualCellarTheme.values
                       .where((t) =>
-                          t != VirtualCellarTheme.classic &&
-                          t != VirtualCellarTheme.wineFridge)
+                          t != VirtualCellarTheme.classic)
                       .map((t) => RadioListTile<VirtualCellarTheme?>(
                             title: Text(t.label),
                             subtitle: Text(

@@ -9,19 +9,22 @@ class CellarThemeData {
   CellarThemeData._();
 
   /// Returns the [ThemeData] for the given cellar theme.
-  /// [platformBrightness] is used for classic/wineFridge to follow the system.
+  /// [platformBrightness] is used for classic to follow the system.
   static ThemeData forTheme(
     VirtualCellarTheme theme, {
     Brightness platformBrightness = Brightness.light,
   }) {
     switch (theme) {
       case VirtualCellarTheme.classic:
-      case VirtualCellarTheme.wineFridge:
-        // These themes don't override — caller checks overridesAppTheme first.
+        // This theme doesn't override — caller checks overridesAppTheme first.
         // Return a fallback that won't be used in practice.
         return ThemeData.light();
       case VirtualCellarTheme.premiumCave:
         return _premiumCave;
+      case VirtualCellarTheme.stoneCave:
+        return _stoneCave;
+      case VirtualCellarTheme.garageIndustrial:
+        return _garageIndustrial;
     }
   }
 
@@ -30,9 +33,10 @@ class CellarThemeData {
     if (theme == null) return false;
     switch (theme) {
       case VirtualCellarTheme.classic:
-      case VirtualCellarTheme.wineFridge:
         return false;
       case VirtualCellarTheme.premiumCave:
+      case VirtualCellarTheme.stoneCave:
+      case VirtualCellarTheme.garageIndustrial:
         return true;
     }
   }
@@ -251,6 +255,413 @@ class CellarThemeData {
           borderRadius: BorderRadius.circular(8),
         ),
         textStyle: const TextStyle(color: _cream, fontSize: 12),
+      ),
+    );
+  }
+
+  // ─── Stone Cave: warm sandstone & oak ─────────────────────────────
+
+  static const Color _sandstone = Color(0xFF2C2418);
+  static const Color _stoneWall = Color(0xFF3A3028);
+  static const Color _warmOak = Color(0xFFB8863C);
+  static const Color _parchment = Color(0xFFF0E4D0);
+  static const Color _lightOak = Color(0xFFD4A854);
+
+  static final ThemeData _stoneCave = _buildStoneCave();
+
+  static ThemeData _buildStoneCave() {
+    final colorScheme = ColorScheme.dark(
+      brightness: Brightness.dark,
+      primary: _warmOak,
+      onPrimary: _sandstone,
+      secondary: const Color(0xFF8A6428),
+      onSecondary: _parchment,
+      surface: _stoneWall,
+      onSurface: _parchment,
+      surfaceContainerLowest: _sandstone,
+      surfaceContainerLow: const Color(0xFF342A1E),
+      surfaceContainer: const Color(0xFF3E3228),
+      surfaceContainerHigh: const Color(0xFF4A3E30),
+      surfaceContainerHighest: const Color(0xFF564838),
+      error: const Color(0xFFCF6679),
+      onError: Colors.black,
+      outline: const Color(0xFF7A6850),
+      outlineVariant: const Color(0xFF5A4E3C),
+    );
+
+    final textTheme = GoogleFonts.nunitoTextTheme(ThemeData.dark().textTheme);
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: _sandstone,
+      textTheme: textTheme,
+
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        foregroundColor: _parchment,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: _parchment),
+      ),
+
+      cardTheme: CardThemeData(
+        elevation: 4,
+        color: _stoneWall.withValues(alpha: 0.85),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: _warmOak.withValues(alpha: 0.15)),
+        ),
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: _warmOak,
+        foregroundColor: _sandstone,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: _warmOak.withValues(alpha: 0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: _warmOak.withValues(alpha: 0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _warmOak),
+        ),
+        filled: true,
+        fillColor: _stoneWall,
+        labelStyle: const TextStyle(color: _parchment),
+        hintStyle: TextStyle(color: _parchment.withValues(alpha: 0.5)),
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: _stoneWall,
+        selectedColor: _warmOak.withValues(alpha: 0.25),
+        labelStyle: const TextStyle(color: _parchment),
+        secondaryLabelStyle: const TextStyle(color: _lightOak),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _warmOak.withValues(alpha: 0.2)),
+        ),
+        checkmarkColor: _warmOak,
+      ),
+
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: _stoneWall,
+        indicatorColor: _warmOak.withValues(alpha: 0.2),
+        surfaceTintColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            color: selected ? _warmOak : _parchment.withValues(alpha: 0.6),
+            fontSize: 12,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? _warmOak : _parchment.withValues(alpha: 0.6),
+          );
+        }),
+      ),
+
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: _stoneWall,
+        indicatorColor: _warmOak.withValues(alpha: 0.2),
+        selectedIconTheme: const IconThemeData(color: _warmOak),
+        unselectedIconTheme:
+            IconThemeData(color: _parchment.withValues(alpha: 0.6)),
+        selectedLabelTextStyle: const TextStyle(color: _warmOak),
+        unselectedLabelTextStyle:
+            TextStyle(color: _parchment.withValues(alpha: 0.6)),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        color: _stoneWall,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: _warmOak.withValues(alpha: 0.15)),
+        ),
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFF3A3028),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF4A3E30),
+        contentTextStyle: const TextStyle(color: _parchment),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: _warmOak.withValues(alpha: 0.15),
+      ),
+
+      iconTheme: const IconThemeData(color: _parchment),
+
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll(_warmOak),
+          foregroundColor: WidgetStatePropertyAll(_sandstone),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(_warmOak),
+        ),
+      ),
+
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(_parchment),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: _warmOak.withValues(alpha: 0.3)),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: _stoneWall,
+      ),
+
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: const Color(0xFF4A3E30),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: const TextStyle(color: _parchment, fontSize: 12),
+      ),
+    );
+  }
+
+  // ─── Garage Industrial: cold concrete & galvanised steel ──────────
+
+  static const Color _concrete = Color(0xFF1A1A1E);
+  static const Color _cinderBlock = Color(0xFF2A2A30);
+  static const Color _coldSteel = Color(0xFF7A8A9A);
+  static const Color _lightConcrete = Color(0xFFD0D4DA);
+  static const Color _neonBlue = Color(0xFF8AC4E8);
+
+  static final ThemeData _garageIndustrial = _buildGarageIndustrial();
+
+  static ThemeData _buildGarageIndustrial() {
+    final colorScheme = ColorScheme.dark(
+      brightness: Brightness.dark,
+      primary: _coldSteel,
+      onPrimary: _concrete,
+      secondary: _neonBlue,
+      onSecondary: _concrete,
+      surface: _cinderBlock,
+      onSurface: _lightConcrete,
+      surfaceContainerLowest: _concrete,
+      surfaceContainerLow: const Color(0xFF222228),
+      surfaceContainer: const Color(0xFF2E2E34),
+      surfaceContainerHigh: const Color(0xFF3A3A42),
+      surfaceContainerHighest: const Color(0xFF46464E),
+      error: const Color(0xFFCF6679),
+      onError: Colors.black,
+      outline: const Color(0xFF5A5A66),
+      outlineVariant: const Color(0xFF3E3E48),
+    );
+
+    final textTheme =
+        GoogleFonts.robotoCondensedTextTheme(ThemeData.dark().textTheme);
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: _concrete,
+      textTheme: textTheme,
+
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        foregroundColor: _lightConcrete,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: _lightConcrete),
+      ),
+
+      cardTheme: CardThemeData(
+        elevation: 4,
+        color: _cinderBlock.withValues(alpha: 0.85),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _coldSteel.withValues(alpha: 0.15)),
+        ),
+      ),
+
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: _coldSteel,
+        foregroundColor: _concrete,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: _coldSteel.withValues(alpha: 0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: _coldSteel.withValues(alpha: 0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _neonBlue),
+        ),
+        filled: true,
+        fillColor: _cinderBlock,
+        labelStyle: const TextStyle(color: _lightConcrete),
+        hintStyle: TextStyle(color: _lightConcrete.withValues(alpha: 0.5)),
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: _cinderBlock,
+        selectedColor: _coldSteel.withValues(alpha: 0.25),
+        labelStyle: const TextStyle(color: _lightConcrete),
+        secondaryLabelStyle: const TextStyle(color: _neonBlue),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: BorderSide(color: _coldSteel.withValues(alpha: 0.2)),
+        ),
+        checkmarkColor: _neonBlue,
+      ),
+
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: _cinderBlock,
+        indicatorColor: _coldSteel.withValues(alpha: 0.2),
+        surfaceTintColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            color: selected
+                ? _neonBlue
+                : _lightConcrete.withValues(alpha: 0.6),
+            fontSize: 12,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected
+                ? _neonBlue
+                : _lightConcrete.withValues(alpha: 0.6),
+          );
+        }),
+      ),
+
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: _cinderBlock,
+        indicatorColor: _coldSteel.withValues(alpha: 0.2),
+        selectedIconTheme: const IconThemeData(color: _neonBlue),
+        unselectedIconTheme:
+            IconThemeData(color: _lightConcrete.withValues(alpha: 0.6)),
+        selectedLabelTextStyle: const TextStyle(color: _neonBlue),
+        unselectedLabelTextStyle:
+            TextStyle(color: _lightConcrete.withValues(alpha: 0.6)),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        color: _cinderBlock,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _coldSteel.withValues(alpha: 0.15)),
+        ),
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFF2A2A30),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF3A3A42),
+        contentTextStyle: const TextStyle(color: _lightConcrete),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+        ),
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: _coldSteel.withValues(alpha: 0.15),
+      ),
+
+      iconTheme: const IconThemeData(color: _lightConcrete),
+
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll(_coldSteel),
+          foregroundColor: WidgetStatePropertyAll(_concrete),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+      ),
+
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(_neonBlue),
+        ),
+      ),
+
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(_lightConcrete),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: _coldSteel.withValues(alpha: 0.3)),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+      ),
+
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: _cinderBlock,
+      ),
+
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: const Color(0xFF3A3A42),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        textStyle: const TextStyle(color: _lightConcrete, fontSize: 12),
       ),
     );
   }

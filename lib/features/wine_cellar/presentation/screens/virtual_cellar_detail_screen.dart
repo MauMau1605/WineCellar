@@ -18,6 +18,10 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_c
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/bottle_move_state_provider.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_screen_background.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_wrapper.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/stone_cave_screen_background.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/stone_cave_wrapper.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/garage_industrial_screen_background.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/garage_industrial_wrapper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
 class VirtualCellarDetailScreen extends ConsumerStatefulWidget {
@@ -432,6 +436,10 @@ class _VirtualCellarDetailScreenState
         children: [
           if (cellar.theme == VirtualCellarTheme.premiumCave)
             const PremiumCaveScreenBackground(),
+          if (cellar.theme == VirtualCellarTheme.stoneCave)
+            const StoneCaveScreenBackground(),
+          if (cellar.theme == VirtualCellarTheme.garageIndustrial)
+            const GarageIndustrialScreenBackground(),
           StreamBuilder<List<BottlePlacementEntity>>(
         stream: ref
             .watch(virtualCellarRepositoryProvider)
@@ -1543,8 +1551,9 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     final cellWidth = _kCellWidth * _zoomLevel;
     final cellHeight = _kCellHeight * _zoomLevel;
     final rowNumWidth = _kRowNumWidth * _zoomLevel;
-    final isWineFridge = cellar.theme == VirtualCellarTheme.wineFridge;
     final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
+    final isStoneCave = cellar.theme == VirtualCellarTheme.stoneCave;
+    final isGarageIndustrial = cellar.theme == VirtualCellarTheme.garageIndustrial;
     final rowGap = 6 * _zoomLevel;
 
     return Column(
@@ -1654,6 +1663,46 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                                 moveState: moveState,
                               ),
                             )
+                          : isStoneCave
+                          ? StoneCaveWrapper(
+                              columns: cellar.columns,
+                              rows: cellar.rows,
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              rowNumWidth: rowNumWidth,
+                              rowGap: rowGap,
+                              gridChild: _buildGridContent(
+                                context,
+                                cellar: cellar,
+                                lookup: lookup,
+                                cellWidth: cellWidth,
+                                cellHeight: cellHeight,
+                                rowNumWidth: rowNumWidth,
+                                rowGap: rowGap,
+                                onSlotTap: onSlotTap,
+                                moveState: moveState,
+                              ),
+                            )
+                          : isGarageIndustrial
+                          ? GarageIndustrialWrapper(
+                              columns: cellar.columns,
+                              rows: cellar.rows,
+                              cellWidth: cellWidth,
+                              cellHeight: cellHeight,
+                              rowNumWidth: rowNumWidth,
+                              rowGap: rowGap,
+                              gridChild: _buildGridContent(
+                                context,
+                                cellar: cellar,
+                                lookup: lookup,
+                                cellWidth: cellWidth,
+                                cellHeight: cellHeight,
+                                rowNumWidth: rowNumWidth,
+                                rowGap: rowGap,
+                                onSlotTap: onSlotTap,
+                                moveState: moveState,
+                              ),
+                            )
                           : Container(
                         padding: EdgeInsets.fromLTRB(
                           10 * _zoomLevel,
@@ -1663,43 +1712,16 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                         ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(
-                            isWineFridge ? 18 : 14,
+                            14,
                           ),
-                          gradient: isWineFridge
-                              ? LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerHighest,
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerLow,
-                                  ],
-                                )
-                              : null,
-                          color: isWineFridge
-                              ? null
-                              : Theme.of(
+                          color: Theme.of(
                                   context,
                                 ).colorScheme.surfaceContainerLowest,
                           border: Border.all(
-                            color: isWineFridge
-                                ? Theme.of(context).colorScheme.outlineVariant
-                                : Theme.of(
+                            color: Theme.of(
                                     context,
                                   ).colorScheme.surfaceContainerHigh,
                           ),
-                          boxShadow: isWineFridge
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ]
-                              : null,
                         ),
                         child: _buildGridContent(
                                 context,
@@ -1747,8 +1769,14 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     required BottleMoveStateEntity moveState,
   }) {
     final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
+    final isStoneCave = cellar.theme == VirtualCellarTheme.stoneCave;
+    final isGarageIndustrial = cellar.theme == VirtualCellarTheme.garageIndustrial;
     final labelColor = isPremiumCave
         ? const Color(0xCCA8C8E0)
+        : isStoneCave
+        ? const Color(0xCCF0E4D0)
+        : isGarageIndustrial
+        ? const Color(0xCCD0D4DA)
         : Theme.of(context).colorScheme.outline;
     final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: labelColor,
@@ -1901,8 +1929,10 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
     final hasWine = wine != null;
     final visibleWine = hasWine && !widget.hideBottleVisual;
     final wineColor = hasWine ? AppTheme.colorForWine(wine.color.name) : null;
-    final isWineFridge = widget.cellarTheme == VirtualCellarTheme.wineFridge;
     final isPremiumCave = widget.cellarTheme == VirtualCellarTheme.premiumCave;
+    final isStoneCave = widget.cellarTheme == VirtualCellarTheme.stoneCave;
+    final isGarageIndustrial = widget.cellarTheme == VirtualCellarTheme.garageIndustrial;
+    final isImmersive = isPremiumCave || isStoneCave || isGarageIndustrial;
 
     final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
     final isSelected =
@@ -1924,10 +1954,8 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
         ? (widget.previewIsValid
               ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.35)
               : theme.colorScheme.errorContainer.withValues(alpha: 0.4))
-        : isPremiumCave
+        : isImmersive
         ? Colors.transparent
-        : isWineFridge
-        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7)
         : Colors.transparent;
 
     final content = GestureDetector(
@@ -1954,19 +1982,13 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
         decoration: BoxDecoration(
           color: slotBackgroundColor,
           borderRadius: BorderRadius.circular(
-              isPremiumCave ? 0 : (isWineFridge ? 12 : 10)),
-          border: isWineFridge
-              ? Border.all(
-                  color: slotStrokeColor.withValues(alpha: 0.7),
-                  width: widget.isPreviewTarget || isSelected ? 1.8 : 1.2,
-                )
-              : null,
+              isImmersive ? 0 : 10),
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (isPremiumCave)
-              // Premium cave: no decorative wave or bar – bottles sit on
+            if (isImmersive)
+              // Immersive themes: no decorative wave or bar – bottles sit on
               // the painted shelf rails. Show only a subtle selection ring
               // or preview border.
               if (widget.isPreviewTarget || isSelected)
@@ -1987,19 +2009,6 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
                 )
               else
                 const SizedBox.shrink()
-            else if (isWineFridge)
-              Positioned(
-                bottom: 8,
-                left: 8,
-                right: 8,
-                child: Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: slotStrokeColor.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              )
             else
               Positioned(
                 bottom: 8,
@@ -2013,56 +2022,14 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
               ),
             if (visibleWine)
               Positioned(
-                top: isPremiumCave ? 2 : (isWineFridge ? 5 : 6),
-                child: isPremiumCave
+                top: isImmersive ? 2 : 6,
+                child: isImmersive
                     ? CustomPaint(
                         size: const Size(28, 28),
                         painter: _BottleFacePainter(
                           wineColor: wineColor!,
                           isSelected: isSelected,
                         ),
-                      )
-                    : isWineFridge
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: wineColor!.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                          Container(
-                            width: 13,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  wineColor.withValues(alpha: 0.85),
-                                  wineColor,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isSelected
-                                    ? theme.colorScheme.primary
-                                    : Colors.white.withValues(alpha: 0.75),
-                                width: isSelected ? 1.8 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.14),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                       )
                     : Container(
                         width: 16,
@@ -2088,23 +2055,20 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
               )
             else if (!widget.showDragGhost)
               Positioned(
-                top: isPremiumCave ? 6 : (isWineFridge ? 11 : 8),
-                child: isPremiumCave
+                top: isImmersive ? 6 : 8,
+                child: isImmersive
                     ? CustomPaint(
                         size: const Size(24, 24),
                         painter: _EmptySlotDashedPainter(),
                       )
                     : Container(
-                  width: isWineFridge ? 8 : 6,
-                  height: isWineFridge ? 14 : 6,
+                  width: 6,
+                  height: 6,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.outlineVariant.withValues(
                       alpha: 0.55,
                     ),
-                    borderRadius: isWineFridge
-                        ? BorderRadius.circular(8)
-                        : null,
-                    shape: isWineFridge ? BoxShape.rectangle : BoxShape.circle,
+                    shape: BoxShape.circle,
                   ),
                 ),
               ),
