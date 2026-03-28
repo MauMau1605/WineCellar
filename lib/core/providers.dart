@@ -239,6 +239,17 @@ final useOcrForImagesProvider =
   );
 });
 
+/// Clé API Gemini dédiée à la recherche web (fallback).
+/// Permet de compléter les champs estimés via Gemini Search même si
+/// le fournisseur principal est Mistral/OpenAI/Ollama.
+final geminiFallbackApiKeyProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyGeminiFallbackApiKey,
+  );
+});
+
 /// Reusable notifier for secure string storage
 class SecureStringNotifier extends StateNotifier<String?> {
   final FlutterSecureStorage _storage;
@@ -431,6 +442,32 @@ final visionAiServiceProvider = Provider<AiService?>((ref) {
 
 final addWineUseCaseProvider = Provider<AddWineUseCase>((ref) {
   return AddWineUseCase(ref.watch(wineRepositoryProvider));
+});
+
+/// GeminiService dédié à la recherche web (complétion de champs estimés).
+/// Utilise la clé fallback Gemini si le fournisseur principal n'est pas Gemini,
+/// sinon réutilise la clé Gemini principale.
+final geminiWebSearchServiceProvider = Provider<GeminiService?>((ref) {
+  final mainProvider = ref.watch(aiProviderSettingProvider);
+  final mainGeminiKey = ref.watch(geminiApiKeyProvider);
+  final fallbackKey = ref.watch(geminiFallbackApiKeyProvider);
+
+  // Si Gemini est le fournisseur principal, utiliser sa clé.
+  if (mainProvider == AiProvider.gemini) {
+    if (mainGeminiKey == null || mainGeminiKey.isEmpty) return null;
+    final model = ref.watch(selectedModelProvider);
+    return GeminiService(
+      apiKey: mainGeminiKey,
+      model: _sanitizeGeminiModel(model),
+    );
+  }
+
+  // Sinon, utiliser la clé fallback.
+  if (fallbackKey == null || fallbackKey.isEmpty) return null;
+  return GeminiService(
+    apiKey: fallbackKey,
+    model: AppConstants.defaultGeminiModel,
+  );
 });
 
 final getWineByIdUseCaseProvider = Provider<GetWineByIdUseCase>((ref) {

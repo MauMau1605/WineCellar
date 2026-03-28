@@ -25,9 +25,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _modelController = TextEditingController();
   final _visionModelController = TextEditingController();
   final _visionApiKeyController = TextEditingController();
+  final _geminiFallbackKeyController = TextEditingController();
   AiProvider? _visionProviderOverride;
   bool _obscureApiKey = true;
   bool _obscureVisionApiKey = true;
+  bool _obscureFallbackKey = true;
   bool _testingConnection = false;
 
   @override
@@ -49,6 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final visionProviderName = ref.read(visionProviderOverrideProvider);
     final visionModel = ref.read(visionModelOverrideProvider);
     final visionApiKey = ref.read(visionApiKeyOverrideProvider);
+    final geminiFallbackKey = ref.read(geminiFallbackApiKeyProvider);
 
     final parsedVisionProvider = AiProvider.values.where(
       (provider) => provider.name == visionProviderName,
@@ -65,6 +68,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : parsedVisionProvider.first;
       _visionModelController.text = visionModel ?? '';
       _visionApiKeyController.text = visionApiKey ?? '';
+      _geminiFallbackKeyController.text = geminiFallbackKey ?? '';
     });
   }
 
@@ -77,6 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _modelController.dispose();
     _visionModelController.dispose();
     _visionApiKeyController.dispose();
+    _geminiFallbackKeyController.dispose();
     super.dispose();
   }
 
@@ -359,6 +364,71 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // -------- Section : Recherche web Gemini --------
+          if (currentProvider != AiProvider.gemini) ...[
+            Text(
+              'Recherche web (Gemini)',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Permet de compléter automatiquement les informations '
+                      'manquantes d\u2019un vin (fenêtre de dégustation, notes\u2026) '
+                      'via la recherche internet Gemini.\n\n'
+                      'Actuellement, seul Google Gemini permet d\u2019accéder '
+                      'à internet en direct grâce au Search Grounding. '
+                      'Vous pouvez utiliser un autre fournisseur (Mistral, '
+                      'OpenAI\u2026) comme modèle principal pour l\u2019ajout '
+                      'de vins, et configurer ici une clé Gemini uniquement '
+                      'pour la complétion d\u2019informations à la demande.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _geminiFallbackKeyController,
+                      decoration: InputDecoration(
+                        labelText: 'Clé API Gemini (recherche web)',
+                        hintText: 'AIza...',
+                        prefixIcon: const Icon(Icons.travel_explore),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureFallbackKey
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscureFallbackKey = !_obscureFallbackKey,
+                          ),
+                        ),
+                      ),
+                      obscureText: _obscureFallbackKey,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Gratuit — obtenez votre clé sur aistudio.google.com',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
           // -------- Section : Analyse d'image --------
           Text(
             'Analyse d\'image',
@@ -594,6 +664,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         .setValue(
           _visionApiKeyController.text.isNotEmpty
               ? _visionApiKeyController.text
+              : null,
+        );
+
+    await ref
+        .read(geminiFallbackApiKeyProvider.notifier)
+        .setValue(
+          _geminiFallbackKeyController.text.isNotEmpty
+              ? _geminiFallbackKeyController.text
               : null,
         );
 

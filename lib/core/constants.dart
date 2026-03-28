@@ -39,6 +39,9 @@ class AppConstants {
   /// Si true, utilise l'OCR local (MLKit) au lieu de l'analyse IA multimodale
   static const String keyUseOcrForImages = 'use_ocr_for_images';
 
+  /// Clé API Gemini dédiée à la recherche web (fallback pour compléter les champs estimés)
+  static const String keyGeminiFallbackApiKey = 'gemini_fallback_api_key';
+
   // Expert cellar editor
   static const String keyExpertCellarDraft = 'expert_cellar_draft';
 

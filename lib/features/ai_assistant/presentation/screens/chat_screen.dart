@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:wine_cellar/core/chat_logger.dart';
 import 'package:wine_cellar/core/enums.dart';
@@ -13,6 +15,7 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_servic
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
@@ -26,6 +29,9 @@ import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 enum _DuplicateChoice { incrementExisting, createNew }
 
 enum _PreAddChoice { edit, continueAdd }
+
+/// The three modes available in the AI chat.
+enum _ChatMode { addWine, foodPairing, wineReview }
 
 /// Data passed from the add-wine screen to pre-fill the AI chat.
 class PrefillData {
@@ -56,14 +62,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   static List<ChatMessage> _sessionMessages = [];
   static List<WineAiResponse> _sessionWineDataList = [];
-  static bool _sessionSearchMode = false;
+  static _ChatMode _sessionChatMode = _ChatMode.addWine;
 
   final List<ChatMessage> _messages = [];
   List<WineAiResponse> _currentWineDataList = [];
   final Set<int> _addedWineIndices = {};
   final Set<int> _manuallyEditedWineIndices = {};
   bool _isLoading = false;
-  bool _searchMode = false;
+  _ChatMode _chatMode = _ChatMode.addWine;
   final _chatLogger = ChatLogger();
   PrefillData? _prefillData;
 
@@ -81,7 +87,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } else {
       _messages.addAll(_sessionMessages);
       _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
-      _searchMode = _sessionSearchMode;
+      _chatMode = _sessionChatMode;
     }
     _handlePrefillMessage();
   }
@@ -155,9 +161,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          _searchMode
+                          _chatMode == _ChatMode.foodPairing
                               ? 'L\'IA cherche dans votre cave...'
-                              : 'L\'IA analyse votre vin...',
+                              : _chatMode == _ChatMode.wineReview
+                                  ? 'Recherche d\'avis sur internet...'
+                                  : 'L\'IA analyse votre vin...',
                         ),
                       ],
                     ),
@@ -211,9 +219,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: TextField(
                       controller: _textController,
                       decoration: InputDecoration(
-                        hintText: _searchMode
+                        hintText: _chatMode == _ChatMode.foodPairing
                             ? 'Décrivez votre repas...'
-                            : 'Décrivez votre vin...',
+                            : _chatMode == _ChatMode.wineReview
+                                ? 'Quel vin souhaitez-vous évaluer ?'
+                                : 'Décrivez votre vin...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                         ),
@@ -469,7 +479,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     String messageToSend = aiMessage?.trim() ?? trimmed;
     List<WineEntity> cellarWinesForSearch = const [];
-    if (aiMessage == null && _searchMode) {
+    if (aiMessage == null && _chatMode == _ChatMode.foodPairing) {
       final wines = await ref.read(wineRepositoryProvider).getAllWines();
       cellarWinesForSearch = wines;
       final cellarSummary = _buildCellarSummary(wines);
@@ -477,19 +487,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         userQuestion: trimmed,
         cellarSummary: cellarSummary,
       );
+    } else if (aiMessage == null && _chatMode == _ChatMode.wineReview) {
+      final aiService = ref.read(aiServiceProvider);
+      final geminiWebSearch = ref.read(geminiWebSearchServiceProvider);
+      if (aiService != null && aiService.supportsWebSearch) {
+        messageToSend = AiPrompts.buildGroundedReviewMessage(
+          userQuestion: trimmed,
+        );
+      } else if (geminiWebSearch != null) {
+        // Fallback: use Gemini web search service directly
+        messageToSend = AiPrompts.buildGroundedReviewMessage(
+          userQuestion: trimmed,
+        );
+      } else {
+        messageToSend = AiPrompts.buildWineReviewMessage(
+          userQuestion: trimmed,
+        );
+      }
     }
 
     _chatLogger.logUserMessage(trimmed);
+
+    final mainServiceSupportsWebSearch =
+        ref.read(aiServiceProvider)?.supportsWebSearch == true;
+    final geminiWebSearch = ref.read(geminiWebSearchServiceProvider);
+    final useWebSearchForReview = _chatMode == _ChatMode.wineReview &&
+        (mainServiceSupportsWebSearch || geminiWebSearch != null);
+
+    // If review mode with fallback Gemini (main service doesn't support web search),
+    // call the Gemini service directly instead of going through the main use case.
+    if (useWebSearchForReview && !mainServiceSupportsWebSearch && geminiWebSearch != null) {
+      try {
+        final result = await geminiWebSearch.analyzeWineWithWebSearch(
+          userMessage: messageToSend,
+          conversationHistory: history,
+        );
+        if (!mounted) return;
+        _handleWebSearchResult(result);
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: 'Erreur de recherche web : $e',
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+        });
+      }
+      _cacheConversationState();
+      _scrollToBottom();
+      return;
+    }
 
     final either = await analyzeUseCase(
       AnalyzeWineParams(
         userMessage: messageToSend,
         conversationHistory: history,
+        useWebSearch: useWebSearchForReview,
       ),
     );
 
-    either.fold(
-      (failure) {
+    await either.fold(
+      (failure) async {
         _chatLogger.logError(failure.message);
         setState(() {
           _isLoading = false;
@@ -503,14 +566,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         });
       },
-      (result) {
+      (result) async {
         _chatLogger.logAiResponse(result.textResponse);
-        final assistantText = _searchMode
+        String assistantText = _chatMode == _ChatMode.foodPairing
             ? _appendWineDetailLinksToResponse(
                 result.textResponse,
                 cellarWinesForSearch,
               )
             : result.textResponse;
+
+        var recoveredWineDataList = result.wineDataList;
+        if (_chatMode == _ChatMode.addWine && recoveredWineDataList.isEmpty) {
+          recoveredWineDataList = await _recoverWineDataIfMissing(
+            analyzeUseCase: analyzeUseCase,
+            baseHistory: history,
+            originalUserMessage: messageToSend,
+            assistantResponse: result.textResponse,
+          );
+        }
+
+        // Append web sources as markdown links
+        if (result.webSources.isNotEmpty) {
+          final sourcesSection = StringBuffer();
+          sourcesSection.writeln();
+          sourcesSection.writeln('---');
+          sourcesSection.writeln('🔗 **Sources :**');
+          final seen = <String>{};
+          for (final source in result.webSources) {
+            if (seen.add(source.uri)) {
+              sourcesSection.writeln('- [${source.title}](${source.uri})');
+            }
+          }
+          assistantText = '$assistantText${sourcesSection.toString()}';
+        }
         setState(() {
           _isLoading = false;
           _messages.add(
@@ -522,8 +610,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           );
 
-          if (result.wineDataList.isNotEmpty) {
-            _currentWineDataList = result.wineDataList;
+          if (recoveredWineDataList.isNotEmpty) {
+            _currentWineDataList = recoveredWineDataList;
             _addedWineIndices.clear();
           }
         });
@@ -533,16 +621,100 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToBottom();
   }
 
+  /// Handle a web search result (used by fallback Gemini path).
+  void _handleWebSearchResult(AiChatResult result) {
+    _chatLogger.logAiResponse(result.textResponse);
+    String assistantText = result.textResponse;
+    if (result.webSources.isNotEmpty) {
+      final sourcesSection = StringBuffer();
+      sourcesSection.writeln();
+      sourcesSection.writeln('---');
+      sourcesSection.writeln('🔗 **Sources :**');
+      final seen = <String>{};
+      for (final source in result.webSources) {
+        if (seen.add(source.uri)) {
+          sourcesSection.writeln('- [${source.title}](${source.uri})');
+        }
+      }
+      assistantText = '$assistantText${sourcesSection.toString()}';
+    }
+    setState(() {
+      _isLoading = false;
+      _messages.add(
+        ChatMessage(
+          id: _uuid.v4(),
+          content: assistantText,
+          role: ChatRole.assistant,
+          timestamp: DateTime.now(),
+        ),
+      );
+    });
+  }
+
   void _handleAssistantLinkTap(String href) {
     if (!mounted) return;
+    // Internal app routes
     if (href.startsWith('/')) {
       context.push(href);
       return;
     }
     final uri = Uri.tryParse(href);
-    if (uri != null && uri.path.startsWith('/cellar/wine/')) {
+    if (uri == null) return;
+    // Internal wine detail links
+    if (uri.path.startsWith('/cellar/wine/')) {
       context.push(uri.path);
+      return;
     }
+    // External web links (from grounded search sources)
+    if (uri.scheme == 'https' || uri.scheme == 'http') {
+      launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<List<WineAiResponse>> _recoverWineDataIfMissing({
+    required AnalyzeWineUseCase analyzeUseCase,
+    required List<Map<String, String>> baseHistory,
+    required String originalUserMessage,
+    required String assistantResponse,
+  }) async {
+    if (assistantResponse.trim().isEmpty) return const [];
+
+    final repairHistory = <Map<String, String>>[
+      ...baseHistory,
+      {
+        'role': 'user',
+        'content': originalUserMessage,
+      },
+      {
+        'role': 'assistant',
+        'content': assistantResponse,
+      },
+    ];
+
+    final repairEither = await analyzeUseCase(
+      AnalyzeWineParams(
+        userMessage: AiPrompts.buildMissingJsonRecoveryMessage(
+          originalUserMessage: originalUserMessage,
+          previousAssistantResponse: assistantResponse,
+        ),
+        conversationHistory: repairHistory,
+      ),
+    );
+
+    return repairEither.fold(
+      (failure) {
+        _chatLogger.logError(
+          'Échec de récupération de la fiche vin: ${failure.message}',
+        );
+        return const <WineAiResponse>[];
+      },
+      (repairResult) {
+        if (repairResult.wineDataList.isNotEmpty) {
+          _chatLogger.logAiResponse(repairResult.textResponse);
+        }
+        return repairResult.wineDataList;
+      },
+    );
   }
 
   String _appendWineDetailLinksToResponse(
@@ -593,9 +765,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      // Ensure we are in add-wine mode, not search mode.
-      if (_searchMode) {
-        _onModeChanged(false);
+      // Ensure we are in add-wine mode, not search or review mode.
+      if (_chatMode != _ChatMode.addWine) {
+        _onModeChanged(_ChatMode.addWine);
       }
 
       final analyzeUseCase = ref.read(analyzeWineUseCaseProvider);
@@ -638,15 +810,217 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     for (var i = 0; i < _currentWineDataList.length; i++) {
       final alreadyAdded = _addedWineIndices.contains(i);
+      final wineData = _currentWineDataList[i];
       cards.add(
         WinePreviewCard(
-          wineData: _currentWineDataList[i],
+          wineData: wineData,
           onConfirm: alreadyAdded ? null : () => _addWineToCellar(context, i),
           onEdit: alreadyAdded ? null : () => _editWineDataDialog(i),
         ),
       );
+
+      // Show "complete with web search" button if there are estimated fields
+      if (!alreadyAdded &&
+          wineData.estimatedFields.isNotEmpty &&
+          wineData.name != null &&
+          _chatMode == _ChatMode.addWine) {
+        final geminiService = ref.read(geminiWebSearchServiceProvider);
+        if (geminiService != null) {
+          cards.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: OutlinedButton.icon(
+                onPressed:
+                    _isLoading ? null : () => _completeWithWebSearch(i),
+                icon: const Icon(Icons.travel_explore, size: 18),
+                label: Text(
+                  'Compléter ${wineData.estimatedFields.length} '
+                  'champ(s) via Google',
+                ),
+              ),
+            ),
+          );
+        }
+      }
     }
     return cards;
+  }
+
+  /// Complete estimated fields for a wine using Gemini web search.
+  Future<void> _completeWithWebSearch(int wineIndex) async {
+    if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return;
+
+    final geminiService = ref.read(geminiWebSearchServiceProvider);
+    if (geminiService == null) return;
+
+    final wine = _currentWineDataList[wineIndex];
+    if (wine.estimatedFields.isEmpty || wine.name == null) return;
+
+    setState(() => _isLoading = true);
+
+    // Add a user-visible message
+    setState(() {
+      _messages.add(
+        ChatMessage(
+          id: _uuid.v4(),
+          content: '🌐 Recherche d\'informations complémentaires pour '
+              '**${wine.name}**…',
+          role: ChatRole.system,
+          timestamp: DateTime.now(),
+        ),
+      );
+    });
+    _scrollToBottom();
+
+    try {
+      final message = AiPrompts.buildFieldCompletionMessage(
+        wineName: wine.name!,
+        vintage: wine.vintage,
+        color: wine.color,
+        appellation: wine.appellation,
+        fieldsToComplete: wine.estimatedFields,
+      );
+
+      final result = await geminiService.analyzeWineWithWebSearch(
+        userMessage: message,
+        systemPromptOverride: AiPrompts.fieldCompletionSystemPrompt,
+      );
+
+      if (!mounted) return;
+
+      if (result.isError) {
+        setState(() {
+          _isLoading = false;
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: '❌ ${result.errorMessage}',
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+        });
+        _scrollToBottom();
+        return;
+      }
+
+      // Try to parse the JSON complement from the response
+      final complementData = _extractCompletionJson(result.textResponse);
+
+      if (complementData == null) {
+        setState(() {
+          _isLoading = false;
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: '⚠️ Aucune information complémentaire trouvée '
+                  'dans les résultats de recherche.\n\n'
+                  '${result.textResponse}',
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+        });
+        _scrollToBottom();
+        return;
+      }
+
+      final complement = WineAiResponse.fromJson(complementData);
+
+      // Count how many fields were actually completed
+      final completedFields = wine.estimatedFields
+          .where((f) => WineAiResponse.fieldWasCompleted(f, complement))
+          .toList();
+
+      if (completedFields.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _messages.add(
+            ChatMessage(
+              id: _uuid.v4(),
+              content: '⚠️ La recherche n\'a pas permis de confirmer '
+                  'les informations estimées.\n\n'
+                  '${result.textResponse}',
+              role: ChatRole.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+        });
+        _scrollToBottom();
+        return;
+      }
+
+      // Merge and update
+      final merged = wine.mergeWith(complement);
+      setState(() {
+        _currentWineDataList[wineIndex] = merged;
+        _isLoading = false;
+
+        String sourcesText = '';
+        if (result.webSources.isNotEmpty) {
+          final seen = <String>{};
+          final links = result.webSources
+              .where((s) => seen.add(s.uri))
+              .take(3)
+              .map((s) => '- [${s.title}](${s.uri})')
+              .join('\n');
+          sourcesText = '\n\n🔗 **Sources :**\n$links';
+        }
+
+        _messages.add(
+          ChatMessage(
+            id: _uuid.v4(),
+            content: '✅ **${completedFields.length} champ(s) complété(s)** '
+                'via la recherche Google :\n'
+                '${completedFields.map((f) => '• $f').join('\n')}'
+                '$sourcesText',
+            role: ChatRole.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+      _cacheConversationState();
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _messages.add(
+          ChatMessage(
+            id: _uuid.v4(),
+            content: '❌ Erreur lors de la recherche web : $e',
+            role: ChatRole.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+      _scrollToBottom();
+    }
+  }
+
+  /// Extract JSON from a Gemini response that may contain markdown code blocks.
+  Map<String, dynamic>? _extractCompletionJson(String text) {
+    // Try to extract JSON from ```json ... ``` block
+    final jsonBlockRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
+    final match = jsonBlockRegex.firstMatch(text);
+    if (match != null) {
+      try {
+        final decoded = jsonDecode(match.group(1)!);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+
+    // Try to find a JSON object directly in the text
+    final braceStart = text.indexOf('{');
+    final braceEnd = text.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      try {
+        final decoded = jsonDecode(text.substring(braceStart, braceEnd + 1));
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+
+    return null;
   }
 
   Future<void> _addAllWinesToCellar(BuildContext context) async {
@@ -1312,7 +1686,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages.clear();
       _currentWineDataList = [];
       _addedWineIndices.clear();
-      _searchMode = false;
+      _chatMode = _ChatMode.addWine;
       _messages.add(_buildWelcomeMessage());
     });
     _cacheConversationState();
@@ -1362,7 +1736,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _cacheConversationState() {
     _sessionMessages = List<ChatMessage>.from(_messages);
     _sessionWineDataList = List<WineAiResponse>.from(_currentWineDataList);
-    _sessionSearchMode = _searchMode;
+    _sessionChatMode = _chatMode;
   }
 
   // ---- Mode selector & cellar search helpers ----
@@ -1370,27 +1744,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildModeSelector() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SegmentedButton<bool>(
+      child: SegmentedButton<_ChatMode>(
         segments: const [
           ButtonSegment(
-            value: false,
-            label: Text('Ajouter un vin'),
+            value: _ChatMode.addWine,
+            label: Text('Ajouter'),
             icon: Icon(Icons.wine_bar, size: 18),
           ),
           ButtonSegment(
-            value: true,
-            label: Text('Accord mets-vin'),
+            value: _ChatMode.foodPairing,
+            label: Text('Accords'),
             icon: Icon(Icons.restaurant, size: 18),
           ),
+          ButtonSegment(
+            value: _ChatMode.wineReview,
+            label: Text('Avis'),
+            icon: Icon(Icons.rate_review, size: 18),
+          ),
         ],
-        selected: {_searchMode},
+        selected: {_chatMode},
         onSelectionChanged: (selected) => _onModeChanged(selected.first),
       ),
     );
   }
 
-  void _onModeChanged(bool searchMode) {
-    if (_searchMode == searchMode) return;
+  void _onModeChanged(_ChatMode newMode) {
+    if (_chatMode == newMode) return;
 
     // Reset AI session on mode switch for clean context
     final aiService = ref.read(aiServiceProvider);
@@ -1401,24 +1780,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     setState(() {
-      _searchMode = searchMode;
+      _chatMode = newMode;
       _currentWineDataList = [];
       _addedWineIndices.clear();
       _messages.add(
         ChatMessage(
           id: _uuid.v4(),
-          content: searchMode
-              ? '🔍 **Mode accord mets-vin activé**\n'
-                    'Décrivez votre repas et je chercherai le meilleur vin '
-                    'dans votre cave. Les vins à boire prochainement seront '
-                    'privilégiés.\n\n'
-                    'Exemples :\n'
-                    '• "Je prépare un gigot d\'agneau"\n'
-                    '• "Plateau de fromages ce soir"\n'
-                    '• "Sushi et cuisine japonaise"'
-              : '🍷 **Mode ajout de vin activé**\n'
-                    'Décrivez-moi les vins que vous souhaitez ajouter à '
-                    'votre cave.',
+          content: switch (newMode) {
+            _ChatMode.foodPairing =>
+              '🔍 **Mode accord mets-vin activé**\n'
+                  'Décrivez votre repas et je chercherai le meilleur vin '
+                  'dans votre cave. Les vins à boire prochainement seront '
+                  'privilégiés.\n\n'
+                  'Exemples :\n'
+                  '• "Je prépare un gigot d\'agneau"\n'
+                  '• "Plateau de fromages ce soir"\n'
+                  '• "Sushi et cuisine japonaise"',
+            _ChatMode.wineReview => () {
+                final hasWebSearch =
+                    ref.read(aiServiceProvider)?.supportsWebSearch == true ||
+                    ref.read(geminiWebSearchServiceProvider) != null;
+                return hasWebSearch
+                    ? '📋 **Mode avis sur un vin activé**\n'
+                        'Demandez-moi des informations sur un vin et je '
+                        'chercherai des avis et notes sur internet via '
+                        'Google Search.\n\n'
+                        '🌐 Les sources seront citées pour chaque information.\n\n'
+                        'Exemples :\n'
+                        '• "Que vaut le Château Margaux 2015 ?"\n'
+                        '• "Parle-moi du Domaine de la Romanée-Conti"\n'
+                        '• "Le millésime 2020 en Bourgogne est-il bon ?"'
+                    : '📋 **Mode avis sur un vin activé**\n'
+                        'Demandez-moi des informations sur un vin et je vous '
+                        'donnerai ce que je sais avec honnêteté — en distinguant '
+                        'les faits établis de mes estimations.\n\n'
+                        '⚠️ La recherche web n\'est disponible qu\'avec Gemini. '
+                        'Ajoutez une clé API Gemini dans les paramètres pour '
+                        'activer la recherche internet.\n\n'
+                        'Exemples :\n'
+                        '• "Que vaut le Château Margaux 2015 ?"\n'
+                        '• "Parle-moi du Domaine de la Romanée-Conti"\n'
+                        '• "Le millésime 2020 en Bourgogne est-il bon ?"';
+              }(),
+            _ChatMode.addWine =>
+              '🍷 **Mode ajout de vin activé**\n'
+                  'Décrivez-moi les vins que vous souhaitez ajouter à '
+                  'votre cave.',
+          },
           role: ChatRole.assistant,
           timestamp: DateTime.now(),
         ),

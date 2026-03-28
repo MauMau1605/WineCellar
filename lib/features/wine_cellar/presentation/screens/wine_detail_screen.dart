@@ -603,8 +603,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () =>
-                                context.push('/cellars/${cellar.id}'),
+                            onPressed: () {
+                              Navigator.of(dialogContext).pop();
+                              context.push('/cellars/${cellar.id}?highlightWineId=${wine.id}');
+                            },
                             child: const Text('Ouvrir le cellier'),
                           ),
                         ],
@@ -639,46 +641,54 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     required List<BottlePlacementEntity> placements,
     required Color wineColor,
   }) {
-    final maxColumns = cellar.columns > 10 ? 10 : cellar.columns;
-    final maxRows = cellar.rows > 8 ? 8 : cellar.rows;
-
     final points = <(int, int)>{
       for (final p in placements) (p.positionY, p.positionX),
     };
 
+    final gridContent = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(cellar.rows, (r) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(cellar.columns, (c) {
+            final occupied = points.contains((r, c));
+            return Container(
+              width: 20,
+              height: 20,
+              margin: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                color: occupied
+                    ? wineColor.withValues(alpha: 0.25)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.35),
+                border: Border.all(
+                  color: occupied
+                      ? wineColor
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
+        );
+      }),
+    );
+
     return Container(
+      constraints: const BoxConstraints(maxHeight: 200, maxWidth: 500),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(maxRows, (r) {
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(maxColumns, (c) {
-              final occupied = points.contains((r, c));
-              return Container(
-                width: 20,
-                height: 20,
-                margin: const EdgeInsets.all(1),
-                decoration: BoxDecoration(
-                  color: occupied
-                      ? wineColor.withValues(alpha: 0.25)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.35),
-                  border: Border.all(
-                    color: occupied
-                        ? wineColor
-                        : Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              );
-            }),
-          );
-        }),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: gridContent,
+          ),
+        ),
       ),
     );
   }

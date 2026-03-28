@@ -691,7 +691,35 @@ class _AiTokensTab extends StatelessWidget {
           'OCR local: lit le texte de l etiquette sans envoyer l image.',
           'Vision IA: possible avec un fournisseur/modele vision compatible.',
           'Vous pouvez definir un token et un modele dedies a la vision.',
-          'Seul Gemini avec gemini-2.5-flash-lite a pour le moment ete teste en version gratuite.'
+          'Seul Gemini avec gemini-2.5-flash-lite a pour le moment ete teste en version gratuite.',
+        ]),
+        _BlockTitle('Les 3 modes de chat IA'),
+        _Paragraph(
+          'L assistant IA propose trois modes accessibles via le selecteur en haut du chat :',
+        ),
+        _Bullets([
+          'Ajouter un vin : decrivez un vin et l IA extrait les informations structurees pour l ajouter a votre cave.',
+          'Accord mets-vin : demandez des suggestions d accords avec les vins de votre cave.',
+          'Avis sur un vin : obtenez un avis detaille sur un vin avec recherche internet (necessite Gemini).',
+        ]),
+        _BlockTitle('Recherche web et Gemini'),
+        _Paragraph(
+          'Actuellement, seul Google Gemini peut acceder a internet '
+          'pour verifier et completer les informations sur un vin '
+          '(grace au Search Grounding). Les autres fournisseurs '
+          '(OpenAI, Mistral, Ollama) ne disposent pas de cette '
+          'fonctionnalite.',
+        ),
+        _Bullets([
+          'En mode "Avis sur un vin", si Gemini est votre fournisseur principal, la recherche web est automatique.',
+          'Si vous utilisez un autre fournisseur, vous pouvez configurer une cle Gemini dediee dans Parametres > Recherche web (Gemini). L IA utilisera alors Gemini en complement pour les recherches internet.',
+          'Apres l ajout d un vin, si des champs sont estimes par l IA (signales par une etoile), un bouton "Completer via Google" permet de verifier ces informations par recherche internet.',
+        ]),
+        _BlockTitle('Champs estimes et anti-hallucination'),
+        _Bullets([
+          'L IA signale les champs qu elle a estimes ou deduits (et non directement fournis par vous) avec une icone etoile.',
+          'Une note de confiance explique le raisonnement de l IA pour ses estimations.',
+          'Utilisez le bouton "Completer via Google" pour faire verifier ces estimations par une recherche internet.',
         ]),
       ],
     );

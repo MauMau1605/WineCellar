@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 
 /// Screen for editing an existing wine's fields
@@ -46,6 +47,7 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
   WineColor _selectedColor = WineColor.red;
   List<FoodCategoryEntity> _allPairingCategories = const [];
   Set<int> _selectedPairingIds = <int>{};
+  List<String> _existingLocations = const [];
 
   @override
   void initState() {
@@ -68,6 +70,7 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     _cellarXCtrl = TextEditingController();
     _cellarYCtrl = TextEditingController();
     _loadWine();
+    _loadExistingLocations();
   }
 
   Future<void> _loadWine() async {
@@ -113,6 +116,17 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     if (!mounted) return;
     setState(() {
       _allPairingCategories = categories;
+    });
+  }
+
+  Future<void> _loadExistingLocations() async {
+    final result = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
+    if (!mounted) return;
+    final cellars = result.getOrElse((_) => const []);
+    setState(() {
+      _existingLocations = cellars.map((c) => c.name).toList();
     });
   }
 
@@ -327,13 +341,34 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _locationCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Localisation',
-                prefixIcon: Icon(Icons.place),
-                helperText: 'Ex: Cave maison, Garage, Cellier...',
-              ),
+            Autocomplete<String>(
+              optionsBuilder: (textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return _existingLocations;
+                }
+                final query = textEditingValue.text.toLowerCase();
+                return _existingLocations.where(
+                  (loc) => loc.toLowerCase().contains(query),
+                );
+              },
+              initialValue: TextEditingValue(text: _locationCtrl.text),
+              fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                controller.addListener(() {
+                  _locationCtrl.text = controller.text;
+                });
+                return TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Localisation',
+                    prefixIcon: Icon(Icons.place),
+                    helperText: 'Sélectionner ou saisir un nouveau nom',
+                  ),
+                );
+              },
+              onSelected: (String selection) {
+                _locationCtrl.text = selection;
+              },
             ),
             const SizedBox(height: 12),
             Row(
@@ -454,11 +489,35 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     );
   }
 
+  /// If the location text doesn't match any existing virtual cellar name,
+  /// create a new empty virtual cellar with that name.
+  Future<void> _ensureVirtualCellarForLocation(String location) async {
+    if (location.isEmpty) return;
+    final exists = _existingLocations.any(
+      (loc) => loc.toLowerCase() == location.toLowerCase(),
+    );
+    if (exists) return;
+
+    final newCellar = VirtualCellarEntity(
+      name: location,
+      rows: 5,
+      columns: 5,
+    );
+    await ref.read(createVirtualCellarUseCaseProvider).call(newCellar);
+    await _loadExistingLocations();
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_wine == null) return;
 
     setState(() => _saving = true);
+
+    final location = _locationCtrl.text.trim();
+    if (location.isNotEmpty) {
+      await _ensureVirtualCellarForLocation(location);
+      if (!mounted) return;
+    }
 
     final grapes = _grapesCtrl.text
         .split(',')

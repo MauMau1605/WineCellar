@@ -18,6 +18,12 @@ class WineAiResponse {
   final bool needsMoreInfo;
   final String? followUpQuestion;
 
+  /// Fields that were estimated/inferred by the AI (not provided by the user).
+  final List<String> estimatedFields;
+
+  /// AI's reasoning for estimated fields (especially drinking window).
+  final String? confidenceNotes;
+
   const WineAiResponse({
     this.name,
     this.appellation,
@@ -36,6 +42,8 @@ class WineAiResponse {
     this.description,
     this.needsMoreInfo = false,
     this.followUpQuestion,
+    this.estimatedFields = const [],
+    this.confidenceNotes,
   });
 
   factory WineAiResponse.fromJson(Map<String, dynamic> json) {
@@ -63,6 +71,11 @@ class WineAiResponse {
       description: json['description'] as String?,
       needsMoreInfo: json['needsMoreInfo'] as bool? ?? false,
       followUpQuestion: json['followUpQuestion'] as String?,
+      estimatedFields: (json['estimatedFields'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      confidenceNotes: json['confidenceNotes'] as String?,
     );
   }
 
@@ -85,9 +98,61 @@ class WineAiResponse {
       'description': description,
       'needsMoreInfo': needsMoreInfo,
       'followUpQuestion': followUpQuestion,
+      'estimatedFields': estimatedFields,
+      'confidenceNotes': confidenceNotes,
     };
   }
 
   /// Check if we have enough info to create a wine entry
   bool get isComplete => name != null && color != null;
+
+  /// Returns a copy with non-null fields from [other] overwriting this instance.
+  /// Only overwrites fields that are non-null/non-empty in [other].
+  WineAiResponse mergeWith(WineAiResponse other) {
+    return WineAiResponse(
+      name: name,
+      appellation: other.appellation ?? appellation,
+      producer: other.producer ?? producer,
+      region: other.region ?? region,
+      country: other.country ?? country,
+      color: color,
+      vintage: vintage,
+      grapeVarieties: other.grapeVarieties.isNotEmpty
+          ? other.grapeVarieties
+          : grapeVarieties,
+      quantity: quantity,
+      purchasePrice: purchasePrice,
+      drinkFromYear: other.drinkFromYear ?? drinkFromYear,
+      drinkUntilYear: other.drinkUntilYear ?? drinkUntilYear,
+      tastingNotes: other.tastingNotes ?? tastingNotes,
+      suggestedFoodPairings: suggestedFoodPairings,
+      description: description,
+      needsMoreInfo: needsMoreInfo,
+      followUpQuestion: followUpQuestion,
+      // Remove completed fields from estimatedFields
+      estimatedFields: estimatedFields
+          .where((f) => !_fieldWasCompleted(f, other))
+          .toList(),
+      confidenceNotes: confidenceNotes,
+    );
+  }
+
+  bool _fieldWasCompleted(String fieldName, WineAiResponse other) {
+    return fieldWasCompleted(fieldName, other);
+  }
+
+  /// Check if a field was completed by [other].
+  static bool fieldWasCompleted(String fieldName, WineAiResponse other) {
+    return switch (fieldName) {
+      'appellation' => other.appellation != null,
+      'region' => other.region != null,
+      'country' => other.country != null,
+      'producer' => other.producer != null,
+      'grapeVarieties' => other.grapeVarieties.isNotEmpty,
+      'drinkFromYear' => other.drinkFromYear != null,
+      'drinkUntilYear' => other.drinkUntilYear != null,
+      'tastingNotes' => other.tastingNotes != null,
+      _ => false,
+    };
+  }
 }

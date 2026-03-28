@@ -40,6 +40,24 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   final _searchController = TextEditingController();
   WineFilter _filter = const WineFilter();
   WineSort? _sort;
+  List<String> _availableLocations = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    final result = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
+    if (!mounted) return;
+    final cellars = result.getOrElse((_) => const []);
+    setState(() {
+      _availableLocations = cellars.map((c) => c.name).toList()..sort();
+    });
+  }
 
   @override
   void dispose() {
@@ -137,7 +155,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                   if (value.isEmpty) {
                     _filter = _filter.copyWith(clearSearch: true);
                   } else {
-                    _filter = WineFilter(searchQuery: value);
+                    _filter = _filter.copyWith(
+                      searchQuery: value,
+                      clearColor: true,
+                      clearMaturity: true,
+                    );
                   }
                 });
               },
@@ -145,6 +167,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           ),
           // Filter chips
           _buildFilterChips(),
+          // Location filter chips
+          if (_availableLocations.isNotEmpty)
+            _buildLocationFilterChips(),
           // Wine list
           Expanded(
             child: winesAsync.when(
@@ -155,6 +180,15 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                           .where((w) => w.maturity == _filter.maturity)
                           .toList()
                     : wines;
+
+                // Apply location filter in-memory
+                if (_filter.locations.isNotEmpty) {
+                  filtered = filtered
+                      .where((w) =>
+                          w.location != null &&
+                          _filter.locations.contains(w.location))
+                      .toList();
+                }
 
                 // Apply sort
                 if (_sort != null) {
@@ -276,9 +310,14 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 selected: _filter.color == color,
                 onSelected: (selected) {
                   setState(() {
-                    _filter = selected
-                        ? WineFilter(color: color)
-                        : const WineFilter();
+                    if (selected) {
+                      _filter = _filter.copyWith(
+                        color: color,
+                        clearMaturity: true,
+                      );
+                    } else {
+                      _filter = _filter.copyWith(clearColor: true);
+                    }
                   });
                 },
               ),
@@ -296,14 +335,70 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                     selected: _filter.maturity == maturity,
                     onSelected: (selected) {
                       setState(() {
-                        _filter = selected
-                            ? WineFilter(maturity: maturity)
-                            : const WineFilter();
+                        if (selected) {
+                          _filter = _filter.copyWith(
+                            maturity: maturity,
+                            clearColor: true,
+                          );
+                        } else {
+                          _filter = _filter.copyWith(clearMaturity: true);
+                        }
                       });
                     },
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            Icons.place,
+            size: 16,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          const SizedBox(width: 6),
+          ..._availableLocations.map(
+            (location) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(location),
+                selected: _filter.locations.contains(location),
+                onSelected: (selected) {
+                  setState(() {
+                    final newLocations = {..._filter.locations};
+                    if (selected) {
+                      newLocations.add(location);
+                    } else {
+                      newLocations.remove(location);
+                    }
+                    _filter = _filter.copyWith(
+                      locations: newLocations,
+                    );
+                  });
+                },
+              ),
+            ),
+          ),
+          if (_filter.locations.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: ActionChip(
+                label: const Text('Tout effacer'),
+                onPressed: () {
+                  setState(() {
+                    _filter = _filter.copyWith(clearLocations: true);
+                  });
+                },
+              ),
+            ),
         ],
       ),
     );

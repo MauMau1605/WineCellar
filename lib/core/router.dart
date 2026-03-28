@@ -63,9 +63,14 @@ final GoRouter appRouter = GoRouter(
                 final preSelectedWineId = wineIdStr != null
                     ? int.tryParse(wineIdStr)
                     : null;
+                final highlightWineIdStr = state.uri.queryParameters['highlightWineId'];
+                final highlightWineId = highlightWineIdStr != null
+                    ? int.tryParse(highlightWineIdStr)
+                    : null;
                 return VirtualCellarDetailScreen(
                   cellarId: id,
                   preSelectedWineId: preSelectedWineId,
+                  highlightWineId: highlightWineId,
                 );
               },
             ),

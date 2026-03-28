@@ -85,7 +85,8 @@ enum WineSortField {
   color,
   region,
   appellation,
-  rating;
+  rating,
+  location;
 
   String get label {
     switch (this) {
@@ -105,6 +106,8 @@ enum WineSortField {
         return 'Appellation';
       case WineSortField.rating:
         return 'Note';
+      case WineSortField.location:
+        return 'Localisation';
     }
   }
 }

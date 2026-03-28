@@ -87,17 +87,25 @@ class MistralService implements AiService {
 
       // Add current user message
       messages.add({'role': 'user', 'content': userMessage});
+      final forceJsonOnly =
+          userMessage.contains(AiPrompts.forceJsonOnlyToken);
+
+      final payload = <String, dynamic>{
+        'model': model,
+        'messages': messages,
+        'temperature': 0.3,
+        'max_tokens': 8000,
+      };
+
+      if (forceJsonOnly) {
+        payload['response_format'] = {'type': 'json_object'};
+      }
 
       _recordApiRequest(endpoint: 'chat/completions', modelName: model);
 
       final response = await _dio.post(
         '/v1/chat/completions',
-        data: {
-          'model': model,
-          'messages': messages,
-          'temperature': 0.3,
-          'max_tokens': 8000,
-        },
+        data: payload,
       );
 
       final data = response.data as Map<String, dynamic>;
@@ -105,8 +113,11 @@ class MistralService implements AiService {
       final textResponse =
           choices?.firstOrNull?['message']?['content'] as String? ?? '';
 
-      // Update session history
-      _sessionHistory.add({'role': 'user', 'content': userMessage});
+        // Update session history (strip internal control token from persisted context)
+        final userMessageForHistory = userMessage
+          .replaceAll(AiPrompts.forceJsonOnlyToken, '')
+          .trim();
+        _sessionHistory.add({'role': 'user', 'content': userMessageForHistory});
       _sessionHistory.add({'role': 'assistant', 'content': textResponse});
 
       final wineDataList = _extractWineData(textResponse);
@@ -301,6 +312,21 @@ class MistralService implements AiService {
   }
 
   @override
+  bool get supportsWebSearch => false;
+
+  @override
+  Future<AiChatResult> analyzeWineWithWebSearch({
+    required String userMessage,
+    List<Map<String, String>> conversationHistory = const [],
+    String? systemPromptOverride,
+  }) async {
+    return analyzeWine(
+      userMessage: userMessage,
+      conversationHistory: conversationHistory,
+    );
+  }
+
+  @override
   Future<bool> testConnection() async {
     try {
       _recordApiRequest(endpoint: 'models', modelName: 'list');
@@ -315,14 +341,21 @@ class MistralService implements AiService {
   /// Extract JSON block from AI response text (supports {"wines":[...]} and single object)
   List<WineAiResponse> _extractWineData(String response) {
     try {
-      final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
-      final match = jsonRegex.firstMatch(response);
-
-      if (match != null) {
-        final jsonStr = match.group(1)!;
-        return _parseWineJson(jsonStr);
+      // 1. Look for JSON block between <json> and </json> tags (as requested by system prompt)
+      final xmlJsonRegex = RegExp(r'<json>\s*([\s\S]*?)\s*</json>');
+      final xmlMatch = xmlJsonRegex.firstMatch(response);
+      if (xmlMatch != null) {
+        return _parseWineJson(xmlMatch.group(1)!);
       }
 
+      // 2. Look for JSON block between ```json and ```
+      final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
+      final match = jsonRegex.firstMatch(response);
+      if (match != null) {
+        return _parseWineJson(match.group(1)!);
+      }
+
+      // 3. Fallback: try to find raw JSON object/array
       final rawJsonRegex = RegExp(r'\{[\s\S]*"(?:wines|name)"[\s\S]*\}');
       final rawMatch = rawJsonRegex.firstMatch(response);
       if (rawMatch != null) {
@@ -352,6 +385,7 @@ class MistralService implements AiService {
 
   String _cleanTextResponse(String response) {
     return response
+        .replaceAll(RegExp(r'<json>\s*[\s\S]*?\s*</json>'), '')
         .replaceAll(RegExp(r'```json\s*[\s\S]*?\s*```'), '')
         .trim();
   }

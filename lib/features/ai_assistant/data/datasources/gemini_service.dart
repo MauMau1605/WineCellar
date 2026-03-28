@@ -343,19 +343,159 @@ class GeminiService implements AiService {
     }
   }
 
+  @override
+  bool get supportsWebSearch => true;
+
+  @override
+  Future<AiChatResult> analyzeWineWithWebSearch({
+    required String userMessage,
+    List<Map<String, String>> conversationHistory = const [],
+    String? systemPromptOverride,
+  }) async {
+    try {
+      await _waitForRateLimit();
+
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+
+      // Build contents from conversation history + current message
+      final contents = <Map<String, dynamic>>[];
+      for (final msg in conversationHistory) {
+        final role = msg['role'] == 'user' ? 'user' : 'model';
+        contents.add({
+          'role': role,
+          'parts': [{'text': msg['content'] ?? ''}],
+        });
+      }
+      contents.add({
+        'role': 'user',
+        'parts': [{'text': userMessage}],
+      });
+
+      _recordApiRequest(
+        endpoint: 'generateContent.webSearch',
+        modelName: model,
+      );
+
+      final systemPrompt =
+          systemPromptOverride ?? AiPrompts.groundedReviewSystemPrompt;
+
+      final response = await dio.post(
+        '/v1beta/models/$model:generateContent',
+        queryParameters: {'key': apiKey},
+        data: {
+          'contents': contents,
+          'systemInstruction': {
+            'parts': [{'text': systemPrompt}],
+          },
+          'tools': [
+            {'google_search': {}},
+          ],
+          'generationConfig': {
+            'temperature': 0.3,
+            'maxOutputTokens': 8000,
+          },
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final candidates = data['candidates'] as List?;
+      if (candidates == null || candidates.isEmpty) {
+        return AiChatResult.error(
+          'Gemini n\'a retourné aucun résultat pour cette recherche.',
+        );
+      }
+
+      final candidate = candidates.first as Map<String, dynamic>;
+      final content = candidate['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List?;
+      final textResponse = parts
+              ?.whereType<Map<String, dynamic>>()
+              .map((p) => p['text'] as String?)
+              .where((t) => t != null)
+              .join('') ??
+          '';
+
+      // Extract grounding sources
+      final groundingMeta =
+          candidate['groundingMetadata'] as Map<String, dynamic>?;
+      final webSources = <WebSource>[];
+      if (groundingMeta != null) {
+        final chunks = groundingMeta['groundingChunks'] as List?;
+        if (chunks != null) {
+          for (final chunk in chunks) {
+            final web = (chunk as Map<String, dynamic>?)?['web']
+                as Map<String, dynamic>?;
+            if (web != null) {
+              final uri = web['uri'] as String?;
+              final title = web['title'] as String?;
+              if (uri != null) {
+                webSources.add(WebSource(
+                  uri: uri,
+                  title: title ?? uri,
+                ));
+              }
+            }
+          }
+        }
+      }
+
+      return AiChatResult(
+        textResponse: textResponse,
+        webSources: webSources,
+      );
+    } on DioException catch (e) {
+      _logger.e('Gemini web search API error', error: e);
+
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 429) {
+        return AiChatResult.error(
+          'Limite de requêtes Gemini atteinte. Attendez quelques minutes.',
+        );
+      }
+
+      String errorMsg =
+          'Erreur de recherche web avec Gemini: ${e.message}';
+      final responseData = e.response?.data;
+      if (responseData is Map) {
+        final error = responseData['error'];
+        if (error is Map) {
+          final detail = error['message']?.toString();
+          if (detail != null) errorMsg = 'Erreur Gemini: $detail';
+        }
+      }
+      return AiChatResult.error(errorMsg);
+    } catch (e) {
+      _logger.e('Gemini web search error', error: e);
+      return AiChatResult.error(
+        'Erreur de recherche web avec Gemini: ${e.toString()}',
+      );
+    }
+  }
+
   /// Extract JSON block from AI response text (supports {"wines":[...]} array and single object)
   List<WineAiResponse> _extractWineData(String response) {
     try {
-      // Look for JSON block between ```json and ```
-      final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
-      final match = jsonRegex.firstMatch(response);
-
-      if (match != null) {
-        final jsonStr = match.group(1)!;
-        return _parseWineJson(jsonStr);
+      // 1. Look for JSON block between <json> and </json> tags (as requested by system prompt)
+      final xmlJsonRegex = RegExp(r'<json>\s*([\s\S]*?)\s*</json>');
+      final xmlMatch = xmlJsonRegex.firstMatch(response);
+      if (xmlMatch != null) {
+        return _parseWineJson(xmlMatch.group(1)!);
       }
 
-      // Fallback: try to find raw JSON object/array
+      // 2. Look for JSON block between ```json and ```
+      final jsonRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
+      final match = jsonRegex.firstMatch(response);
+      if (match != null) {
+        return _parseWineJson(match.group(1)!);
+      }
+
+      // 3. Fallback: try to find raw JSON object/array
       final rawJsonRegex = RegExp(r'\{[\s\S]*"(?:wines|name)"[\s\S]*\}');
       final rawMatch = rawJsonRegex.firstMatch(response);
       if (rawMatch != null) {
@@ -389,6 +529,7 @@ class GeminiService implements AiService {
   /// Remove the JSON block from the display text
   String _cleanTextResponse(String response) {
     return response
+        .replaceAll(RegExp(r'<json>\s*[\s\S]*?\s*</json>'), '')
         .replaceAll(RegExp(r'```json\s*[\s\S]*?\s*```'), '')
         .trim();
   }

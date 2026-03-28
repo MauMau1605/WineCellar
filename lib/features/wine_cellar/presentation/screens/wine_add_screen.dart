@@ -13,6 +13,8 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_qua
 
 enum _DuplicateChoice { incrementExisting, createNew }
 
+enum _PlacementChoice { none, associateOnly, placeInSlot }
+
 /// Screen used to choose between AI-assisted add and manual add.
 class WineAddScreen extends ConsumerStatefulWidget {
   const WineAddScreen({super.key});
@@ -46,6 +48,7 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
   bool _saving = false;
   List<FoodCategoryEntity> _allPairingCategories = const [];
   Set<int> _selectedPairingIds = <int>{};
+  List<String> _existingLocations = const [];
 
   bool get _canSubmit {
     final hasName = _nameCtrl.text.trim().isNotEmpty;
@@ -59,6 +62,7 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     _nameCtrl.addListener(_refresh);
     _vintageCtrl.addListener(_refresh);
     _loadFoodCategories();
+    _loadExistingLocations();
   }
 
   Future<void> _loadFoodCategories() async {
@@ -68,6 +72,17 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     if (!mounted) return;
     setState(() {
       _allPairingCategories = categories;
+    });
+  }
+
+  Future<void> _loadExistingLocations() async {
+    final result = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
+    if (!mounted) return;
+    final cellars = result.getOrElse((_) => const []);
+    setState(() {
+      _existingLocations = cellars.map((c) => c.name).toList();
     });
   }
 
@@ -297,12 +312,37 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _locationCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Localisation',
-                  prefixIcon: Icon(Icons.place),
-                ),
+              Autocomplete<String>(
+                optionsBuilder: (textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return _existingLocations;
+                  }
+                  final query = textEditingValue.text.toLowerCase();
+                  return _existingLocations.where(
+                    (loc) => loc.toLowerCase().contains(query),
+                  );
+                },
+                fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                  // Sync initial value
+                  if (controller.text != _locationCtrl.text && _locationCtrl.text.isNotEmpty) {
+                    controller.text = _locationCtrl.text;
+                  }
+                  controller.addListener(() {
+                    _locationCtrl.text = controller.text;
+                  });
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Localisation',
+                      prefixIcon: Icon(Icons.place),
+                      helperText: 'Sélectionner ou saisir un nouveau nom',
+                    ),
+                  );
+                },
+                onSelected: (String selection) {
+                  _locationCtrl.text = selection;
+                },
               ),
               const SizedBox(height: 12),
               Row(
@@ -493,6 +533,24 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     );
   }
 
+  /// If the location text doesn't match any existing virtual cellar name,
+  /// create a new empty virtual cellar with that name.
+  Future<void> _ensureVirtualCellarForLocation(String location) async {
+    if (location.isEmpty) return;
+    final exists = _existingLocations.any(
+      (loc) => loc.toLowerCase() == location.toLowerCase(),
+    );
+    if (exists) return;
+
+    final newCellar = VirtualCellarEntity(
+      name: location,
+      rows: 5,
+      columns: 5,
+    );
+    await ref.read(createVirtualCellarUseCaseProvider).call(newCellar);
+    await _loadExistingLocations();
+  }
+
   Future<void> _onManualAddPressed() async {
     if (!_canSubmit) {
       await _showMissingInfoDialog();
@@ -559,6 +617,12 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
 
     setState(() => _saving = true);
 
+    final location = _locationCtrl.text.trim();
+    if (location.isNotEmpty) {
+      await _ensureVirtualCellarForLocation(location);
+      if (!mounted) return;
+    }
+
     final result = await ref.read(addWineUseCaseProvider).call(entity);
 
     result.fold(
@@ -580,52 +644,116 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
   Future<void> _askPlaceInCellar(int wineId) async {
     if (!mounted) return;
 
-    final wantsToPlace = await showDialog<bool>(
+    // Show 3-option dialog
+    final choice = await showDialog<_PlacementChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Vin ajouté à la cave !'),
         content: const Text(
-          'Souhaitez-vous placer ce vin dans une cave virtuelle maintenant ?',
+          'Comment souhaitez-vous gérer le stockage de ce vin ?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(_PlacementChoice.none),
             child: const Text('Non merci'),
           ),
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(_PlacementChoice.associateOnly),
+            child: const Text('Associer à une cave'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Placer en cave'),
+            onPressed: () => Navigator.of(ctx).pop(_PlacementChoice.placeInSlot),
+            child: const Text('Placer à un emplacement'),
           ),
         ],
       ),
     );
 
-    if (!mounted) return;
-
-    if (wantsToPlace != true) {
-      context.go('/cellar/wine/$wineId');
+    if (!mounted || choice == null || choice == _PlacementChoice.none) {
+      if (mounted) context.go('/cellar/wine/$wineId');
       return;
     }
 
+    // Get or create cellars
+    final cellars = await _getOrCreateCellars();
+    if (!mounted || cellars.isEmpty) {
+      if (mounted) context.go('/cellar/wine/$wineId');
+      return;
+    }
+
+    // Select a cellar
+    final selectedCellar = await _showCellarPicker(cellars);
+    if (!mounted || selectedCellar == null || selectedCellar.id == null) {
+      if (mounted) context.go('/cellar/wine/$wineId');
+      return;
+    }
+
+    // Update wine location to match selected cellar name
+    await _updateWineLocation(wineId, selectedCellar.name);
+    if (!mounted) return;
+
+    if (choice == _PlacementChoice.associateOnly) {
+      context.go('/cellar/wine/$wineId');
+    } else {
+      context.go('/cellars/${selectedCellar.id}?wineId=$wineId');
+    }
+  }
+
+  Future<List<VirtualCellarEntity>> _getOrCreateCellars() async {
     final cellarsResult = await ref
         .read(virtualCellarRepositoryProvider)
         .getAll();
-    if (!mounted) return;
+    if (!mounted) return const [];
 
-    final cellars = cellarsResult.getOrElse((_) => const []);
-    if (cellars.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Aucune cave virtuelle. Créez-en une dans l\'onglet Celliers.',
-          ),
+    var cellars = cellarsResult.getOrElse((_) => const []);
+    if (cellars.isNotEmpty) return cellars;
+
+    // No cellars exist — propose creating a default one
+    final wantsCreate = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aucune cave'),
+        content: const Text(
+          'Vous n\'avez pas encore de cave virtuelle.\n'
+          'Voulez-vous en créer une par défaut (5×5) ?',
         ),
-      );
-      context.go('/cellar/wine/$wineId');
-      return;
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Non'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Créer une cave'),
+          ),
+        ],
+      ),
+    );
 
-    final selectedCellar = await showDialog<VirtualCellarEntity>(
+    if (!mounted || wantsCreate != true) return const [];
+
+    final newCellar = VirtualCellarEntity(
+      name: 'Ma cave',
+      rows: 5,
+      columns: 5,
+    );
+    final createResult = await ref
+        .read(createVirtualCellarUseCaseProvider)
+        .call(newCellar);
+    if (!mounted) return const [];
+
+    if (createResult.isLeft()) return const [];
+
+    final refreshed = await ref
+        .read(virtualCellarRepositoryProvider)
+        .getAll();
+    return refreshed.getOrElse((_) => const []);
+  }
+
+  Future<VirtualCellarEntity?> _showCellarPicker(
+    List<VirtualCellarEntity> cellars,
+  ) {
+    return showDialog<VirtualCellarEntity>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Choisir une cave'),
@@ -655,15 +783,17 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
         ],
       ),
     );
+  }
 
+  Future<void> _updateWineLocation(int wineId, String cellarName) async {
+    final wineResult = await ref.read(getWineByIdUseCaseProvider).call(wineId);
     if (!mounted) return;
 
-    if (selectedCellar == null || selectedCellar.id == null) {
-      context.go('/cellar/wine/$wineId');
-      return;
-    }
+    final wine = wineResult.getOrElse((_) => null);
+    if (wine == null) return;
 
-    context.go('/cellars/${selectedCellar.id}?wineId=$wineId');
+    final updated = wine.copyWith(location: cellarName);
+    await ref.read(updateWineUseCaseProvider).call(updated);
   }
 
   Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {

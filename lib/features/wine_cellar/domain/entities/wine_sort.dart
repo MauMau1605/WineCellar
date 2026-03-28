@@ -42,6 +42,8 @@ class WineSort {
         return (a.appellation ?? '').compareTo(b.appellation ?? '');
       case WineSortField.rating:
         return (a.rating ?? 0).compareTo(b.rating ?? 0);
+      case WineSortField.location:
+        return (a.location ?? '').compareTo(b.location ?? '');
     }
   }
 }

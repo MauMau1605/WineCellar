@@ -7,10 +7,12 @@ import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service
 class AnalyzeWineParams {
   final String userMessage;
   final List<Map<String, String>> conversationHistory;
+  final bool useWebSearch;
 
   const AnalyzeWineParams({
     required this.userMessage,
     this.conversationHistory = const [],
+    this.useWebSearch = false,
   });
 }
 
@@ -26,10 +28,18 @@ class AnalyzeWineUseCase implements UseCase<AiChatResult, AnalyzeWineParams> {
   @override
   Future<Either<Failure, AiChatResult>> call(AnalyzeWineParams params) async {
     try {
-      final result = await _aiService.analyzeWine(
-        userMessage: params.userMessage,
-        conversationHistory: params.conversationHistory,
-      );
+      final AiChatResult result;
+      if (params.useWebSearch) {
+        result = await _aiService.analyzeWineWithWebSearch(
+          userMessage: params.userMessage,
+          conversationHistory: params.conversationHistory,
+        );
+      } else {
+        result = await _aiService.analyzeWine(
+          userMessage: params.userMessage,
+          conversationHistory: params.conversationHistory,
+        );
+      }
 
       if (result.isError) {
         return Left(AiFailure(result.errorMessage ?? 'Erreur IA inconnue.'));

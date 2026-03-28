@@ -27,11 +27,13 @@ import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_ce
 class VirtualCellarDetailScreen extends ConsumerStatefulWidget {
   final int cellarId;
   final int? preSelectedWineId;
+  final int? highlightWineId;
 
   const VirtualCellarDetailScreen({
     super.key,
     required this.cellarId,
     this.preSelectedWineId,
+    this.highlightWineId,
   });
 
   @override
@@ -466,6 +468,7 @@ class _VirtualCellarDetailScreenState
                   onSlotTap: (row, col) =>
                       _onSlotTap(context, cellar, placements, row, col),
                   cellarId: widget.cellarId,
+                  highlightWineId: widget.highlightWineId,
                   onLongPressPlacement: _onLongPressPlacement,
                   onMovePlacement:
                       ({
@@ -1307,6 +1310,7 @@ class _CellarGridView extends ConsumerStatefulWidget {
   final _PendingPlacement? pendingPlacement;
   final void Function(int row, int col) onSlotTap;
   final int cellarId;
+  final int? highlightWineId;
   final void Function(int placementId) onLongPressPlacement;
   final Future<void> Function({
     required int anchorPlacementId,
@@ -1323,6 +1327,7 @@ class _CellarGridView extends ConsumerStatefulWidget {
     required this.pendingPlacement,
     required this.onSlotTap,
     required this.cellarId,
+    this.highlightWineId,
     required this.onLongPressPlacement,
     required this.onMovePlacement,
   });
@@ -1339,6 +1344,7 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   final ScrollController _horizontalController = ScrollController();
   final GlobalKey _dragAreaKey = GlobalKey();
   final Map<int, Offset> _activePointers = <int, Offset>{};
+  bool _highlightActive = false;
 
   int? _dragAnchorPlacementId;
   Set<(int, int)> _previewTargets = <(int, int)>{};
@@ -1346,6 +1352,19 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   double _zoomLevel = 1.0;
   double _pinchStartZoom = 1.0;
   double? _pinchStartDistance;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.highlightWineId != null) {
+      _highlightActive = true;
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _highlightActive = false);
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -1861,6 +1880,9 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                               _handleDragPointerUpdate,
                           hideBottleVisual: hideBottleVisual,
                           showDragGhost: showDragGhost,
+                          isHighlighted: _highlightActive &&
+                              placement != null &&
+                              placement.wineId == widget.highlightWineId,
                         );
                       },
                     ),
@@ -1884,6 +1906,7 @@ class _SlotCell extends ConsumerStatefulWidget {
   final int col;
   final VirtualCellarTheme cellarTheme;
   final bool isEmptyCell;
+  final bool isHighlighted;
   final bool isPreviewTarget;
   final bool previewIsValid;
   final int selectedCount;
@@ -1910,13 +1933,50 @@ class _SlotCell extends ConsumerStatefulWidget {
     required this.onDragPointerUpdate,
     required this.hideBottleVisual,
     required this.showDragGhost,
+    this.isHighlighted = false,
   });
 
   @override
   ConsumerState<_SlotCell> createState() => _SlotCellState();
 }
 
-class _SlotCellState extends ConsumerState<_SlotCell> {
+class _SlotCellState extends ConsumerState<_SlotCell>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _blinkController;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isHighlighted) {
+      _startBlink();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _SlotCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isHighlighted && !oldWidget.isHighlighted) {
+      _startBlink();
+    } else if (!widget.isHighlighted && _blinkController != null) {
+      _blinkController!.dispose();
+      _blinkController = null;
+    }
+  }
+
+  void _startBlink() {
+    _blinkController?.dispose();
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _blinkController?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Render empty cells as invisible (no symbol or background)
@@ -2094,6 +2154,28 @@ class _SlotCellState extends ConsumerState<_SlotCell> {
                     color: theme.colorScheme.primary,
                     shape: BoxShape.circle,
                   ),
+                ),
+              ),
+            if (widget.isHighlighted && _blinkController != null)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _blinkController!,
+                  builder: (context, child) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: theme.colorScheme.tertiary.withValues(
+                            alpha: _blinkController!.value * 0.9,
+                          ),
+                          width: 2.5,
+                        ),
+                        color: theme.colorScheme.tertiary.withValues(
+                          alpha: _blinkController!.value * 0.25,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
           ],
