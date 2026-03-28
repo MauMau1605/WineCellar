@@ -5,6 +5,8 @@ class ChatMessage {
   final ChatRole role;
   final DateTime timestamp;
   final WinePreviewData? winePreview; // attached wine data preview
+  final List<ChatSource> webSources;
+  final bool collapseSourcesByDefault;
 
   const ChatMessage({
     required this.id,
@@ -12,7 +14,16 @@ class ChatMessage {
     required this.role,
     required this.timestamp,
     this.winePreview,
+    this.webSources = const [],
+    this.collapseSourcesByDefault = true,
   });
+}
+
+class ChatSource {
+  final String title;
+  final String uri;
+
+  const ChatSource({required this.title, required this.uri});
 }
 
 enum ChatRole {

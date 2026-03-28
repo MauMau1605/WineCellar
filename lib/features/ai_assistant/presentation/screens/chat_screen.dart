@@ -68,6 +68,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   List<WineAiResponse> _currentWineDataList = [];
   final Set<int> _addedWineIndices = {};
   final Set<int> _manuallyEditedWineIndices = {};
+  final Set<int> _autoWebCompletionAttemptedIndices = {};
   bool _isLoading = false;
   _ChatMode _chatMode = _ChatMode.addWine;
   final _chatLogger = ChatLogger();
@@ -568,7 +569,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
       (result) async {
         _chatLogger.logAiResponse(result.textResponse);
-        String assistantText = _chatMode == _ChatMode.foodPairing
+        final assistantText = _chatMode == _ChatMode.foodPairing
             ? _appendWineDetailLinksToResponse(
                 result.textResponse,
                 cellarWinesForSearch,
@@ -585,20 +586,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
 
-        // Append web sources as markdown links
-        if (result.webSources.isNotEmpty) {
-          final sourcesSection = StringBuffer();
-          sourcesSection.writeln();
-          sourcesSection.writeln('---');
-          sourcesSection.writeln('🔗 **Sources :**');
-          final seen = <String>{};
-          for (final source in result.webSources) {
-            if (seen.add(source.uri)) {
-              sourcesSection.writeln('- [${source.title}](${source.uri})');
-            }
-          }
-          assistantText = '$assistantText${sourcesSection.toString()}';
-        }
+        final chatSources = _chatSourcesFromWebSources(result.webSources);
         setState(() {
           _isLoading = false;
           _messages.add(
@@ -607,14 +595,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               content: assistantText,
               role: ChatRole.assistant,
               timestamp: DateTime.now(),
+              webSources: chatSources,
+              collapseSourcesByDefault: chatSources.isNotEmpty,
             ),
           );
 
           if (recoveredWineDataList.isNotEmpty) {
             _currentWineDataList = recoveredWineDataList;
             _addedWineIndices.clear();
+            _autoWebCompletionAttemptedIndices.clear();
           }
         });
+
+        if (_chatMode == _ChatMode.addWine && _isAutoWebCompletionEnabled()) {
+          await _autoCompleteEstimatedFieldsIfNeeded();
+        }
       },
     );
     _cacheConversationState();
@@ -624,20 +619,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Handle a web search result (used by fallback Gemini path).
   void _handleWebSearchResult(AiChatResult result) {
     _chatLogger.logAiResponse(result.textResponse);
-    String assistantText = result.textResponse;
-    if (result.webSources.isNotEmpty) {
-      final sourcesSection = StringBuffer();
-      sourcesSection.writeln();
-      sourcesSection.writeln('---');
-      sourcesSection.writeln('🔗 **Sources :**');
-      final seen = <String>{};
-      for (final source in result.webSources) {
-        if (seen.add(source.uri)) {
-          sourcesSection.writeln('- [${source.title}](${source.uri})');
-        }
-      }
-      assistantText = '$assistantText${sourcesSection.toString()}';
-    }
+    final assistantText = result.textResponse;
+    final chatSources = _chatSourcesFromWebSources(result.webSources);
     setState(() {
       _isLoading = false;
       _messages.add(
@@ -646,9 +629,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           content: assistantText,
           role: ChatRole.assistant,
           timestamp: DateTime.now(),
+          webSources: chatSources,
+          collapseSourcesByDefault: chatSources.isNotEmpty,
         ),
       );
     });
+  }
+
+  bool _isAutoWebCompletionEnabled() {
+    final geminiService = ref.read(geminiWebSearchServiceProvider);
+    return geminiService != null;
+  }
+
+  Future<void> _autoCompleteEstimatedFieldsIfNeeded() async {
+    if (_chatMode != _ChatMode.addWine) return;
+    if (!_isAutoWebCompletionEnabled()) return;
+
+    for (var i = 0; i < _currentWineDataList.length; i++) {
+      if (_autoWebCompletionAttemptedIndices.contains(i)) continue;
+      if (_addedWineIndices.contains(i)) continue;
+
+      final wine = _currentWineDataList[i];
+      if (wine.name == null || wine.estimatedFields.isEmpty) continue;
+
+      _autoWebCompletionAttemptedIndices.add(i);
+      await _completeWithWebSearch(i, triggeredAutomatically: true);
+      if (!mounted) return;
+    }
+  }
+
+  List<ChatSource> _chatSourcesFromWebSources(List<WebSource> webSources) {
+    final seen = <String>{};
+    return webSources
+        .where((source) => seen.add(source.uri))
+        .map((source) => ChatSource(title: source.title, uri: source.uri))
+        .toList();
   }
 
   void _handleAssistantLinkTap(String href) {
@@ -823,7 +838,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!alreadyAdded &&
           wineData.estimatedFields.isNotEmpty &&
           wineData.name != null &&
-          _chatMode == _ChatMode.addWine) {
+          _chatMode == _ChatMode.addWine &&
+          !_isAutoWebCompletionEnabled()) {
         final geminiService = ref.read(geminiWebSearchServiceProvider);
         if (geminiService != null) {
           cards.add(
@@ -847,7 +863,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Complete estimated fields for a wine using Gemini web search.
-  Future<void> _completeWithWebSearch(int wineIndex) async {
+  Future<void> _completeWithWebSearch(
+    int wineIndex, {
+    bool triggeredAutomatically = false,
+  }) async {
     if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return;
 
     final geminiService = ref.read(geminiWebSearchServiceProvider);
@@ -858,19 +877,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     setState(() => _isLoading = true);
 
-    // Add a user-visible message
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          id: _uuid.v4(),
-          content: '🌐 Recherche d\'informations complémentaires pour '
-              '**${wine.name}**…',
-          role: ChatRole.system,
-          timestamp: DateTime.now(),
-        ),
-      );
-    });
-    _scrollToBottom();
+    if (!triggeredAutomatically) {
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            id: _uuid.v4(),
+            content: '🌐 Recherche d\'informations complémentaires pour '
+                '**${wine.name}**…',
+            role: ChatRole.system,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+      _scrollToBottom();
+    }
 
     try {
       final message = AiPrompts.buildFieldCompletionMessage(
@@ -952,30 +972,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Merge and update
       final merged = wine.mergeWith(complement);
+      final chatSources = _chatSourcesFromWebSources(result.webSources);
       setState(() {
         _currentWineDataList[wineIndex] = merged;
         _isLoading = false;
 
-        String sourcesText = '';
-        if (result.webSources.isNotEmpty) {
-          final seen = <String>{};
-          final links = result.webSources
-              .where((s) => seen.add(s.uri))
-              .take(3)
-              .map((s) => '- [${s.title}](${s.uri})')
-              .join('\n');
-          sourcesText = '\n\n🔗 **Sources :**\n$links';
-        }
-
         _messages.add(
           ChatMessage(
             id: _uuid.v4(),
-            content: '✅ **${completedFields.length} champ(s) complété(s)** '
-                'via la recherche Google :\n'
-                '${completedFields.map((f) => '• $f').join('\n')}'
-                '$sourcesText',
+            content: triggeredAutomatically
+                ? '✅ **${completedFields.length} champ(s) auto-complété(s)** '
+                    'via la recherche internet :\n'
+                    '${completedFields.map((f) => '• $f').join('\n')}'
+                : '✅ **${completedFields.length} champ(s) complété(s)** '
+                    'via la recherche Google :\n'
+                    '${completedFields.map((f) => '• $f').join('\n')}',
             role: ChatRole.assistant,
             timestamp: DateTime.now(),
+            webSources: chatSources,
+            collapseSourcesByDefault: chatSources.isNotEmpty,
           ),
         );
       });

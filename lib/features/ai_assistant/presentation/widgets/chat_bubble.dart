@@ -63,53 +63,105 @@ class ChatBubble extends StatelessWidget {
                         color: textColor,
                       ),
                     )
-                  : MarkdownBody(
-                      data: message.content,
-                      selectable: true,
-                      onTapLink: (text, href, title) {
-                        if (href == null || onLinkTap == null) return;
-                        onLinkTap!(href);
-                      },
-                      styleSheet: MarkdownStyleSheet(
-                        p: theme.textTheme.bodyMedium?.copyWith(color: textColor),
-                        h1: theme.textTheme.titleLarge?.copyWith(color: textColor),
-                        h2: theme.textTheme.titleMedium?.copyWith(color: textColor),
-                        h3: theme.textTheme.titleSmall?.copyWith(color: textColor),
-                        listBullet: theme.textTheme.bodyMedium?.copyWith(color: textColor),
-                        strong: theme.textTheme.bodyMedium?.copyWith(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        em: theme.textTheme.bodyMedium?.copyWith(
-                          color: textColor,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        code: theme.textTheme.bodySmall?.copyWith(
-                          color: textColor,
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                          fontFamily: 'monospace',
-                        ),
-                        codeblockDecoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        blockquoteDecoration: BoxDecoration(
-                          border: Border(
-                            left: BorderSide(
-                              color: textColor.withValues(alpha: 0.5),
-                              width: 3,
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        MarkdownBody(
+                          data: message.content,
+                          selectable: true,
+                          onTapLink: (text, href, title) {
+                            if (href == null || onLinkTap == null) return;
+                            onLinkTap!(href);
+                          },
+                          styleSheet: MarkdownStyleSheet(
+                            p: theme.textTheme.bodyMedium?.copyWith(color: textColor),
+                            h1: theme.textTheme.titleLarge?.copyWith(color: textColor),
+                            h2: theme.textTheme.titleMedium?.copyWith(color: textColor),
+                            h3: theme.textTheme.titleSmall?.copyWith(color: textColor),
+                            listBullet: theme.textTheme.bodyMedium?.copyWith(color: textColor),
+                            strong: theme.textTheme.bodyMedium?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
                             ),
+                            em: theme.textTheme.bodyMedium?.copyWith(
+                              color: textColor,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            code: theme.textTheme.bodySmall?.copyWith(
+                              color: textColor,
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                              fontFamily: 'monospace',
+                            ),
+                            codeblockDecoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            blockquoteDecoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: textColor.withValues(alpha: 0.5),
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                            tableBorder: TableBorder.all(
+                              color: textColor.withValues(alpha: 0.3),
+                            ),
+                            tableHead: theme.textTheme.bodyMedium?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            tableBody: theme.textTheme.bodyMedium?.copyWith(color: textColor),
                           ),
                         ),
-                        tableBorder: TableBorder.all(
-                          color: textColor.withValues(alpha: 0.3),
-                        ),
-                        tableHead: theme.textTheme.bodyMedium?.copyWith(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        tableBody: theme.textTheme.bodyMedium?.copyWith(color: textColor),
-                      ),
+                        if (message.webSources.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Theme(
+                            data: theme.copyWith(
+                              dividerColor: Colors.transparent,
+                              splashColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
+                            ),
+                            child: ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding: EdgeInsets.zero,
+                              maintainState: true,
+                              initiallyExpanded:
+                                  !message.collapseSourcesByDefault,
+                              title: Text(
+                                'Sources (${message.webSources.length})',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              iconColor: textColor,
+                              collapsedIconColor: textColor,
+                              children: message.webSources
+                                  .map(
+                                    (source) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: InkWell(
+                                        onTap: onLinkTap == null
+                                            ? null
+                                            : () => onLinkTap!(source.uri),
+                                        child: Text(
+                                          '- ${source.title}',
+                                          style:
+                                              theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.colorScheme.primary,
+                                            decoration:
+                                                TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
             ),
           ),
