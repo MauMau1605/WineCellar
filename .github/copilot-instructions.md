@@ -53,6 +53,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le détail complet.
 - Lors d'un changement de responsabilité ou d'architecture, mettre à jour `docs/ARCHITECTURE.md`.
 - Lors d'un ajout ou modification de fonctionnalité visible par l'utilisateur, mettre à jour le manuel utilisateur (`lib/features/user_manual/`).
 - Lors d'un ajout de fonctionnalité, ajouter ou mettre à jour les tests unitaires correspondants dans `test/`.
+- Lors d'une correction de bug, créer ou mettre à jour des tests associés qui reproduisent le bug corrigé afin de limiter les régressions futures.
 - En cas de demande ambiguë, demander une clarification avant d'implémenter.
 
 ## Base de données (Drift)

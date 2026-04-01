@@ -594,6 +594,7 @@ class _VirtualCellarTab extends StatelessWidget {
           'Creez un ou plusieurs celliers (taille configurable).',
           'Placez une bouteille sur une position libre.',
           'Visualisez rapidement ou se trouve chaque vin.',
+          'Apres ajout d un vin, vous pouvez l associer a un cellier existant, le placer directement sur une case, ou creer un nouveau cellier standard 5x5.',
         ]),
         _BlockTitle('Placer des bouteilles'),
         _Paragraph(
@@ -713,7 +714,9 @@ class _AiTokensTab extends StatelessWidget {
         _Bullets([
           'En mode "Avis sur un vin", si Gemini est votre fournisseur principal, la recherche web est automatique.',
           'Si vous utilisez un autre fournisseur, vous pouvez configurer une cle Gemini dediee dans Parametres > Recherche web (Gemini). L IA utilisera alors Gemini en complement pour les recherches internet.',
-          'Apres l ajout d un vin, si des champs sont estimes par l IA (signales par une etoile), un bouton "Completer via Google" permet de verifier ces informations par recherche internet.',
+          'Apres l ajout d un vin, la verification web est declenchee automatiquement seulement si des champs critiques restent estimes (ex: producteur, appellation, fenetre de degustation).',
+          'Le bouton "Completer via Google" reste disponible pour forcer la verification manuelle quand vous le jugez utile.',
+          'Si votre message est ambigu apres une fiche deja en cours, l assistant vous demande si c est un nouveau vin ou une precision sur le vin actuel.',
         ]),
         _BlockTitle('Champs estimes et anti-hallucination'),
         _Bullets([

@@ -42,6 +42,7 @@ class MistralService implements AiService {
         ));
 
   /// Reset the conversation session
+  @override
   void resetChat() {
     _sessionHistory.clear();
   }

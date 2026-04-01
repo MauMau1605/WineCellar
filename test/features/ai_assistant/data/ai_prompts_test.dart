@@ -199,7 +199,8 @@ void main() {
       test('impose de terminer par un bloc json', () {
         final prompt = AiPrompts.systemPrompt;
 
-        expect(prompt, contains('Tu dois TOUJOURS terminer ta réponse'));
+        expect(prompt, contains('RÉPONSE OBLIGATOIRE'));
+        expect(prompt, contains('<json>'));
       });
     });
 

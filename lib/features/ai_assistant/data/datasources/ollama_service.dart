@@ -17,6 +17,9 @@ class OllamaService implements AiService {
   bool get supportsWebSearch => false;
 
   @override
+  void resetChat() {} // Ollama is stateless — no session to reset.
+
+  @override
   Future<AiChatResult> analyzeWineWithWebSearch({
     required String userMessage,
     List<Map<String, String>> conversationHistory = const [],

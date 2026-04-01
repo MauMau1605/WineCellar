@@ -115,49 +115,83 @@ class ChatBubble extends StatelessWidget {
                           ),
                         ),
                         if (message.webSources.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Theme(
-                            data: theme.copyWith(
-                              dividerColor: Colors.transparent,
-                              splashColor: Colors.transparent,
-                              highlightColor: Colors.transparent,
-                            ),
-                            child: ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              childrenPadding: EdgeInsets.zero,
-                              maintainState: true,
-                              initiallyExpanded:
-                                  !message.collapseSourcesByDefault,
-                              title: Text(
-                                'Sources (${message.webSources.length})',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: textColor,
-                                  fontWeight: FontWeight.w600,
+                          const SizedBox(height: 10),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: theme.colorScheme.primary
+                                      .withValues(alpha: 0.5),
+                                  width: 2,
                                 ),
                               ),
-                              iconColor: textColor,
-                              collapsedIconColor: textColor,
-                              children: message.webSources
-                                  .map(
-                                    (source) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 6),
-                                      child: InkWell(
-                                        onTap: onLinkTap == null
-                                            ? null
-                                            : () => onLinkTap!(source.uri),
-                                        child: Text(
-                                          '- ${source.title}',
-                                          style:
-                                              theme.textTheme.bodySmall?.copyWith(
-                                            color: theme.colorScheme.primary,
-                                            decoration:
-                                                TextDecoration.underline,
+                            ),
+                            child: Theme(
+                              data: theme.copyWith(
+                                dividerColor: Colors.transparent,
+                              ),
+                              child: ExpansionTile(
+                                tilePadding:
+                                    const EdgeInsets.only(left: 8, right: 4),
+                                childrenPadding:
+                                    const EdgeInsets.only(left: 8),
+                                maintainState: true,
+                                initiallyExpanded:
+                                    !message.collapseSourcesByDefault,
+                                leading: Icon(
+                                  Icons.link,
+                                  size: 16,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                title: Text(
+                                  'Sources (${message.webSources.length})',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                iconColor: theme.colorScheme.primary,
+                                collapsedIconColor: theme.colorScheme.primary,
+                                children: message.webSources
+                                    .map(
+                                      (source) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 6),
+                                        child: InkWell(
+                                          onTap: onLinkTap == null
+                                              ? null
+                                              : () => onLinkTap!(source.uri),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Icon(
+                                                Icons.open_in_new,
+                                                size: 12,
+                                                color: theme
+                                                    .colorScheme.primary,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  source.title,
+                                                  style: theme
+                                                      .textTheme.bodySmall
+                                                      ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme.primary,
+                                                    decoration: TextDecoration
+                                                        .underline,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
+                                    )
+                                    .toList(),
+                              ),
                             ),
                           ),
                         ],

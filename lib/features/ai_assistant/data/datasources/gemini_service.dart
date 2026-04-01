@@ -54,6 +54,7 @@ class GeminiService implements AiService {
   Future<String?> discoverVisionModel() async => model;
 
   /// Reset the chat session (call when starting a new conversation)
+  @override
   void resetChat() {
     _chatSession = null;
   }

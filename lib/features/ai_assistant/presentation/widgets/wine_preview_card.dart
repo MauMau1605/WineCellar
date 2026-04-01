@@ -118,28 +118,46 @@ class WinePreviewCard extends StatelessWidget {
                 isEstimated: wineData.estimatedFields.contains('suggestedFoodPairings'),
               ),
 
-            // Confidence notes for estimated fields
+            // Confidence notes — collapsible to save vertical space
             if (wineData.confidenceNotes != null &&
                 wineData.confidenceNotes!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.amber.withValues(alpha: 0.3),
-                    ),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    dividerColor: Colors.transparent,
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.info_outline,
-                          size: 16, color: Colors.amber),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: ExpansionTile(
+                      tilePadding:
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      childrenPadding:
+                          const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                      leading: const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.amber,
+                      ),
+                      title: Text(
+                        'Estimations IA (${wineData.estimatedFields.length} champ(s))',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.amber,
+                        ),
+                      ),
+                      iconColor: Colors.amber,
+                      collapsedIconColor: Colors.amber,
+                      initiallyExpanded: false,
+                      children: [
+                        Text(
                           wineData.confidenceNotes!,
                           style: const TextStyle(
                             fontSize: 12,
@@ -147,8 +165,8 @@ class WinePreviewCard extends StatelessWidget {
                             color: Colors.amber,
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

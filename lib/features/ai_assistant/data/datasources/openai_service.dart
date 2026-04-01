@@ -14,6 +14,9 @@ class OpenAiService implements AiService {
   final Logger _logger = Logger();
   String? _discoveredVisionModel;
 
+  static const int _structuredOutputMaxTokens = 4000;
+  static const int _visionStructuredOutputMaxTokens = 2500;
+
   static const List<String> _preferredVisionModels = [
     'gpt-4o-mini',
     'gpt-4.1-mini',
@@ -77,7 +80,7 @@ class OpenAiService implements AiService {
         model: model,
         messages: messages,
         temperature: 0.3, // Low temperature for more consistent structured output
-        maxTokens: 1500,
+        maxTokens: _structuredOutputMaxTokens,
       );
 
       final textResponse = response.choices.first.message.content
@@ -220,7 +223,7 @@ class OpenAiService implements AiService {
         'model': modelName,
         'messages': messages,
         'temperature': 0.1,
-        'max_tokens': 1200,
+        'max_tokens': _visionStructuredOutputMaxTokens,
       },
     );
 
@@ -303,6 +306,9 @@ class OpenAiService implements AiService {
 
   @override
   bool get supportsWebSearch => false;
+
+  @override
+  void resetChat() {} // OpenAI is stateless — no session to reset.
 
   @override
   Future<AiChatResult> analyzeWineWithWebSearch({

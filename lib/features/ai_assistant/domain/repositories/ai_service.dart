@@ -30,6 +30,11 @@ abstract class AiService {
   /// Whether this service supports web-grounded search (e.g. Gemini Search).
   bool get supportsWebSearch => false;
 
+  /// Reset the internal chat/conversation session.
+  /// Implementations that maintain session state should clear it here.
+  /// Default: no-op.
+  void resetChat() {}
+
   /// Analyze wine using web search grounding for verified information.
   /// Default implementation falls back to regular [analyzeWine].
   /// [systemPromptOverride] replaces the default grounded review prompt.

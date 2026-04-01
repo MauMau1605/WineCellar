@@ -15,6 +15,10 @@ enum _DuplicateChoice { incrementExisting, createNew }
 
 enum _PlacementChoice { none, associateOnly, placeInSlot }
 
+class _CreateNewCellarChoice {
+  const _CreateNewCellarChoice();
+}
+
 /// Screen used to choose between AI-assisted add and manual add.
 class WineAddScreen extends ConsumerStatefulWidget {
   const WineAddScreen({super.key});
@@ -24,6 +28,8 @@ class WineAddScreen extends ConsumerStatefulWidget {
 }
 
 class _WineAddScreenState extends ConsumerState<WineAddScreen> {
+  static const _createNewCellarChoice = _CreateNewCellarChoice();
+
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _appellationCtrl = TextEditingController();
@@ -674,15 +680,7 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
       return;
     }
 
-    // Get or create cellars
-    final cellars = await _getOrCreateCellars();
-    if (!mounted || cellars.isEmpty) {
-      if (mounted) context.go('/cellar/wine/$wineId');
-      return;
-    }
-
-    // Select a cellar
-    final selectedCellar = await _showCellarPicker(cellars);
+    final selectedCellar = await _selectOrCreateCellar();
     if (!mounted || selectedCellar == null || selectedCellar.id == null) {
       if (mounted) context.go('/cellar/wine/$wineId');
       return;
@@ -699,61 +697,83 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
     }
   }
 
-  Future<List<VirtualCellarEntity>> _getOrCreateCellars() async {
+  Future<VirtualCellarEntity?> _selectOrCreateCellar() async {
     final cellarsResult = await ref
         .read(virtualCellarRepositoryProvider)
         .getAll();
-    if (!mounted) return const [];
+    if (!mounted) return null;
 
-    var cellars = cellarsResult.getOrElse((_) => const []);
-    if (cellars.isNotEmpty) return cellars;
+    final cellars = cellarsResult.getOrElse((_) => const []);
+    if (cellars.isEmpty) {
+      // Auto-create a default cellar when none exists.
+      return _createDefaultCellar(existingCellars: cellars);
+    }
 
-    // No cellars exist — propose creating a default one
-    final wantsCreate = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aucune cave'),
-        content: const Text(
-          'Vous n\'avez pas encore de cave virtuelle.\n'
-          'Voulez-vous en créer une par défaut (5×5) ?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Non'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Créer une cave'),
-          ),
-        ],
-      ),
-    );
+    final pickerResult = await _showCellarPicker(cellars);
+    if (!mounted || pickerResult == null) return null;
 
-    if (!mounted || wantsCreate != true) return const [];
+    if (pickerResult == _createNewCellarChoice) {
+      return _createDefaultCellar(existingCellars: cellars);
+    }
 
+    if (pickerResult is VirtualCellarEntity) {
+      return pickerResult;
+    }
+
+    return null;
+  }
+
+  Future<VirtualCellarEntity?> _createDefaultCellar({
+    required List<VirtualCellarEntity> existingCellars,
+  }) async {
+    final cellarName = _buildDefaultCellarName(existingCellars);
     final newCellar = VirtualCellarEntity(
-      name: 'Ma cave',
+      name: cellarName,
       rows: 5,
       columns: 5,
     );
+
     final createResult = await ref
         .read(createVirtualCellarUseCaseProvider)
         .call(newCellar);
-    if (!mounted) return const [];
+    if (!mounted) return null;
 
-    if (createResult.isLeft()) return const [];
-
-    final refreshed = await ref
-        .read(virtualCellarRepositoryProvider)
-        .getAll();
-    return refreshed.getOrElse((_) => const []);
+    return createResult.fold(
+      (failure) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message)),
+          );
+        }
+        return null;
+      },
+      (id) {
+        _loadExistingLocations();
+        return newCellar.copyWith(id: id);
+      },
+    );
   }
 
-  Future<VirtualCellarEntity?> _showCellarPicker(
+  String _buildDefaultCellarName(List<VirtualCellarEntity> existingCellars) {
+    final lowerNames = existingCellars
+        .map((cellar) => cellar.name.trim().toLowerCase())
+        .toSet();
+
+    if (!lowerNames.contains('ma cave')) {
+      return 'Ma cave';
+    }
+
+    var suffix = 2;
+    while (lowerNames.contains('ma cave $suffix')) {
+      suffix++;
+    }
+    return 'Ma cave $suffix';
+  }
+
+  Future<Object?> _showCellarPicker(
     List<VirtualCellarEntity> cellars,
   ) {
-    return showDialog<VirtualCellarEntity>(
+    return showDialog<Object>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Choisir une cave'),
@@ -779,6 +799,11 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Annuler'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(_createNewCellarChoice),
+            icon: const Icon(Icons.add),
+            label: const Text('Créer une nouvelle cave (5×5)'),
           ),
         ],
       ),
