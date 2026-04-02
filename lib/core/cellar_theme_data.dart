@@ -491,7 +491,7 @@ class CellarThemeData {
     );
 
     final textTheme =
-        GoogleFonts.robotoCondensedTextTheme(ThemeData.dark().textTheme);
+        GoogleFonts.robotoTextTheme(ThemeData.dark().textTheme);
 
     return ThemeData(
       useMaterial3: true,
