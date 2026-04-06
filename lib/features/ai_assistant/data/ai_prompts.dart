@@ -257,6 +257,93 @@ Message utilisateur : $userMessage
 ''';
   }
 
+  // ============================================================
+  //  Developer — batch wine re-evaluation
+  // ============================================================
+
+  /// System prompt used for batch wine re-evaluation (developer mode).
+  /// Compatible with both local AI and Gemini Search Grounding.
+  static String get batchReevaluationSystemPrompt => '''
+Tu es un expert en vins chargé de réévaluer les fiches de vins d'une cave personnelle.
+L'année actuelle est ${DateTime.now().year}.
+Réponds UNIQUEMENT avec du JSON valide entre balises <json>...</json>. AUCUN autre texte.
+
+=== RÈGLES ANTI-HALLUCINATION — PRIORITÉ ABSOLUE ===
+• Ne change une valeur que si tu es CERTAIN d'une amélioration fiable.
+• Si tu n'as pas d'information fiable → "unchanged": true pour ce vin.
+• drinkFromYear / drinkUntilYear : sans millésime connu → TOUJOURS "unchanged": true.
+• Pour un millésime connu : fenêtre réaliste basée sur l'appellation, la couleur et le millésime.
+  Ex. Pauillac rouge 2016 → 2024–2040. Ne sur-élargis PAS.
+• suggestedFoodPairings : UNIQUEMENT des valeurs de la liste autorisée.
+=== FIN ===
+
+Liste des accords autorisés (exactement ces libellés) : $_authorizedPairings
+''';
+
+  /// User message for batch wine re-evaluation.
+  ///
+  /// [winesJson] is a list of maps, each containing wine fields.
+  /// [evaluateDrinkingWindow] / [evaluateFoodPairings] control which fields
+  /// are re-evaluated.
+  static String buildBatchReevaluationMessage({
+    required List<Map<String, dynamic>> winesJson,
+    required bool evaluateDrinkingWindow,
+    required bool evaluateFoodPairings,
+  }) {
+    final fieldList = [
+      if (evaluateDrinkingWindow) 'drinkFromYear / drinkUntilYear',
+      if (evaluateFoodPairings) 'suggestedFoodPairings',
+    ].join(', ');
+
+    final drinkFields = evaluateDrinkingWindow
+        ? '''
+    "drinkFromYear": <int ou null si inchangé>,
+    "drinkUntilYear": <int ou null si inchangé>,'''
+        : '';
+
+    final foodFields = evaluateFoodPairings
+        ? '''
+    "suggestedFoodPairings": [<noms exactement de la liste autorisée>] ou null si inchangé,'''
+        : '';
+
+    return '''
+Réévalue le champ suivant pour ${winesJson.length} vin(s) : $fieldList
+
+Vins à réévaluer :
+${_encodeWinesCompact(winesJson)}
+
+Réponds avec ce format JSON :
+<json>
+{
+  "results": [
+    {
+      "wineId": <int>,
+$drinkFields$foodFields
+      "unchanged": <true si AUCUN des champs évalués ne change, false sinon>
+    }
+  ]
+}
+</json>
+
+RÈGLE STRICTE :
+- unchanged = true si tes nouvelles valeurs sont identiques aux valeurs actuelles du vin.
+- Ne propose que des valeurs DIFFÉRENTES et FIABLES. Sinon, unchanged: true.
+''';
+  }
+
+  static String _encodeWinesCompact(List<Map<String, dynamic>> wines) {
+    final buf = StringBuffer();
+    for (final w in wines) {
+      buf.writeln(w.entries
+          .where((e) => e.value != null)
+          .map((e) => '${e.key}: ${e.value}')
+          .join(', '));
+    }
+    return buf.toString().trimRight();
+  }
+
+  // ============================================================
+
   /// Build a prompt wrapper that forces the model to refine the current wine
   /// already discussed in the chat.
   static String buildCurrentWineRefinementMessage({

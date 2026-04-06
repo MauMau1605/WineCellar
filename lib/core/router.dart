@@ -2,6 +2,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/widgets/shell_scaffold.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/screens/chat_screen.dart';
+import 'package:wine_cellar/features/developer/presentation/screens/developer_screen.dart';
+import 'package:wine_cellar/features/developer/presentation/screens/reevaluation_preview_screen.dart';
+import 'package:wine_cellar/features/developer/presentation/screens/wine_reevaluation_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
 import 'package:wine_cellar/features/user_manual/presentation/screens/user_manual_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_detail_screen.dart';
@@ -80,6 +83,21 @@ final GoRouter appRouter = GoRouter(
           path: '/settings',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: SettingsScreen()),
+        ),
+        GoRoute(
+          path: '/developer',
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: DeveloperScreen()),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/developer/reevaluate',
+      builder: (context, state) => const WineReevaluationScreen(),
+      routes: [
+        GoRoute(
+          path: 'preview',
+          builder: (context, state) => const ReevaluationPreviewScreen(),
         ),
       ],
     ),

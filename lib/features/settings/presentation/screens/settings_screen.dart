@@ -580,6 +580,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const SizedBox(height: 32),
 
+          // Section: Developer Mode
+          _DeveloperModeSection(),
+
+          const SizedBox(height: 16),
+
           // About section
           Text(
             'À propos',
@@ -829,6 +834,65 @@ class _VisualThemeSection extends ConsumerWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+//  Developer Mode section
+// ============================================================
+
+class _DeveloperModeSection extends ConsumerWidget {
+  const _DeveloperModeSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final devMode = ref.watch(developerModeProvider);
+    final theme = Theme.of(context);
+
+    // TODO(release): uncomment the following line to hide in production builds:
+    // if (kReleaseMode) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Développeur',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.developer_mode),
+                title: const Text('Mode développeur'),
+                subtitle: const Text(
+                  'Active des outils de test avancés (réévaluation IA, etc.).',
+                ),
+                value: devMode,
+                onChanged: (v) =>
+                    ref.read(developerModeProvider.notifier).setValue(v),
+              ),
+              if (devMode) ...[
+                const Divider(height: 0),
+                ListTile(
+                  leading: const Icon(Icons.build_circle_outlined),
+                  title: const Text('Outils développeur'),
+                  subtitle: const Text(
+                    'Réévaluation IA, tests et utilitaires.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/developer'),
+                ),
+              ],
+            ],
           ),
         ),
       ],

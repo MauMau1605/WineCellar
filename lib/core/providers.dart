@@ -590,3 +590,16 @@ final visionModelProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (visionService == null) return null;
   return visionService.discoverVisionModel();
 });
+
+// ============ Developer Mode ============
+
+/// Whether the developer mode is enabled.
+///
+/// Future: wrap the setter with `if (!kReleaseMode)` to hide in production.
+final developerModeProvider =
+    StateNotifierProvider<SecureBoolNotifier, bool>((ref) {
+  return SecureBoolNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyDeveloperMode,
+  );
+});

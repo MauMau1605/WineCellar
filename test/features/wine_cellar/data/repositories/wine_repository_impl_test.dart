@@ -124,6 +124,99 @@ void main() {
       await targetDb.close();
     });
 
+    test(
+        'backfille la localisation depuis le nom de la cave pour les vins sans localisation',
+        () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      // Snapshot avec deux vins :
+      // - l'un sans localisation ET placé en cave → doit recevoir le nom de la cave
+      // - l'autre avec localisation ET placé en cave → ne doit pas être modifié
+      // - le troisième sans localisation ET non placé → doit rester sans localisation
+      final snapshotJson = jsonEncode({
+        'snapshotType': 'full_cellar',
+        'virtualCellars': [
+          {
+            'id': 1,
+            'name': 'Cave du salon',
+            'rows': 3,
+            'columns': 3,
+            'emptyCells': null,
+            'theme': null,
+            'createdAt': '2025-01-01T00:00:00.000Z',
+            'updatedAt': '2025-01-01T00:00:00.000Z',
+          },
+        ],
+        'wines': [
+          {
+            'id': 10,
+            'name': 'Bordeaux sans localisation',
+            'color': 'red',
+            'quantity': 1,
+            'location': null,
+          },
+          {
+            'id': 11,
+            'name': 'Chablis avec localisation',
+            'color': 'white',
+            'quantity': 1,
+            'location': 'Cave perso',
+          },
+          {
+            'id': 12,
+            'name': 'Rosé non placé sans localisation',
+            'color': 'rose',
+            'quantity': 1,
+            'location': null,
+          },
+        ],
+        'bottlePlacements': [
+          {'id': 1, 'wineId': 10, 'cellarId': 1, 'positionX': 0, 'positionY': 0, 'createdAt': '2025-01-01T00:00:00.000Z'},
+          {'id': 2, 'wineId': 11, 'cellarId': 1, 'positionX': 1, 'positionY': 0, 'createdAt': '2025-01-01T00:00:00.000Z'},
+        ],
+      });
+
+      final importedCount = await repository.importFromJson(snapshotJson);
+      expect(importedCount, 3);
+
+      final wines = await repository.getAllWines();
+      expect(wines, hasLength(3));
+
+      final bordeaux =
+          wines.firstWhere((w) => w.name == 'Bordeaux sans localisation');
+      expect(
+        bordeaux.location,
+        'Cave du salon',
+        reason:
+            'Un vin sans localisation mais placé en cave doit recevoir le nom de la cave',
+      );
+
+      final chablis =
+          wines.firstWhere((w) => w.name == 'Chablis avec localisation');
+      expect(
+        chablis.location,
+        'Cave perso',
+        reason: 'Un vin avec une localisation existante ne doit pas être modifié',
+      );
+
+      final rose =
+          wines.firstWhere((w) => w.name == 'Rosé non placé sans localisation');
+      expect(
+        rose.location,
+        isNull,
+        reason:
+            'Un vin sans localisation et sans placement ne doit pas être modifié',
+      );
+
+      await db.close();
+    });
+
     test('importe un JSON legacy avec types hétérogènes en conservant les infos vin',
         () async {
       final db = AppDatabase.forTesting(NativeDatabase.memory());

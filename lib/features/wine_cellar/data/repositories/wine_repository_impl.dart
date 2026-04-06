@@ -366,6 +366,8 @@ class WineRepositoryImpl implements WineRepository {
       await db.delete(db.virtualCellars).go();
 
       final cellarIdMap = <int, int>{};
+      // Maps old cellar IDs to their display names, used to backfill wine locations
+      final cellarNameMap = <int, String>{};
 
       for (final cellarJson in cellarsList) {
         final cellar = _mapCellarFromJsonCompat(cellarJson);
@@ -385,10 +387,14 @@ class WineRepositoryImpl implements WineRepository {
 
         if (cellar.id != null) {
           cellarIdMap[cellar.id!] = newId;
+          cellarNameMap[cellar.id!] = cellar.name;
         }
       }
 
       final wineIdMap = <int, int>{};
+      // Tracks new wine IDs that were imported without a location,
+      // so their location can be backfilled from their cellar placement.
+      final winesWithEmptyLocation = <int>{};
       var importedCount = 0;
       for (final wineJson in winesList) {
         final importedWine = _parseWineFromJsonCompat(wineJson);
@@ -406,6 +412,10 @@ class WineRepositoryImpl implements WineRepository {
         );
         if (importedWine.id != null) {
           wineIdMap[importedWine.id!] = newWineId;
+          if (importedWine.location == null ||
+              importedWine.location!.trim().isEmpty) {
+            winesWithEmptyLocation.add(newWineId);
+          }
         }
         importedCount++;
       }
@@ -433,6 +443,22 @@ class WineRepositoryImpl implements WineRepository {
           positionX: placement.positionX,
           positionY: placement.positionY,
         );
+
+        // If the wine has no location, backfill it with the cellar name.
+        if (winesWithEmptyLocation.contains(remappedWineId)) {
+          final cellarName = cellarNameMap[placement.cellarId];
+          if (cellarName != null) {
+            await (db.update(db.wines)
+                  ..where((t) => t.id.equals(remappedWineId)))
+                .write(
+                  WinesCompanion(
+                    location: Value(cellarName),
+                    updatedAt: Value(DateTime.now()),
+                  ),
+                );
+            winesWithEmptyLocation.remove(remappedWineId);
+          }
+        }
       }
 
       return importedCount;

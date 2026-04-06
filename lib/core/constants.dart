@@ -48,6 +48,9 @@ class AppConstants {
   // Visual theme
   static const String keyAppVisualTheme = 'app_visual_theme';
 
+  // Developer mode
+  static const String keyDeveloperMode = 'developer_mode';
+
   // Wine defaults
   static const int maxRating = 5;
   static const int defaultQuantity = 1;
