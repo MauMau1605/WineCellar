@@ -152,6 +152,15 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : () => context.go('/chat'),
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Renseigner avec l\'assistant IA'),
+                ),
+              ),
+              const SizedBox(height: 24),
 
               _sectionTitle('Informations principales'),
               const SizedBox(height: 8),
@@ -467,15 +476,6 @@ class _WineAddScreenState extends ConsumerState<WineAddScreen> {
               ),
 
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => context.go('/chat'),
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('Renseigner avec l\'assistant IA'),
-                ),
-              ),
-              const SizedBox(height: 12),
               Tooltip(
                 message: _canSubmit ? '' : disabledMessage,
                 child: SizedBox(
