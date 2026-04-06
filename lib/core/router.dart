@@ -88,16 +88,19 @@ final GoRouter appRouter = GoRouter(
           path: '/developer',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: DeveloperScreen()),
-        ),
-      ],
-    ),
-    GoRoute(
-      path: '/developer/reevaluate',
-      builder: (context, state) => const WineReevaluationScreen(),
-      routes: [
-        GoRoute(
-          path: 'preview',
-          builder: (context, state) => const ReevaluationPreviewScreen(),
+          routes: [
+            GoRoute(
+              path: 'reevaluate',
+              builder: (context, state) => const WineReevaluationScreen(),
+              routes: [
+                GoRoute(
+                  path: 'preview',
+                  builder: (context, state) =>
+                      const ReevaluationPreviewScreen(),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     ),
