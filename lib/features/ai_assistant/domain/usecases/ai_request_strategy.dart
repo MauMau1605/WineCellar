@@ -88,15 +88,6 @@ class AiRequestStrategy {
       );
     }
 
-    if (wine.estimatedFields.isEmpty) {
-      return const WebSearchDecision(
-        shouldUseWebSearch: false,
-        reason: 'Aucun champ estimé à confirmer.',
-      );
-    }
-
-    final estimated = wine.estimatedFields.toSet();
-    final highValueCount = estimated.intersection(_highValueFields).length;
     final hasIdentitySignals = wine.vintage != null ||
         (wine.appellation ?? '').trim().isNotEmpty ||
         (wine.producer ?? '').trim().isNotEmpty;
@@ -107,6 +98,31 @@ class AiRequestStrategy {
         reason: 'Identité du vin insuffisante pour une recherche fiable.',
       );
     }
+
+    // Fenêtre de dégustation absente pour un millésime récent (≤ 3 ans) :
+    // le modèle a explicitement refusé d'estimer (vin trop jeune). La
+    // recherche web peut combler cette lacune.
+    final currentYear = DateTime.now().year;
+    if (wine.drinkFromYear == null &&
+        wine.drinkUntilYear == null &&
+        wine.vintage != null &&
+        (currentYear - wine.vintage!) <= 3) {
+      return const WebSearchDecision(
+        shouldUseWebSearch: true,
+        reason:
+            'Fenêtre de dégustation absente pour un millésime récent — recherche web pour compléter.',
+      );
+    }
+
+    if (wine.estimatedFields.isEmpty) {
+      return const WebSearchDecision(
+        shouldUseWebSearch: false,
+        reason: 'Aucun champ estimé à confirmer.',
+      );
+    }
+
+    final estimated = wine.estimatedFields.toSet();
+    final highValueCount = estimated.intersection(_highValueFields).length;
 
     if (highValueCount > 0) {
       return const WebSearchDecision(

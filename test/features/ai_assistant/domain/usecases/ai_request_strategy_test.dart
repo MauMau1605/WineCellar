@@ -54,6 +54,82 @@ void main() {
 
       expect(decision.shouldUseWebSearch, isFalse);
     });
+
+    test(
+        'active la recherche web pour un vin recent sans fenetre de degustation '
+        'meme si estimatedFields est vide', () {
+      // Régression : vin récent (≤ 3 ans) → modèle refuse d'estimer
+      // drinkFromYear/Until → estimatedFields vide → la recherche internet
+      // ne se lançait pas.
+      final recentVintage = DateTime.now().year - 2;
+      final wine = WineAiResponse(
+        name: 'Chateau Petrus',
+        vintage: recentVintage,
+        appellation: 'Pomerol',
+        producer: 'Chateau Petrus',
+        // drinkFromYear / drinkUntilYear intentionnellement null
+        estimatedFields: const [],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isTrue);
+    });
+
+    test(
+        'active la recherche web pour un vin recent sans fenetre de degustation '
+        'avec quelques champs estimes non critiques', () {
+      final recentVintage = DateTime.now().year - 1;
+      final wine = WineAiResponse(
+        name: 'Domaine de la Romanee-Conti',
+        vintage: recentVintage,
+        appellation: 'Vosne-Romanee',
+        // drinkFromYear / drinkUntilYear intentionnellement null
+        estimatedFields: const ['region'],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isTrue);
+    });
+
+    test(
+        'desactive la recherche web quand fenetre de degustation absente '
+        'mais millésime trop ancien pour etre bloque par la règle recent', () {
+      // Millésime > 3 ans : le modèle AURAIT dû estimer → pas de règle spéciale.
+      // estimatedFields vide → pas de recherche.
+      final oldVintage = DateTime.now().year - 5;
+      final wine = WineAiResponse(
+        name: 'Vin ancien',
+        vintage: oldVintage,
+        appellation: 'Bordeaux',
+        estimatedFields: const [],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isFalse);
+    });
+
+    test(
+        'desactive la recherche web quand fenetre de degustation absente '
+        'mais millésime inconnu', () {
+      // Sans millésime, on ne peut pas utiliser la règle des vins récents.
+      const wine = WineAiResponse(
+        name: 'Vin sans millesime',
+        appellation: 'Bordeaux',
+        // vintage intentionnellement null
+        estimatedFields: [],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isFalse);
+    });
   });
 
   group('AiRequestStrategy.detectAddWineMessageIntent', () {
