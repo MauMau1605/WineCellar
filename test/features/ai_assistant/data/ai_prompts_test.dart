@@ -218,6 +218,93 @@ void main() {
       });
     });
 
+    group('buildCsvMappingPrompt', () {
+      test('inclut toutes les lignes de preview', () {
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: [
+            ['Nom', 'Millésime', 'Couleur'],
+            ['Margaux', '2018', 'rouge'],
+          ],
+        );
+
+        expect(prompt, contains('Ligne 1: Nom | Millésime | Couleur'));
+        expect(prompt, contains('Ligne 2: Margaux | 2018 | rouge'));
+      });
+
+      test('utilise allRows quand fourni pour analyser plus de lignes', () {
+        final previewRows = [
+          ['Ligne A'],
+          ['Ligne B'],
+        ];
+        final allRows = [
+          ['Ligne A'],
+          ['Ligne B'],
+          ['Ligne C'],
+          ['Ligne D'],
+          ['Nom', 'Millésime'],
+          ['Margaux', '2018'],
+        ];
+
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: previewRows,
+          allRows: allRows,
+        );
+
+        // Doit contenir les 6 lignes de allRows, pas seulement 2 de previewRows
+        expect(prompt, contains('6 lignes'));
+        expect(prompt, contains('Ligne 5: Nom | Millésime'));
+        expect(prompt, contains('Ligne 6: Margaux | 2018'));
+      });
+
+      test('fallback sur previewRows quand allRows est null', () {
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: [
+            ['A', 'B'],
+            ['C', 'D'],
+          ],
+          allRows: null,
+        );
+
+        expect(prompt, contains('2 lignes'));
+        expect(prompt, contains('Ligne 1: A | B'));
+      });
+
+      test('demande de parcourir toutes les lignes pour trouver l\'en-tête', () {
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: [
+            ['test'],
+          ],
+        );
+
+        expect(prompt, contains('TOUTES les lignes'));
+        expect(prompt, contains('métadonnées'));
+      });
+
+      test('contient les noms de champs attendus', () {
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: [
+            ['test'],
+          ],
+        );
+
+        expect(prompt, contains('name'));
+        expect(prompt, contains('vintage'));
+        expect(prompt, contains('producer'));
+        expect(prompt, contains('purchasePrice'));
+      });
+
+      test('demande de valider le mapping avec les données', () {
+        final prompt = AiPrompts.buildCsvMappingPrompt(
+          previewRows: [
+            ['Nom', 'Millésime'],
+            ['Margaux', '2018'],
+          ],
+        );
+
+        expect(prompt, contains('contenu des lignes de données'));
+      });
+    });
+
     group('fieldCompletionSystemPrompt', () {
       test('contient l\'instruction de retourner du JSON', () {
         final prompt = AiPrompts.fieldCompletionSystemPrompt;

@@ -361,4 +361,152 @@ $currentWineSummary
 Message utilisateur : $userMessage
 ''';
   }
+
+  // ============================================================
+  //  CSV Import — AI-assisted mapping
+  // ============================================================
+
+  /// Build a prompt to ask the AI to analyse CSV preview rows and suggest a
+  /// column mapping. The AI returns JSON with field→column assignments and
+  /// the detected header line number.
+  ///
+  /// [allRows] contains up to 100 lines from the CSV file so the AI can
+  /// identify the header line even when it is not the very first row.
+  static String buildCsvMappingPrompt({
+    required List<List<String>> previewRows,
+    List<List<String>>? allRows,
+  }) {
+    final rowsToAnalyze = allRows ?? previewRows;
+    final buf = StringBuffer();
+    buf.writeln('[MODE ANALYSE MAPPING CSV]');
+    buf.writeln(
+        'Voici ${rowsToAnalyze.length} lignes d\'un fichier CSV de vins :');
+    buf.writeln();
+    for (var i = 0; i < rowsToAnalyze.length; i++) {
+      buf.writeln('Ligne ${i + 1}: ${rowsToAnalyze[i].join(' | ')}');
+    }
+    buf.writeln();
+    buf.writeln('TÂCHE : Analyse TOUTES les lignes ci-dessus et retourne '
+        'UNIQUEMENT un bloc JSON.');
+    buf.writeln('Identifie :');
+    buf.writeln('1. La ligne d\'en-tête (headerLine, 1-based). null si aucune.');
+    buf.writeln('   ATTENTION : l\'en-tête peut ne PAS être la première ligne. '
+        'Certains fichiers CSV commencent par des lignes de métadonnées, '
+        'des titres, des lignes vides ou des commentaires avant la vraie '
+        'ligne d\'en-tête. Parcours TOUTES les lignes pour trouver celle '
+        'qui contient les noms de colonnes (ex: "Nom", "Millésime", '
+        '"Wine", "Vintage"…).');
+    buf.writeln('2. Le mapping des colonnes vers les champs vin (1-based).');
+    buf.writeln('   Utilise le contenu des lignes de données (après '
+        'l\'en-tête) pour confirmer ton analyse : vérifie que les '
+        'données correspondent au type attendu pour chaque champ '
+        '(ex: des années pour "vintage", des noms pour "name"…).');
+    buf.writeln();
+    buf.writeln('Champs possibles (utilise ces noms exacts) :');
+    buf.writeln('name, vintage, producer, appellation, quantity, color, '
+        'region, country, grapeVarieties, purchasePrice, location, notes');
+    buf.writeln();
+    buf.writeln('Format attendu :');
+    buf.writeln('<json>');
+    buf.writeln('{');
+    buf.writeln('  "headerLine": 1,');
+    buf.writeln('  "mapping": {');
+    buf.writeln('    "name": 1,');
+    buf.writeln('    "vintage": 3,');
+    buf.writeln('    "producer": 2');
+    buf.writeln('  }');
+    buf.writeln('}');
+    buf.writeln('</json>');
+    buf.writeln();
+    buf.writeln('RÈGLES :');
+    buf.writeln('- Réponds UNIQUEMENT avec le bloc <json>...</json>.');
+    buf.writeln('- Ne mets dans mapping QUE les colonnes identifiées avec confiance.');
+    buf.writeln('- Si tu ne trouves pas de correspondance pour un champ, omets-le.');
+    buf.writeln('- Le champ "name" est obligatoire. Si tu ne le trouves pas, '
+        'fais ton meilleur choix.');
+    buf.writeln('- Utilise le contenu des lignes de données pour valider '
+        'le mapping (un champ "vintage" doit contenir des années, etc.).');
+    return buf.toString();
+  }
+
+  // ============================================================
+  //  CSV Import — Full AI enrichment prompt
+  // ============================================================
+
+  /// Build an AI prompt for CSV wine enrichment that requests a full evaluation
+  /// of all fields (not just filling blanks).
+  static String buildCsvEnrichmentPrompt({
+    required List<String> rowDescriptions,
+    required int batchNumber,
+    required int totalBatches,
+  }) {
+    return '''
+[MODE IMPORT CSV — ENRICHISSEMENT COMPLET]
+Lot $batchNumber/$totalBatches.
+
+Tu dois évaluer et compléter INTÉGRALEMENT chaque vin ci-dessous.
+Ce n'est PAS un simple remplissage de champs vides — tu dois aussi CORRIGER
+et NORMALISER les champs existants quand nécessaire.
+
+CORRECTIONS ATTENDUES :
+• Noms : ajoute "Château", "Domaine", "Clos" si approprié (ex: "Margaux" → "Château Margaux")
+• Appellations : normalise (ex: "margaux" → "Margaux", "saint emilion" → "Saint-Émilion Grand Cru")
+• Couleurs : utilise UNIQUEMENT red, white, rose, sparkling, sweet
+• Producteurs : corrige la casse et les fautes éventuelles
+• Cépages : sépare et normalise (ex: "cab sauv" → "Cabernet Sauvignon")
+• Régions / Pays : normalise la casse
+• Fenêtre de dégustation : estime d'après l'appellation, la couleur et le millésime
+
+IMPORTANT :
+- Réponds UNIQUEMENT avec un bloc ```json.
+- Retourne la structure: {"wines": [...]} avec les mêmes clés qu'habituellement.
+- ATTENTION : Traite CHAQUE vin comme un ajout individuel complet, pas un simple copier-coller.
+- estimatedFields : liste les champs que tu as ajoutés ou corrigés significativement.
+- confidenceNotes : explique tes corrections/estimations.
+- Si des informations essentielles restent manquantes (nom vide), mets needsMoreInfo=true.
+- N'ajoute aucun texte hors JSON.
+
+Liste des accords autorisés (exactement ces libellés) : $_authorizedPairings
+
+VINS CSV :
+${rowDescriptions.join('\n')}
+''';
+  }
+
+  /// Build the CSV row description for a single wine in the enrichment prompt.
+  static String buildCsvRowDescription(Map<String, String?> fields, int lineNumber) {
+    final parts = fields.entries
+        .where((e) => e.value != null && e.value!.isNotEmpty)
+        .map((e) => '${e.key}=${e.value}')
+        .join('; ');
+    return '- ligne $lineNumber: $parts';
+  }
+
+  /// Build a prompt to re-evaluate a single wine after user modification.
+  static String buildSingleWineReevaluationPrompt({
+    required Map<String, String?> wineFields,
+  }) {
+    final description = wineFields.entries
+        .where((e) => e.value != null && e.value!.isNotEmpty)
+        .map((e) => '${e.key}: ${e.value}')
+        .join('\n  ');
+
+    return '''
+[MODE RÉÉVALUATION VIN UNIQUE]
+L'utilisateur a modifié manuellement les champs d'un vin importé par CSV.
+Réévalue et complète cette fiche comme tu le ferais pour un ajout normal.
+
+Vin modifié :
+  $description
+
+IMPORTANT :
+- Réponds UNIQUEMENT avec un bloc ```json.
+- Retourne un SEUL vin dans {"wines": [...]}.
+- Normalise les noms, appellations, cépages comme pour un ajout normal.
+- estimatedFields : liste les champs complétés/corrigés.
+- N'ajoute aucun texte hors JSON.
+
+Liste des accords autorisés : $_authorizedPairings
+''';
+  }
 }

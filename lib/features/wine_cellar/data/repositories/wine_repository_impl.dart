@@ -261,11 +261,13 @@ class WineRepositoryImpl implements WineRepository {
   Future<List<CsvImportRow>> parseCsvRows(
     String csvString,
     CsvColumnMapping mapping, {
-    bool hasHeader = true,
+    int? headerLine,
   }) async {
-    final rows = const CsvToListConverter(
+    final separator = detectCsvSeparator(csvString);
+    final rows = CsvToListConverter(
       shouldParseNumbers: false,
       eol: '\n',
+      fieldDelimiter: separator,
     ).convert(csvString);
 
     if (rows.isEmpty) {
@@ -273,7 +275,9 @@ class WineRepositoryImpl implements WineRepository {
     }
 
     final parsedRows = <CsvImportRow>[];
-    final startIndex = hasHeader ? 1 : 0;
+    // headerLine is 1-based; data starts on the next row.
+    // If null, no header — start at row 0.
+    final startIndex = headerLine ?? 0;
 
     for (var i = startIndex; i < rows.length; i++) {
       final row = rows[i];
@@ -316,9 +320,10 @@ class WineRepositoryImpl implements WineRepository {
   Future<int> importFromCsv(
     String csvString,
     CsvColumnMapping mapping, {
-    bool hasHeader = true,
+    int? headerLine,
+    String? locationOverride,
   }) async {
-    final rows = await parseCsvRows(csvString, mapping, hasHeader: hasHeader);
+    final rows = await parseCsvRows(csvString, mapping, headerLine: headerLine);
 
     var importedCount = 0;
     for (final row in rows) {
@@ -337,7 +342,7 @@ class WineRepositoryImpl implements WineRepository {
           grapeVarieties: row.grapeVarieties,
           quantity: (row.quantity ?? 1) <= 0 ? 1 : row.quantity!,
           purchasePrice: row.purchasePrice,
-          location: row.location,
+          location: locationOverride ?? row.location,
           notes: row.notes,
           aiSuggestedFoodPairings: false,
           aiSuggestedDrinkFromYear: false,
@@ -788,6 +793,44 @@ class WineRepositoryImpl implements WineRepository {
     return true;
   }
 
+  /// Detect the most likely CSV field delimiter from the first few lines.
+  ///
+  /// Tests `,`, `;`, and `\t`. Returns the one that produces the most
+  /// consistent non-zero column count across the sampled lines.
+  static String detectCsvSeparator(String csvContent) {
+    const candidates = [',', ';', '\t'];
+    final sampleLines = csvContent
+        .split('\n')
+        .where((l) => l.trim().isNotEmpty)
+        .take(5)
+        .toList();
+
+    if (sampleLines.isEmpty) return ',';
+
+    String bestSep = ',';
+    var bestScore = -1;
+
+    for (final sep in candidates) {
+      final counts = sampleLines.map((line) {
+        return sep.allMatches(line).length;
+      }).toList();
+
+      if (counts.every((c) => c == 0)) continue;
+
+      // Score = average field count. Prefer consistent column counts.
+      final avg = counts.reduce((a, b) => a + b) / counts.length;
+      final allSame = counts.every((c) => c == counts.first);
+      final score = (avg * 10).round() + (allSame ? 100 : 0);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestSep = sep;
+      }
+    }
+
+    return bestSep;
+  }
+
   int? _parseInt(String? value) {
     if (value == null) return null;
     return int.tryParse(value.replaceAll(RegExp(r'[^0-9-]'), ''));
@@ -823,5 +866,11 @@ class WineRepositoryImpl implements WineRepository {
       return WineColor.sweet;
     }
     return WineColor.red;
+  }
+
+  @override
+  Future<void> deleteAllWines() async {
+    await _bottlePlacementDao.clearAllPlacements();
+    await _wineDao.deleteAllWines();
   }
 }

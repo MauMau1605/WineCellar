@@ -144,6 +144,7 @@ lib/
 │   │       └── widgets/
 │   │           ├── wine_card.dart
 │   │           ├── csv_column_mapping_dialog.dart
+│   │           ├── csv_batch_validation_dialog.dart
 │   │           ├── virtual_cellar_theme_selector.dart
 │   │           ├── premium_cave_wrapper.dart (+background)
 │   │           ├── stone_cave_wrapper.dart (+background)
@@ -293,6 +294,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 
 ### `widgets/shell_scaffold.dart` — `ShellScaffold`
 - Shell layout adaptatif : `NavigationBar` (mobile) / `NavigationRail` (desktop)
+- Panneau latéral desktop repliable/dépliable via un bouton de bascule intégré au rail
 - 4 destinations : Cave, Assistant IA, Celliers, Paramètres
 - **Utilisé par :** `core/router.dart` (ShellRoute builder)
 
@@ -487,6 +489,8 @@ Chaque use case a **une seule** méthode `call()` retournant `Either<Failure, T>
 - Instantané complet moderne : remplace la cave actuelle et restaure vins, celliers et placements
 - JSON historique sans `virtualCellars` : import additionnel rétrocompatible, sans réappliquer de placements virtuels
 - Import CSV : parsing avec mapping utilisateur + normalisation des champs (quantité, prix, couleur)
+- Détection automatique du séparateur CSV : `detectCsvSeparator()` (static) — analyse fréquence et cohérence de `,`, `;`, `\t`
+- Support `headerLine` (1-based, nullable) au lieu de `hasHeader` booléen
 
 #### `food_category_repository_impl.dart` — `FoodCategoryRepositoryImpl`
 - Implémente `FoodCategoryRepository`
@@ -518,10 +522,14 @@ Providers Riverpod déclaratifs :
 - Barre de recherche, chips de filtre (couleur + maturité)
 - Layout adaptatif : `ListView` (mobile) / `GridView` (desktop)
 - Actions menu : export JSON/CSV + import JSON/CSV
-- Import CSV guidé : mapping colonnes → prévisualisation extraction → mode direct ou enrichissement IA
+- Import CSV guidé : mapping colonnes (avec pré-analyse IA optionnelle) → prévisualisation extraction → mode direct ou enrichissement IA
+- Détection automatique du séparateur CSV (virgule, point-virgule, tabulation)
+- Sélection flexible de la ligne d'en-tête (click dans l'aperçu ou champ numérique)
 - Vérification avant import CSV et confirmation explicite de préservation de la cave virtuelle actuelle
 - Pour le JSON snapshot, confirmation destructive dédiée avant restauration complète de la cave
-- Enrichissement IA par lots de 20 vins max avec validation utilisateur à chaque lot
+- Enrichissement IA par lots de 20 vins max via prompts `AiPrompts.buildCsvEnrichmentPrompt` (évaluation complète : correction + normalisation + complétion)
+- Validation utilisateur à chaque lot via `CsvBatchValidationDialog` (édition inline, suppression, réévaluation IA individuelle, retry du lot)
+- Résumé final détaillé de l'import (lots traités, vins importés, supprimés)
 - Gestion quantité via `UpdateWineQuantityUseCase` avec dialogue confirmation
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
 
@@ -575,6 +583,26 @@ Providers Riverpod déclaratifs :
 
 #### `csv_column_mapping_dialog.dart` — `CsvColumnMappingDialog`
 - Dialogue d'import CSV avec mapping interactif colonnes → champs vin
+- Aperçu interactif du CSV (20 lignes) : clic sur un en-tête de colonne → dropdown d'assignation de champ vin
+- **Mapping bidirectionnel** : clic sur un champ (chip) → popup de sélection de colonne avec échantillons de données
+- Sélection de la ligne d'en-tête : clic sur le numéro de ligne dans l'aperçu ou champ numérique synchronisé
+- Auto-détection par mots-clés des en-têtes (nom, millésime, producteur…) en fallback
+- Bouton « Pré-analyse IA du mapping » : analyse jusqu'à 100 lignes du CSV pour détecter l'en-tête et le mapping (y compris quand l'en-tête n'est pas la première ligne)
+- **Panneau de champs repliable** : section « Champs assignés » avec compteur de progression (ex: « 4/12 »), repliable pour gagner de l'espace sur petits écrans
+- Résumé des champs assignés sous forme de chips cliquables (icônes 🤖 IA / 🪄 auto / 👆 manuel)
+- Bouton « Réinitialiser » le mapping
+- Avertissements de validation des données (millésime suspect, quantité négative)
+- Retourne `CsvMappingDialogResult` avec `CsvColumnMapping` + `headerLine` (1-based, null si pas d'en-tête)
+
+#### `csv_batch_validation_dialog.dart` — `CsvBatchValidationDialog`
+- Dialogue de validation des lots IA pour l'import CSV avec édition inline
+- Cartes dépliables par vin avec tous les champs éditables (`TextFormField`)
+- Badge « Modifié » affiché sur les vins touchés par l'utilisateur
+- Bouton de suppression individuelle d'un vin du lot
+- Bouton « Réévaluer ce vin par l'IA » (callback `onReevaluateSingleWine`)
+- Barre résumé : nombre de vins actifs, supprimés, modifiés
+- 3 actions : « Annuler l'import » / « Réessayer ce lot » / « Valider ce lot »
+- Retourne `CsvBatchValidationResult` (`CsvBatchAction` + liste éditée + indices modifiés)
 
 #### Widgets de thèmes visuels de cellier
 - `virtual_cellar_theme_selector.dart` — helpers pour afficher icône et description par thème
@@ -645,6 +673,10 @@ Interface d'extraction OCR pour les photos d'étiquette :
 - `buildGroundedReviewMessage()` — message utilisateur pour la recherche web grounded
 - `fieldCompletionSystemPrompt` — prompt système pour la complétion de champs estimés via recherche web
 - `buildFieldCompletionMessage()` — construit le message pour compléter les champs manquants d'un vin
+- `buildCsvMappingPrompt()` — prompt pour l'analyse IA du mapping de colonnes CSV. Accepte `allRows` (jusqu'à 100 lignes) pour analyser le fichier en profondeur et détecter l'en-tête même quand elle n'est pas en première ligne. Retourne JSON avec `headerLine` + `mapping`
+- `buildCsvEnrichmentPrompt()` — prompt d'enrichissement complet des vins CSV (correction, normalisation, complétion)
+- `buildCsvRowDescription()` — formate une ligne CSV pour le prompt d'enrichissement
+- `buildSingleWineReevaluationPrompt()` — prompt de réévaluation individuelle d'un vin après modification manuelle
 
 #### `datasources/` — 4 implémentations de `AiService` + 1 datasource OCR
 
@@ -884,19 +916,33 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 ```
 1. WineListScreen : menu → "Importer CSV"
 2. FilePicker : sélection du fichier CSV
-3. CsvColumnMappingDialog : l'utilisateur associe les colonnes aux champs vin
-4. ParseCsvImportUseCase.call(ParseCsvImportParams)
-  → WineRepository.parseCsvRows(...)
+3. Détection automatique du séparateur CSV (virgule, point-virgule, tabulation)
+4. Extraction de 5 lignes d'aperçu
+5. CsvColumnMappingDialog :
+   - Aperçu interactif : clic sur en-tête de colonne → dropdown d'assignation
+   - Auto-détection des en-têtes par mots-clés (fallback)
+   - [Optionnel] Pré-analyse IA : AiPrompts.buildCsvMappingPrompt()
+     → AnalyzeWineUseCase → parsing JSON <json>...</json>
+     → assignation automatique des colonnes
+   - Sélection de la ligne d'en-tête (clic ou champ numérique)
+   - Retourne CsvMappingDialogResult (mapping + headerLine)
+6. ParseCsvImportUseCase.call(ParseCsvImportParams)
+  → WineRepository.parseCsvRows(csvContent, mapping, headerLine)
   → preview extraction (échantillon)
-5. Choix utilisateur :
+7. Choix utilisateur :
   A) Import direct
+    → Récapitulatif détaillé → confirmation
     → ImportWinesFromCsvUseCase.call(...)
     → WineRepository.importFromCsv(...)
   B) Compléter avec IA
     → découpage en lots de 20
+    → AiPrompts.buildCsvEnrichmentPrompt() (évaluation complète)
     → AnalyzeWineUseCase.call(...) pour chaque lot
-    → tableau de validation utilisateur
-    → AddWineUseCase pour chaque vin validé
+    → CsvBatchValidationDialog : édition inline, suppression, réévaluation individuelle
+    → CsvBatchAction.validate : AddWineUseCase pour chaque vin validé
+    → CsvBatchAction.retry : renvoi du lot à l'IA
+    → CsvBatchAction.cancel : arrêt de l'import
+    → Résumé final détaillé (lots traités, vins importés, supprimés)
 ```
 ```
 

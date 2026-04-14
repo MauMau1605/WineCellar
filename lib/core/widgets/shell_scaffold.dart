@@ -36,6 +36,9 @@ class ShellScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final index = _currentIndex(context);
     final isWide = MediaQuery.of(context).size.width > 800;
+    final isRailCollapsed = ref.watch(shellNavigationRailCollapsedProvider);
+    final isRailExtended =
+        MediaQuery.of(context).size.width > 1200 && !isRailCollapsed;
 
     final immersive = ref.watch(immersiveCellarThemeProvider);
     final globalVisual = ref.watch(appVisualThemeProvider);
@@ -48,10 +51,10 @@ class ShellScaffold extends ConsumerWidget {
         body: Row(
           children: [
             NavigationRail(
-              extended: MediaQuery.of(context).size.width > 1200,
+              extended: isRailExtended,
               selectedIndex: index,
               onDestinationSelected: (i) => _onTap(context, i),
-              labelType: MediaQuery.of(context).size.width > 1200
+              labelType: isRailExtended
                   ? NavigationRailLabelType.none
                   : NavigationRailLabelType.all,
               leading: Padding(
@@ -60,6 +63,24 @@ class ShellScaffold extends ConsumerWidget {
                   Icons.wine_bar,
                   size: 32,
                   color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              trailing: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: IconButton(
+                  tooltip: isRailCollapsed
+                      ? 'Ouvrir le panneau latéral'
+                      : 'Réduire le panneau latéral',
+                  onPressed: () {
+                    final notifier =
+                        ref.read(shellNavigationRailCollapsedProvider.notifier);
+                    notifier.state = !isRailCollapsed;
+                  },
+                  icon: Icon(
+                    isRailCollapsed
+                        ? Icons.keyboard_double_arrow_right
+                        : Icons.keyboard_double_arrow_left,
+                  ),
                 ),
               ),
               destinations: const [

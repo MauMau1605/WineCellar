@@ -327,6 +327,7 @@ class _OverviewTab extends StatelessWidget {
           'Assistant IA: analyse de texte et d image pour accelerer la saisie.',
           'Accords mets-vins: categories d accords modifiables.',
           'Cave virtuelle: placements de bouteilles dans des celliers.',
+          'Navigation desktop: panneau lateral repliable pour liberer de l espace de travail.',
         ]),
         _BlockTitle('Par ou commencer'),
         _Bullets([
@@ -371,8 +372,11 @@ class _ImportExportTab extends StatelessWidget {
         ]),
         _BlockTitle('Import CSV'),
         _Bullets([
-          'Le CSV est d abord previsualise puis mappe colonne par colonne.',
-          'Vous choisissez ensuite: import direct ou enrichissement avec IA.',
+          'Le separateur est detecte automatiquement (virgule, point-virgule, tabulation).',
+          'Un apercu interactif de 5 lignes permet de verifier le decoupage.',
+          'Le mapping des colonnes se fait par clic sur les en-tetes ou par pre-analyse IA.',
+          'La ligne d en-tete est selectionnable (clic ou saisie numerique).',
+          'Vous choisissez ensuite: import direct ou enrichissement/correction par IA.',
           'Les lignes sans nom de vin sont ignorees a l import.',
         ]),
       ],
@@ -392,7 +396,53 @@ class _CsvImportTab extends StatelessWidget {
         _Bullets([
           'Nom (obligatoire), millesime, producteur, appellation, quantite.',
           'Couleur, region, pays, cepages, prix, localisation, notes.',
-          'Validation visuelle avant ajout (tableau recapitulatif).',
+          'Detection automatique du separateur (virgule, point-virgule, tabulation).',
+          'Previsualisation interactive de 20 lignes avant mapping.',
+          'Validation visuelle et edition avant ajout (par lot ou individuellement).',
+        ]),
+        _BlockTitle('Etape 1 - Mapping des colonnes'),
+        _Paragraph(
+          'Apres selection du fichier CSV, une boite de dialogue affiche '
+          'un apercu des 20 premieres lignes de donnees. Vous pouvez :',
+        ),
+        _Bullets([
+          'Cliquer sur un en-tete de colonne pour l assigner a un champ via menu deroulant.',
+          'Cliquer sur un champ (chip) pour lui assigner une colonne avec apercu des donnees.',
+          'Utiliser le bouton "Pre-analyse IA" : l IA analyse jusqu a 100 lignes pour detecter l en-tete et le mapping, meme si l en-tete n est pas la premiere ligne.',
+          'Selectionner la ligne d en-tete en cliquant sur le numero de ligne ou en saisissant le numero.',
+          'Decocher l en-tete si votre fichier n en contient pas.',
+          'Replier/deplier le panneau des champs assignes pour gagner de l espace.',
+          'Reinitialiser le mapping avec le bouton dedie.',
+          'Des avertissements s affichent si des colonnes importantes manquent.',
+        ]),
+        _BlockTitle('Etape 2 - Choix du mode d import'),
+        _Paragraph(
+          'Apres validation du mapping, vous choisissez entre deux modes :',
+        ),
+        _Bullets([
+          'Import direct : les vins sont ajoutes tels quels en base.',
+          'Import avec IA : l IA corrige, normalise et complete chaque vin.',
+        ]),
+        _BlockTitle('Import avec IA - Enrichissement par lot'),
+        _Paragraph(
+          'Si vous choisissez l enrichissement IA, une boite de validation '
+          'par lot s affiche avec une carte par vin :',
+        ),
+        _Bullets([
+          'Chaque champ est editable directement dans la carte.',
+          'Supprimez un vin de l import avec l icone corbeille.',
+          'Re-evaluez un vin individuellement avec l icone rafraichir.',
+          'L IA corrige les fautes, normalise les couleurs/regions, et complete les champs vides.',
+          'Validez le lot entier ou relancez l IA avec "Reessayer tout".',
+        ]),
+        _BlockTitle('Etape 3 - Resume d import'),
+        _Paragraph(
+          'Apres import, un dialogue resume les resultats :',
+        ),
+        _Bullets([
+          'Nombre de vins importes avec succes.',
+          'Nombre de vins ignores (nom manquant).',
+          'Nombre d erreurs eventuelles.',
         ]),
         _BlockTitle('Format ideal - ce qui fonctionne'),
         _Paragraph(
@@ -429,7 +479,7 @@ class _CsvImportTab extends StatelessWidget {
           ],
           note:
               'Les colonnes absentes restent vides dans la fiche vin. '
-              'Vous pouvez completer manuellement apres import.',
+              'Vous pouvez completer manuellement ou via enrichissement IA.',
         ),
         _BlockTitle('Ce qui ne fonctionne pas'),
         _Paragraph(
@@ -448,7 +498,7 @@ class _CsvImportTab extends StatelessWidget {
               'Sans elle, chaque ligne est ignoree lors de l import.',
         ),
         _CsvExampleTable(
-          label: 'Premiere ligne de donnees traitee comme en-tete',
+          label: 'Mauvaise ligne d en-tete selectionnee',
           isValid: false,
           headers: ['Pomerol', '2015', 'Chateau Petrus', 'Rouge', '6'],
           rows: [
@@ -456,20 +506,8 @@ class _CsvImportTab extends StatelessWidget {
             ['Meursault', '2019', 'Coche-Dury', 'Blanc', '3'],
           ],
           note:
-              'Solution: ajoutez une ligne d en-tete ou decochez '
-              '"Premiere ligne = en-tete" dans la boite de dialogue.',
-        ),
-        _CsvExampleTable(
-          label: 'Separateurs inconsistants - colonnes mal decoupees',
-          isValid: false,
-          headers: ['nom;millesime', 'producteur;quantite'],
-          rows: [
-            ['Pomerol;2015', 'Chateau X;6'],
-            ['Chablis;2020', 'Domaine Y;12'],
-          ],
-          note:
-              'Solution: utilisez un seul type de separateur (, ou ;) '
-              'dans tout le fichier. Ne melangez pas les deux.',
+              'Solution: dans la boite de mapping, cliquez sur le bon numero '
+              'de ligne ou decochez "Ligne d en-tete" si votre fichier n en a pas.',
         ),
         _CsvExampleTable(
           label: 'En-tetes en plusieurs lignes ou cellules fusionnees',
@@ -480,30 +518,16 @@ class _CsvImportTab extends StatelessWidget {
             ['Pomerol', '2015', 'Chateau X', '6'],
           ],
           note:
-              'Solution: gardez une seule ligne d en-tete en premiere ligne. '
+              'Solution: gardez une seule ligne d en-tete. '
               'Supprimez les lignes de titre de groupe ou les cellules fusionnees.',
         ),
-        _BlockTitle('Detection automatique des colonnes'),
-        _Paragraph(
-          'L application lit les en-tetes et propose un mapping automatique '
-          '(exemples reconnus: nom/wine/cuvee, millesime/vintage/year, '
-          'producteur/producer/domaine, quantite/qty/stock, etc.).',
-        ),
-        _Paragraph(
-          'Les champs detectes automatiquement sont marques "Auto" dans la boite de dialogue.',
-        ),
-        _BlockTitle('Importation manuelle (si auto-detection insuffisante)'),
-        _Bullets([
-          'Videz/corrigez les numeros de colonnes proposes.',
-          'Saisissez les index de colonnes (1 = premiere colonne).',
-          'Confirmez si votre fichier contient une ligne d en-tete.',
-          'Validez puis controlez le tableau d extraction avant import final.',
-        ]),
         _BlockTitle('Conseils pour faciliter l import'),
         _Bullets([
           'Evitez les abreviations ambigues dans les en-tetes.',
           'Uniformisez les valeurs (ex: Rouge/Blanc/Rose).',
           'Renseignez le nom du vin sur chaque ligne pour eviter les ignores.',
+          'Utilisez la pre-analyse IA si vos en-tetes sont non standards.',
+          'Profitez de l enrichissement IA pour completer les champs manquants automatiquement.',
         ]),
       ],
     );

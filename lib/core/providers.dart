@@ -12,6 +12,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/repositories/food_catego
 import 'package:wine_cellar/features/wine_cellar/domain/repositories/virtual_cellar_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/add_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_wine.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/delete_all_wines.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/get_wine_by_id.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
@@ -78,6 +79,12 @@ final virtualCellarRepositoryProvider = Provider<VirtualCellarRepository>((ref) 
 });
 
 // ============ Visual Theme ============
+
+/// Desktop shell navigation rail collapsed state.
+/// false = normal, true = compact/collapsed.
+final shellNavigationRailCollapsedProvider = StateProvider<bool>((ref) {
+  return false;
+});
 
 /// Transient theme override set by the cellar detail screen.
 /// When non-null, the entire app adopts this cellar's visual identity.
@@ -476,6 +483,10 @@ final getWineByIdUseCaseProvider = Provider<GetWineByIdUseCase>((ref) {
 
 final deleteWineUseCaseProvider = Provider<DeleteWineUseCase>((ref) {
   return DeleteWineUseCase(ref.watch(wineRepositoryProvider));
+});
+
+final deleteAllWinesUseCaseProvider = Provider<DeleteAllWinesUseCase>((ref) {
+  return DeleteAllWinesUseCase(ref.watch(wineRepositoryProvider));
 });
 
 final updateWineUseCaseProvider = Provider<UpdateWineUseCase>((ref) {

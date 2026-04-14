@@ -7,12 +7,14 @@ import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_reposi
 class ImportWinesFromCsvParams {
   final String csvContent;
   final CsvColumnMapping mapping;
-  final bool hasHeader;
+  final int? headerLine;
+  final String? locationOverride;
 
   const ImportWinesFromCsvParams({
     required this.csvContent,
     required this.mapping,
-    this.hasHeader = true,
+    this.headerLine,
+    this.locationOverride,
   });
 }
 
@@ -38,7 +40,8 @@ class ImportWinesFromCsvUseCase
       final importedCount = await _repository.importFromCsv(
         params.csvContent,
         params.mapping,
-        hasHeader: params.hasHeader,
+        headerLine: params.headerLine,
+        locationOverride: params.locationOverride,
       );
 
       if (importedCount == 0) {

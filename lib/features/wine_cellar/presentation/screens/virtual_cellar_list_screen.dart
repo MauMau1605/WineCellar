@@ -70,11 +70,14 @@ class VirtualCellarListScreen extends ConsumerWidget {
   }
 
   Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
+    final existingCellars = await _getExistingCellarNames(ref);
+    if (!context.mounted) return;
     await _showCellarFormDialog(
       context: context,
       title: 'Nouveau cellier',
       confirmLabel: 'Créer',
       enableModeSelection: true,
+      existingCellarNames: existingCellars,
       onConfirm: (name, rows, cols, theme) async {
         final result = await ref
             .read(createVirtualCellarUseCaseProvider)
@@ -102,6 +105,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
     WidgetRef ref,
     VirtualCellarEntity cellar,
   ) async {
+    final oldName = cellar.name;
     await _showCellarFormDialog(
       context: context,
       title: 'Modifier le cellier',
@@ -127,9 +131,73 @@ class VirtualCellarListScreen extends ConsumerWidget {
               context,
             ).showSnackBar(SnackBar(content: Text(failure.message)));
           }
-        }, (_) {});
+        }, (_) async {
+          // If name changed, ask about updating wine locations
+          if (name != oldName && context.mounted) {
+            await _askUpdateWineLocations(
+              context,
+              ref,
+              oldName: oldName,
+              newName: name,
+            );
+          }
+        });
       },
     );
+  }
+
+  Future<void> _askUpdateWineLocations(
+    BuildContext context,
+    WidgetRef ref, {
+    required String oldName,
+    required String newName,
+  }) async {
+    final wineRepo = ref.read(wineRepositoryProvider);
+    final allWines = await wineRepo.getAllWines();
+    final affectedWines = allWines
+        .where((w) => w.location == oldName)
+        .toList();
+
+    if (affectedWines.isEmpty || !context.mounted) return;
+
+    final shouldUpdate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Mettre à jour la localisation ?'),
+        content: Text(
+          '${affectedWines.length} bouteille(s) ont la localisation '
+          '"$oldName".\n\n'
+          'Souhaitez-vous mettre à jour leur localisation en "$newName" ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Non, garder l\'ancienne'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Oui, mettre à jour'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldUpdate != true) return;
+
+    final updateUseCase = ref.read(updateWineUseCaseProvider);
+    for (final wine in affectedWines) {
+      await updateUseCase(wine.copyWith(location: newName));
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${affectedWines.length} bouteille(s) mise(s) à jour.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDelete(
@@ -175,6 +243,22 @@ class VirtualCellarListScreen extends ConsumerWidget {
     }
   }
 
+  Future<List<String>> _getExistingCellarNames(WidgetRef ref) async {
+    final result = await ref.read(virtualCellarRepositoryProvider).getAll();
+    return result
+        .getOrElse((_) => const [])
+        .map((c) => c.name)
+        .toList();
+  }
+
+  static String _generateDefaultCellarName(List<String> existingNames) {
+    final lowerNames = existingNames.map((n) => n.toLowerCase()).toSet();
+    for (var i = 1;; i++) {
+      final candidate = 'Cave $i';
+      if (!lowerNames.contains(candidate.toLowerCase())) return candidate;
+    }
+  }
+
   Future<void> _showCellarFormDialog({
     required BuildContext context,
     required String title,
@@ -184,6 +268,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
     VirtualCellarTheme initialTheme = VirtualCellarTheme.classic,
     required String confirmLabel,
     bool enableModeSelection = false,
+    List<String> existingCellarNames = const [],
     required Future<void> Function(
       String name,
       int rows,
@@ -233,9 +318,11 @@ class VirtualCellarListScreen extends ConsumerWidget {
                   ],
                   TextField(
                     controller: nameCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Nom du cellier',
-                      hintText: 'Ex : Cave principale',
+                      hintText: existingCellarNames.isEmpty
+                          ? 'Ex : Cave principale'
+                          : 'Par défaut : ${_generateDefaultCellarName(existingCellarNames)}',
                     ),
                     textCapitalization: TextCapitalization.sentences,
                   ),
@@ -307,8 +394,10 @@ class VirtualCellarListScreen extends ConsumerWidget {
               ),
               FilledButton(
                 onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) return;
+                  var name = nameCtrl.text.trim();
+                  if (name.isEmpty) {
+                    name = _generateDefaultCellarName(existingCellarNames);
+                  }
 
                   if (mode == _CellarCreationMode.advanced) {
                     Navigator.of(ctx).pop();

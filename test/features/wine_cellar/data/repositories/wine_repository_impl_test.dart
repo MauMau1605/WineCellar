@@ -280,4 +280,33 @@ void main() {
       await db.close();
     });
   });
+
+  group('WineRepositoryImpl.detectCsvSeparator', () {
+    test('détecte la virgule comme séparateur', () {
+      const csv = 'Nom,Millésime,Producteur\nMargaux,2015,Domaine X\n';
+      expect(WineRepositoryImpl.detectCsvSeparator(csv), ',');
+    });
+
+    test('détecte le point-virgule comme séparateur', () {
+      const csv = 'Nom;Millésime;Producteur\nMargaux;2015;Domaine X\n';
+      expect(WineRepositoryImpl.detectCsvSeparator(csv), ';');
+    });
+
+    test('détecte la tabulation comme séparateur', () {
+      const csv = 'Nom\tMillésime\tProducteur\nMargaux\t2015\tDomaine X\n';
+      expect(WineRepositoryImpl.detectCsvSeparator(csv), '\t');
+    });
+
+    test('retourne virgule par défaut si contenu vide', () {
+      expect(WineRepositoryImpl.detectCsvSeparator(''), ',');
+    });
+
+    test('préfère le séparateur le plus cohérent entre les lignes', () {
+      // Semicolons are consistent (2 per line), commas are inconsistent
+      const csv = 'Nom;Région;Pays\n'
+          'Château Haut-Brion;Bordeaux;France\n'
+          'Chablis, Premier Cru;Bourgogne;France\n';
+      expect(WineRepositoryImpl.detectCsvSeparator(csv), ';');
+    });
+  });
 }

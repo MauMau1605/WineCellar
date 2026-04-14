@@ -185,4 +185,9 @@ class WineDao extends DatabaseAccessor<AppDatabase> with _$WineDaoMixin {
     final result = await query.getSingle();
     return result.read(sum) ?? 0;
   }
+
+  /// Delete all wines from the database.
+  Future<int> deleteAllWines() {
+    return delete(wines).go();
+  }
 }

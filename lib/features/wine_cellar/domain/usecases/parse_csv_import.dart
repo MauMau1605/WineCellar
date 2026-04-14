@@ -8,12 +8,12 @@ import 'package:wine_cellar/features/wine_cellar/domain/repositories/wine_reposi
 class ParseCsvImportParams {
   final String csvContent;
   final CsvColumnMapping mapping;
-  final bool hasHeader;
+  final int? headerLine;
 
   const ParseCsvImportParams({
     required this.csvContent,
     required this.mapping,
-    this.hasHeader = true,
+    this.headerLine,
   });
 }
 
@@ -41,7 +41,7 @@ class ParseCsvImportUseCase
       final rows = await _repository.parseCsvRows(
         params.csvContent,
         params.mapping,
-        hasHeader: params.hasHeader,
+        headerLine: params.headerLine,
       );
 
       if (rows.isEmpty) {

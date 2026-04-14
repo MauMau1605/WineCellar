@@ -53,7 +53,7 @@ void main() {
 
   test('retourne ValidationFailure si aucune ligne exploitable', () async {
     when(
-      () => repository.parseCsvRows(any(), any(), hasHeader: any(named: 'hasHeader')),
+      () => repository.parseCsvRows(any(), any(), headerLine: any(named: 'headerLine')),
     ).thenAnswer((_) async => const []);
 
     final params = ParseCsvImportParams(
@@ -76,7 +76,7 @@ void main() {
     ];
 
     when(
-      () => repository.parseCsvRows(any(), any(), hasHeader: any(named: 'hasHeader')),
+      () => repository.parseCsvRows(any(), any(), headerLine: any(named: 'headerLine')),
     ).thenAnswer((_) async => rows);
 
     final params = ParseCsvImportParams(

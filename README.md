@@ -6,8 +6,12 @@ Application de gestion de cave à vin avec assistant IA intégré.
 
 - **Saisie de vin via chat IA** — décrivez un vin en langage naturel, l'IA extrait les informations structurées
 - **Liste & détail des bouteilles** — gestion des quantités, filtres par couleur/maturité/accord mets-vins
+- **Import CSV intelligent** — détection automatique du séparateur, prévisualisation interactive, mapping des colonnes par clic ou pré-analyse IA, sélection flexible de la ligne d'en-tête, enrichissement IA avec validation par lot éditable
 - **Export JSON / CSV** de la cave
-- **Fournisseurs IA flexibles** — OpenAI (GPT) ou Ollama (local, gratuit)
+- **Accords mets-vins** — catégories éditables avec suggestions IA
+- **Cave virtuelle** — celliers configurables avec grille de placement des bouteilles
+- **Fournisseurs IA flexibles** — OpenAI (GPT), Google Gemini, Mistral, Ollama (local, gratuit)
+- **Vision & OCR** — analyse d'étiquettes par caméra (OCR local ou vision IA)
 - **Base SQLite locale** avec Drift (migrations versionnées)
 
 ## Prérequis
@@ -183,9 +187,11 @@ lib/
 │   ├── tables/                # Définitions des tables (wines, food_categories, pairings)
 │   └── daos/                  # Data Access Objects
 ├── features/
-│   ├── wine_cellar/           # Liste, détail, filtres, export
-│   ├── ai_assistant/          # Chat IA, prompts, services OpenAI/Ollama
-│   └── settings/              # Configuration fournisseur IA, clé API
+│   ├── wine_cellar/           # Liste, détail, filtres, import/export CSV & JSON
+│   ├── ai_assistant/          # Chat IA, prompts, services OpenAI/Gemini/Mistral/Ollama
+│   ├── settings/              # Configuration fournisseur IA, clé API
+│   ├── user_manual/           # Manuel utilisateur intégré
+│   └── developer/             # Outils développeur (logs IA)
 └── l10n/                      # Fichiers .arb (fr/en)
 ```
 
@@ -197,5 +203,5 @@ lib/
 | State management | Riverpod |
 | Navigation | GoRouter |
 | Base de données | Drift (SQLite) |
-| IA | OpenAI / Ollama |
+| IA | OpenAI / Gemini / Mistral / Ollama |
 | Sécurité | flutter_secure_storage |

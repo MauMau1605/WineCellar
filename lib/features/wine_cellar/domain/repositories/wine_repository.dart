@@ -46,16 +46,25 @@ abstract class WineRepository {
   Future<int> importFromJson(String jsonString);
 
   /// Parse wine rows from a CSV string using a user-defined mapping.
+  ///
+  /// [headerLine] is the 1-based row number of the header line, or null if
+  /// no header is present. Data rows start after [headerLine]. Rows before
+  /// the header are ignored (metadata / titles).
   Future<List<CsvImportRow>> parseCsvRows(
     String csvString,
     CsvColumnMapping mapping, {
-    bool hasHeader = true,
+    int? headerLine,
   });
 
   /// Import wines directly from a CSV string using a user-defined mapping.
+  /// If [locationOverride] is provided, it overrides each wine's location.
   Future<int> importFromCsv(
     String csvString,
     CsvColumnMapping mapping, {
-    bool hasHeader = true,
+    int? headerLine,
+    String? locationOverride,
   });
+
+  /// Delete all wines from the cellar.
+  Future<void> deleteAllWines();
 }

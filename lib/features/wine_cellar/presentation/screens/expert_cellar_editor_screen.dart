@@ -145,6 +145,18 @@ class _ExpertCellarEditorScreenState
     _dirtySinceLastSave = false;
   }
 
+  Future<String> _generateDefaultCellarName() async {
+    final result = await ref.read(virtualCellarRepositoryProvider).getAll();
+    final names = result
+        .getOrElse((_) => const [])
+        .map((c) => c.name.toLowerCase())
+        .toSet();
+    for (var i = 1;; i++) {
+      final candidate = 'Cave $i';
+      if (!names.contains(candidate.toLowerCase())) return candidate;
+    }
+  }
+
   Future<void> _clearDraft() async {
     final storage = ref.read(secureStorageProvider);
     await storage.delete(key: AppConstants.keyExpertCellarDraft);
@@ -419,18 +431,14 @@ class _ExpertCellarEditorScreenState
     if (confirmed != true) return;
 
     final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le nom du cellier est requis.')),
-      );
-      return;
-    }
+    final effectiveName = name.isNotEmpty
+        ? name
+        : await _generateDefaultCellarName();
 
     final base = widget.sourceCellar;
     final entity = VirtualCellarEntity(
       id: base?.id,
-      name: name,
+      name: effectiveName,
       rows: rows,
       columns: cols,
       emptyCells: emptyCells,

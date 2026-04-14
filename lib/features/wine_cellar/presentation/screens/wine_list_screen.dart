@@ -15,6 +15,7 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_import_row.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_sort.dart';
@@ -23,10 +24,22 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.da
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_card.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_detail_panel.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/wine_list_provider.dart';
+import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_strategy.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/csv_batch_validation_dialog.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/csv_column_mapping_dialog.dart';
 
 enum _CsvImportMode { direct, withAi }
+
+class _CsvImportChoice {
+  final _CsvImportMode mode;
+  final String? locationOverride;
+
+  const _CsvImportChoice({required this.mode, this.locationOverride});
+}
 
 /// Main cellar screen - displays all wines with filtering
 class WineListScreen extends ConsumerStatefulWidget {
@@ -41,6 +54,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   WineFilter _filter = const WineFilter();
   WineSort? _sort;
   List<String> _availableLocations = const [];
+  int? _selectedWineId;
+
+  static const double _masterDetailBreakpoint = 900;
 
   @override
   void initState() {
@@ -65,13 +81,22 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     super.dispose();
   }
 
+  bool get _isWideScreen =>
+      MediaQuery.of(context).size.width >= _masterDetailBreakpoint;
+
   @override
   Widget build(BuildContext context) {
     final winesAsync = ref.watch(filteredWinesProvider(_filter));
+    final isWide = _isWideScreen;
+
+    // On narrow screen with a selected wine, show detail view
+    if (!isWide && _selectedWineId != null) {
+      return _buildNarrowDetailView();
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ma Cave à Vin'),
+        title: const Text('Ma cave'),
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
@@ -170,7 +195,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           // Location filter chips
           if (_availableLocations.isNotEmpty)
             _buildLocationFilterChips(),
-          // Wine list
+          // Wine list (+ detail panel on wide)
           Expanded(
             child: winesAsync.when(
               data: (wines) {
@@ -198,7 +223,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 if (filtered.isEmpty) {
                   return _buildEmptyState();
                 }
-                return _buildWineGrid(context, filtered);
+
+                if (isWide) {
+                  return _buildMasterDetail(context, filtered);
+                }
+                return _buildWineList(context, filtered);
               },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, stack) => Center(child: Text('Erreur: $err')),
@@ -404,6 +433,26 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
+  /// Narrow screen: detail view replaces the list
+  Widget _buildNarrowDetailView() {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Détail'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => setState(() => _selectedWineId = null),
+        ),
+      ),
+      body: WineDetailPanel(
+        key: ValueKey(_selectedWineId),
+        wineId: _selectedWineId!,
+        onWineDeleted: () {
+          setState(() => _selectedWineId = null);
+        },
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -437,38 +486,81 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
-  Widget _buildWineGrid(BuildContext context, List<WineEntity> wines) {
-    final isWide = MediaQuery.of(context).size.width > 600;
-    final crossAxisCount = isWide ? 3 : 1;
+  /// Master-detail two-column layout for wide screens.
+  Widget _buildMasterDetail(BuildContext context, List<WineEntity> wines) {
+    final theme = Theme.of(context);
 
-    if (!isWide) {
-      // Mobile: simple list
-      return ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: wines.length,
-        itemBuilder: (context, index) => WineCard(
-          wine: wines[index],
-          onTap: () => context.go('/cellar/wine/${wines[index].id}'),
-          onQuantityChanged: (newQty) => _updateQuantity(wines[index], newQty),
+    return Row(
+      children: [
+        // Left: wine list
+        SizedBox(
+          width: 360,
+          child: _buildWineList(context, wines, compact: true),
         ),
-      );
-    }
+        // Divider
+        VerticalDivider(
+          width: 1,
+          thickness: 1,
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        // Right: detail panel
+        Expanded(
+          child: _selectedWineId != null
+              ? WineDetailPanel(
+                  key: ValueKey(_selectedWineId),
+                  wineId: _selectedWineId!,
+                  onWineDeleted: () {
+                    setState(() => _selectedWineId = null);
+                  },
+                )
+              : _buildDetailPlaceholder(theme),
+        ),
+      ],
+    );
+  }
 
-    // Desktop: grid
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 2.5,
+  Widget _buildDetailPlaceholder(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.wine_bar_outlined,
+            size: 64,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Sélectionnez un vin',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildWineList(
+    BuildContext context,
+    List<WineEntity> wines, {
+    bool compact = false,
+  }) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       itemCount: wines.length,
-      itemBuilder: (context, index) => WineCard(
-        wine: wines[index],
-        onTap: () => context.go('/cellar/wine/${wines[index].id}'),
-        onQuantityChanged: (newQty) => _updateQuantity(wines[index], newQty),
-      ),
+      itemBuilder: (context, index) {
+        final wine = wines[index];
+        return WineCard(
+          wine: wine,
+          selected: _selectedWineId == wine.id,
+          compact: compact,
+          onTap: () {
+            setState(() => _selectedWineId = wine.id);
+          },
+          onQuantityChanged: (newQty) => _updateQuantity(wine, newQty),
+        );
+      },
     );
   }
 
@@ -699,12 +791,18 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
     if (!mounted || !importApproved) return;
 
-    final previewRows = _extractCsvPreviewRows(csvContent, maxRows: 2);
+    final previewRows = _extractCsvPreviewRows(csvContent, maxRows: 20);
+    final allRows = _extractCsvPreviewRows(csvContent, maxRows: 100);
 
     if (!mounted) return;
     final mappingResult = await showDialog<CsvMappingDialogResult>(
       context: context,
-      builder: (_) => CsvColumnMappingDialog(previewRows: previewRows),
+      builder: (_) => CsvColumnMappingDialog(
+        previewRows: previewRows,
+        allRows: allRows,
+        onRequestAiMapping: (rows, {allRows}) =>
+            _requestAiMapping(rows, allRows: allRows),
+      ),
     );
 
     if (mappingResult == null || !mounted) {
@@ -716,7 +814,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       ParseCsvImportParams(
         csvContent: csvContent,
         mapping: mappingResult.mapping,
-        hasHeader: mappingResult.hasHeader,
+        headerLine: mappingResult.headerLine,
       ),
     );
 
@@ -732,21 +830,70 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         final previewOk = await _confirmCsvPreview(rows);
         if (!mounted || !previewOk) return;
 
-        final mode = await _askCsvImportMode();
-        if (!mounted || mode == null) return;
+        final choice = await _askCsvImportMode();
+        if (!mounted || choice == null) return;
 
-        if (mode == _CsvImportMode.direct) {
+        // Create virtual cellar if location specified and doesn't exist
+        if (choice.locationOverride != null) {
+          await _ensureVirtualCellarForLocation(choice.locationOverride!);
+        }
+
+        if (choice.mode == _CsvImportMode.direct) {
           final directConfirmed = await _confirmDirectImportRecap(rows);
           if (!mounted || !directConfirmed) return;
 
           await _importCsvDirectly(
             csvContent: csvContent,
             mappingResult: mappingResult,
+            locationOverride: choice.locationOverride,
           );
           return;
         }
 
-        await _importCsvWithAi(rows);
+        await _importCsvWithAi(rows, locationOverride: choice.locationOverride);
+      },
+    );
+  }
+
+  /// Ask the AI to detect header line and column mapping.
+  /// Receives both preview rows (for display) and all rows (for AI analysis).
+  Future<Map<String, dynamic>?> _requestAiMapping(
+    List<List<String>> previewRows, {
+    List<List<String>>? allRows,
+  }) async {
+    final analyzeUseCase = await _resolveAnalyzeWineUseCase();
+    if (analyzeUseCase == null) return null;
+
+    final prompt = AiPrompts.buildCsvMappingPrompt(
+      previewRows: previewRows,
+      allRows: allRows,
+    );
+    final result = await analyzeUseCase(
+      AnalyzeWineParams(userMessage: prompt),
+    );
+
+    return result.fold(
+      (failure) => null,
+      (chatResult) {
+        final text = chatResult.textResponse;
+        try {
+          // Try <json>...</json> first
+          final xmlMatch =
+              RegExp(r'<json>(.*?)</json>', dotAll: true).firstMatch(text);
+          if (xmlMatch != null) {
+            return jsonDecode(xmlMatch.group(1)!) as Map<String, dynamic>;
+          }
+          // Try ```json...```
+          final mdMatch =
+              RegExp(r'```json\s*(.*?)```', dotAll: true).firstMatch(text);
+          if (mdMatch != null) {
+            return jsonDecode(mdMatch.group(1)!) as Map<String, dynamic>;
+          }
+          // Try raw JSON
+          return jsonDecode(text) as Map<String, dynamic>;
+        } catch (_) {
+          return null;
+        }
       },
     );
   }
@@ -981,14 +1128,35 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     return approved ?? false;
   }
 
-  Future<_CsvImportMode?> _askCsvImportMode() {
-    return showDialog<_CsvImportMode>(
+  Future<_CsvImportChoice?> _askCsvImportMode() {
+    final locationCtrl = TextEditingController();
+    return showDialog<_CsvImportChoice>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Choisissez le mode d\'import'),
-        content: const Text(
-          'Souhaitez-vous enrichir les données manquantes avec l\'IA,\n'
-          'ou ajouter directement ces vins à la cave ?',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Souhaitez-vous enrichir les données manquantes avec l\'IA,\n'
+              'ou ajouter directement ces vins à la cave ?',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: locationCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Localisation commune (optionnel)',
+                hintText: 'Ex : Cave principale, Garage…',
+                prefixIcon: Icon(Icons.place_outlined),
+                helperText:
+                    'Si renseigné, tous les vins importés auront cette '
+                    'localisation et un cellier vide sera créé si nécessaire.',
+                helperMaxLines: 3,
+              ),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -996,13 +1164,27 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             child: const Text('Annuler'),
           ),
           OutlinedButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_CsvImportMode.direct),
+            onPressed: () {
+              final loc = locationCtrl.text.trim();
+              Navigator.of(dialogContext).pop(
+                _CsvImportChoice(
+                  mode: _CsvImportMode.direct,
+                  locationOverride: loc.isEmpty ? null : loc,
+                ),
+              );
+            },
             child: const Text('Ajouter directement'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_CsvImportMode.withAi),
+            onPressed: () {
+              final loc = locationCtrl.text.trim();
+              Navigator.of(dialogContext).pop(
+                _CsvImportChoice(
+                  mode: _CsvImportMode.withAi,
+                  locationOverride: loc.isEmpty ? null : loc,
+                ),
+              );
+            },
             child: const Text('Compléter avec IA'),
           ),
         ],
@@ -1010,16 +1192,39 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
+  /// Creates a virtual cellar with the given name if one doesn't already exist.
+  Future<void> _ensureVirtualCellarForLocation(String cellarName) async {
+    final repo = ref.read(virtualCellarRepositoryProvider);
+    final result = await repo.getAll();
+    final cellars = result.getOrElse((_) => const []);
+    final exists = cellars.any(
+      (c) => c.name.toLowerCase() == cellarName.toLowerCase(),
+    );
+    if (!exists) {
+      await ref.read(createVirtualCellarUseCaseProvider).call(
+            VirtualCellarEntity(
+              name: cellarName,
+              rows: 5,
+              columns: 5,
+            ),
+          );
+      // Refresh locations filter
+      await _loadLocations();
+    }
+  }
+
   Future<void> _importCsvDirectly({
     required String csvContent,
     required CsvMappingDialogResult mappingResult,
+    String? locationOverride,
   }) async {
     final useCase = ref.read(importWinesFromCsvUseCaseProvider);
     final result = await useCase(
       ImportWinesFromCsvParams(
         csvContent: csvContent,
         mapping: mappingResult.mapping,
-        hasHeader: mappingResult.hasHeader,
+        headerLine: mappingResult.headerLine,
+        locationOverride: locationOverride,
       ),
     );
 
@@ -1176,7 +1381,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
-  Future<void> _importCsvWithAi(List<CsvImportRow> rows) async {
+  Future<void> _importCsvWithAi(List<CsvImportRow> rows, {String? locationOverride}) async {
     final analyzeUseCase = await _resolveAnalyzeWineUseCase();
     if (analyzeUseCase == null) {
       if (!mounted) return;
@@ -1211,7 +1416,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         .read(foodCategoryRepositoryProvider)
         .getAllCategories();
 
-    var importedCount = 0;
+    var totalImported = 0;
+    var totalDeleted = 0;
+    var batchesCompleted = 0;
     final totalBatches = (meaningfulRows.length / 20).ceil();
 
     for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -1221,287 +1428,340 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           : start + 20;
       final batch = meaningfulRows.sublist(start, end);
 
-      final prompt = _buildAiCsvPrompt(batch, batchIndex + 1, totalBatches);
-      final result = await _runWithAiWorkingDialog(
-        message:
-            'L\'IA travaille sur le lot ${batchIndex + 1}/$totalBatches...\nMerci de patienter.',
-        task: () => analyzeUseCase(AnalyzeWineParams(userMessage: prompt)),
-      );
+      var shouldRetry = true;
+      while (shouldRetry) {
+        shouldRetry = false;
 
-      if (!mounted) return;
+        // Build enrichment prompt
+        final rowDescriptions = batch.map((row) {
+          final fields = _csvRowToFieldsMap(row);
+          return AiPrompts.buildCsvRowDescription(
+            fields,
+            row.sourceRowNumber,
+          );
+        }).toList();
 
-      final shouldContinue = await result.fold(
-        (failure) async {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('IA: ${failure.message}')));
-          return false;
-        },
-        (chatResult) async {
-          if (chatResult.wineDataList.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Le lot ${batchIndex + 1}/$totalBatches n\'a pas produit de tableau exploitable.',
+        final prompt = AiPrompts.buildCsvEnrichmentPrompt(
+          rowDescriptions: rowDescriptions,
+          batchNumber: batchIndex + 1,
+          totalBatches: totalBatches,
+        );
+
+        final result = await _runWithAiWorkingDialog(
+          message:
+              'L\'IA enrichit le lot ${batchIndex + 1}/$totalBatches '
+              '(${batch.length} vin(s))…\nMerci de patienter.',
+          task: () => analyzeUseCase(AnalyzeWineParams(userMessage: prompt)),
+        );
+
+        if (!mounted) return;
+
+        final shouldContinue = await result.fold(
+          (failure) async {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('IA: ${failure.message}')));
+            return false;
+          },
+          (chatResult) async {
+            if (chatResult.wineDataList.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Le lot ${batchIndex + 1}/$totalBatches n\'a pas produit '
+                    'de tableau exploitable.',
+                  ),
                 ),
+              );
+              return false;
+            }
+
+            // Web search refinement pass (if Gemini available)
+            var refinedWines = chatResult.wineDataList;
+            final geminiService = ref.read(geminiWebSearchServiceProvider);
+            if (geminiService != null) {
+              refinedWines = await _refineWinesWithWebSearch(
+                refinedWines,
+                geminiService,
+                batchIndex + 1,
+                totalBatches,
+              );
+              if (!mounted) return false;
+            }
+
+            // Show batch validation dialog with inline editing
+            final batchResult =
+                await showDialog<CsvBatchValidationResult>(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => CsvBatchValidationDialog(
+                batchNumber: batchIndex + 1,
+                totalBatches: totalBatches,
+                wines: refinedWines,
+                onReevaluateSingleWine: (wine) =>
+                    _reevaluateSingleWine(wine, analyzeUseCase),
               ),
             );
-            return false;
+
+            if (batchResult == null || !mounted) return false;
+
+            switch (batchResult.action) {
+              case CsvBatchAction.cancel:
+                return false;
+              case CsvBatchAction.retry:
+                shouldRetry = true;
+                return true; // continue the outer loop
+              case CsvBatchAction.validate:
+                final addWineUseCase = ref.read(addWineUseCaseProvider);
+                final winesInBatch = batchResult.wines;
+                final deletedInBatch =
+                    refinedWines.length - winesInBatch.length;
+                totalDeleted += deletedInBatch;
+
+                for (final aiWine in winesInBatch) {
+                  if (!aiWine.isComplete) continue;
+                  final matchedCategoryIds = _matchFoodCategoryIds(
+                    aiWine.suggestedFoodPairings,
+                    allCategories,
+                  );
+                  final wine = _aiWineToEntity(
+                    aiWine,
+                    matchedCategoryIds,
+                    locationOverride: locationOverride,
+                  );
+                  final addResult = await addWineUseCase(wine);
+                  addResult.fold((_) {}, (_) => totalImported++);
+                }
+
+                batchesCompleted++;
+                return true;
+            }
+          },
+        );
+
+        if (!shouldContinue && !shouldRetry) {
+          // Show partial summary even if import was stopped early
+          if (totalImported > 0 || totalDeleted > 0) {
+            if (mounted) {
+              await _showImportSummaryDialog(
+                totalProcessed: meaningfulRows.length,
+                totalImported: totalImported,
+                totalDeleted: totalDeleted,
+                totalBatches: totalBatches,
+                batchesCompleted: batchesCompleted,
+              );
+            }
           }
-
-          final approved = await _confirmAiBatch(
-            batchNumber: batchIndex + 1,
-            totalBatches: totalBatches,
-            wines: chatResult.wineDataList,
-          );
-
-          if (!approved) {
-            return false;
-          }
-
-          final addWineUseCase = ref.read(addWineUseCaseProvider);
-          for (final aiWine in chatResult.wineDataList) {
-            if (!aiWine.isComplete) continue;
-            final matchedCategoryIds = _matchFoodCategoryIds(
-              aiWine.suggestedFoodPairings,
-              allCategories,
-            );
-            final wine = _aiWineToEntity(aiWine, matchedCategoryIds);
-            final addResult = await addWineUseCase(wine);
-            addResult.fold((_) {}, (_) => importedCount++);
-          }
-
-          return true;
-        },
-      );
-
-      if (!shouldContinue) {
-        break;
+          return;
+        }
       }
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$importedCount vin(s) ajouté(s) après validation IA.'),
-      ),
+    await _showImportSummaryDialog(
+      totalProcessed: meaningfulRows.length,
+      totalImported: totalImported,
+      totalDeleted: totalDeleted,
+      totalBatches: totalBatches,
+      batchesCompleted: batchesCompleted,
     );
   }
 
-  Future<bool> _confirmAiBatch({
-    required int batchNumber,
-    required int totalBatches,
-    required List<WineAiResponse> wines,
-  }) async {
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Validation lot IA $batchNumber/$totalBatches'),
-        content: SizedBox(
-          width: 760,
-          child: Scrollbar(
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < wines.length; i++) ...[
-                    Text(
-                      'Vin ${i + 1}',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    _BidirectionalScrollableDataTable(
-                      columns: const [
-                        DataColumn(label: Text('Champ')),
-                        DataColumn(label: Text('Valeur')),
-                      ],
-                      rows: _buildAiRecapRows(wines[i]),
-                      height: 230,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler l\'import IA'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Valider ce lot'),
-          ),
-        ],
-      ),
+  /// Re-evaluate a single wine via the AI after user modifications.
+  Future<WineAiResponse?> _reevaluateSingleWine(
+    WineAiResponse wine,
+    AnalyzeWineUseCase analyzeUseCase,
+  ) async {
+    final fields = _wineAiResponseToFieldsMap(wine);
+    final prompt = AiPrompts.buildSingleWineReevaluationPrompt(
+      wineFields: fields,
     );
-
-    return approved ?? false;
+    final result = await analyzeUseCase(
+      AnalyzeWineParams(userMessage: prompt),
+    );
+    return result.fold(
+      (failure) => null,
+      (chatResult) => chatResult.wineDataList.isNotEmpty
+          ? chatResult.wineDataList.first
+          : null,
+    );
   }
 
-  String _buildAiCsvPrompt(
-    List<CsvImportRow> rows,
+  /// Refine wines with Gemini web search to complete estimated fields.
+  /// Similar to the web search pass in standard wine addition.
+  Future<List<WineAiResponse>> _refineWinesWithWebSearch(
+    List<WineAiResponse> wines,
+    AiService webSearchService,
     int batchNumber,
     int totalBatches,
-  ) {
-    final rowsText = rows
-        .map(
-          (row) =>
-              '- ligne ${row.sourceRowNumber}: '
-              'name=${row.name ?? ''}; '
-              'vintage=${row.vintage?.toString() ?? ''}; '
-              'producer=${row.producer ?? ''}; '
-              'appellation=${row.appellation ?? ''}; '
-              'quantity=${row.quantity?.toString() ?? ''}; '
-              'color=${row.color ?? ''}; '
-              'region=${row.region ?? ''}; '
-              'country=${row.country ?? ''}; '
-              'grapes=${row.grapeVarieties.join(', ')}; '
-              'price=${row.purchasePrice?.toString() ?? ''}; '
-              'location=${row.location ?? ''}; '
-              'notes=${row.notes ?? ''}',
-        )
-        .join('\n');
-
-    return '''
-[MODE IMPORT CSV]
-Lot $batchNumber/$totalBatches.
-Tu dois enrichir les vins ci-dessous.
-
-IMPORTANT:
-- Réponds UNIQUEMENT avec un bloc ```json.
-- Retourne la structure: {"wines": [...]} avec les mêmes clés qu'habituellement.
-- Si des informations restent manquantes, mets needsMoreInfo=true et complète followUpQuestion.
-- N'ajoute aucun texte hors JSON.
-
-VINS CSV:
-$rowsText
-''';
-  }
-
-  String _missingInfoLabel(WineAiResponse wine) {
-    final missing = <String>[];
-    if ((wine.name ?? '').trim().isEmpty) missing.add('nom');
-    if ((wine.color ?? '').trim().isEmpty) missing.add('couleur');
-    if ((wine.region ?? '').trim().isEmpty) missing.add('région');
-    if ((wine.country ?? '').trim().isEmpty) missing.add('pays');
-    if (wine.needsMoreInfo && (wine.followUpQuestion ?? '').trim().isNotEmpty) {
-      missing.add(wine.followUpQuestion!.trim());
-    }
-    if (missing.isEmpty) return 'Complet';
-    return missing.join(' • ');
-  }
-
-  List<DataRow> _buildAiRecapRows(WineAiResponse wine) {
-    String valueOrDash(String? value) {
-      final trimmed = (value ?? '').trim();
-      return trimmed.isEmpty ? '—' : trimmed;
+  ) async {
+    final eligible = <int>[];
+    for (var i = 0; i < wines.length; i++) {
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wines[i]);
+      if (decision.shouldUseWebSearch) {
+        eligible.add(i);
+      }
     }
 
-    String intOrDash(int? value) => value?.toString() ?? '—';
-    String doubleOrDash(double? value) => value?.toStringAsFixed(2) ?? '—';
+    if (eligible.isEmpty) return wines;
 
-    return [
-      DataRow(
-        cells: [
-          DataCell(const Text('Nom')),
-          DataCell(Text(valueOrDash(wine.name))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Appellation')),
-          DataCell(Text(valueOrDash(wine.appellation))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Producteur')),
-          DataCell(Text(valueOrDash(wine.producer))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Région')),
-          DataCell(Text(valueOrDash(wine.region))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Pays')),
-          DataCell(Text(valueOrDash(wine.country))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Couleur')),
-          DataCell(Text(valueOrDash(wine.color))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Millésime')),
-          DataCell(Text(intOrDash(wine.vintage))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Cépages')),
-          DataCell(
-            Text(
-              wine.grapeVarieties.isEmpty
-                  ? '—'
-                  : wine.grapeVarieties.join(', '),
+    final refined = List<WineAiResponse>.from(wines);
+    var completed = 0;
+
+    for (final idx in eligible) {
+      if (!mounted) return refined;
+
+      final wine = refined[idx];
+      completed++;
+
+      // Show progress dialog for web search
+      final result = await _runWithAiWorkingDialog(
+        message:
+            '🌐 Recherche web $completed/${eligible.length} '
+            '(lot $batchNumber/$totalBatches)\n'
+            '${wine.name ?? "Vin inconnu"}…',
+        task: () async {
+          final message = AiPrompts.buildFieldCompletionMessage(
+            wineName: wine.name!,
+            vintage: wine.vintage,
+            color: wine.color,
+            appellation: wine.appellation,
+            fieldsToComplete: wine.estimatedFields,
+          );
+          return webSearchService.analyzeWineWithWebSearch(
+            userMessage: message,
+            systemPromptOverride: AiPrompts.fieldCompletionSystemPrompt,
+          );
+        },
+      );
+
+      if (result.isError) continue;
+
+      final complementData = _extractCompletionJson(result.textResponse);
+      if (complementData == null) continue;
+
+      final complement = WineAiResponse.fromJson(complementData);
+      final completedFields = wine.estimatedFields
+          .where((f) => WineAiResponse.fieldWasCompleted(f, complement))
+          .toList();
+
+      if (completedFields.isNotEmpty) {
+        refined[idx] = wine.mergeWith(complement);
+      }
+    }
+
+    return refined;
+  }
+
+  /// Extract JSON from a Gemini response that may contain markdown code blocks.
+  Map<String, dynamic>? _extractCompletionJson(String text) {
+    final jsonBlockRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
+    final match = jsonBlockRegex.firstMatch(text);
+    if (match != null) {
+      try {
+        final decoded = jsonDecode(match.group(1)!);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+
+    final braceStart = text.indexOf('{');
+    final braceEnd = text.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      try {
+        final decoded = jsonDecode(text.substring(braceStart, braceEnd + 1));
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  /// Convert a CsvImportRow to a map for AI prompts.
+  Map<String, String?> _csvRowToFieldsMap(CsvImportRow row) {
+    return {
+      'name': row.name,
+      'vintage': row.vintage?.toString(),
+      'producer': row.producer,
+      'appellation': row.appellation,
+      'quantity': row.quantity?.toString(),
+      'color': row.color,
+      'region': row.region,
+      'country': row.country,
+      'grapeVarieties': row.grapeVarieties.isNotEmpty
+          ? row.grapeVarieties.join(', ')
+          : null,
+      'purchasePrice': row.purchasePrice?.toString(),
+      'location': row.location,
+      'notes': row.notes,
+    };
+  }
+
+  /// Convert a WineAiResponse to a map for AI prompts.
+  Map<String, String?> _wineAiResponseToFieldsMap(WineAiResponse wine) {
+    return {
+      'name': wine.name,
+      'appellation': wine.appellation,
+      'producer': wine.producer,
+      'region': wine.region,
+      'country': wine.country,
+      'color': wine.color,
+      'vintage': wine.vintage?.toString(),
+      'grapeVarieties': wine.grapeVarieties.isNotEmpty
+          ? wine.grapeVarieties.join(', ')
+          : null,
+      'quantity': wine.quantity?.toString(),
+      'purchasePrice': wine.purchasePrice?.toString(),
+      'drinkFromYear': wine.drinkFromYear?.toString(),
+      'drinkUntilYear': wine.drinkUntilYear?.toString(),
+      'tastingNotes': wine.tastingNotes,
+      'description': wine.description,
+    };
+  }
+
+  /// Show a detailed summary of the CSV import results.
+  Future<void> _showImportSummaryDialog({
+    required int totalProcessed,
+    required int totalImported,
+    required int totalDeleted,
+    required int totalBatches,
+    required int batchesCompleted,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Résumé de l\'import CSV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SummaryRow(
+              icon: Icons.checklist,
+              text: '$batchesCompleted / $totalBatches lot(s) traité(s)',
             ),
+            const SizedBox(height: 8),
+            _SummaryRow(
+              icon: Icons.wine_bar,
+              text:
+                  '$totalImported vin(s) importé(s) sur $totalProcessed proposé(s)',
+            ),
+            if (totalDeleted > 0) ...[
+              const SizedBox(height: 8),
+              _SummaryRow(
+                icon: Icons.delete_outline,
+                text: '$totalDeleted vin(s) supprimé(s)',
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
           ),
         ],
       ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Quantité')),
-          DataCell(Text(intOrDash(wine.quantity))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Prix achat (€)')),
-          DataCell(Text(doubleOrDash(wine.purchasePrice))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Boire dès')),
-          DataCell(Text(intOrDash(wine.drinkFromYear))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Boire jusqu\'à')),
-          DataCell(Text(intOrDash(wine.drinkUntilYear))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Notes dégustation')),
-          DataCell(Text(valueOrDash(wine.tastingNotes))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Description IA')),
-          DataCell(Text(valueOrDash(wine.description))),
-        ],
-      ),
-      DataRow(
-        cells: [
-          DataCell(const Text('Infos à compléter')),
-          DataCell(Text(_missingInfoLabel(wine))),
-        ],
-      ),
-    ];
+    );
   }
 
   List<DataRow> _buildDirectRecapRows(CsvImportRow row) {
@@ -1651,12 +1911,14 @@ $rowsText
 
   List<List<String>> _extractCsvPreviewRows(
     String csvContent, {
-    int maxRows = 2,
+    int maxRows = 5,
   }) {
     try {
-      final rawRows = const CsvToListConverter(
+      final separator = _detectCsvSeparator(csvContent);
+      final rawRows = CsvToListConverter(
         shouldParseNumbers: false,
         eol: '\n',
+        fieldDelimiter: separator,
       ).convert(csvContent);
 
       final preview = <List<String>>[];
@@ -1673,6 +1935,33 @@ $rowsText
           .toList();
       return lines.map((line) => line.split(';')).toList();
     }
+  }
+
+  /// Simple CSV separator detection for preview purposes.
+  String _detectCsvSeparator(String csvContent) {
+    final lines = csvContent
+        .split('\n')
+        .where((l) => l.trim().isNotEmpty)
+        .take(5)
+        .toList();
+    if (lines.isEmpty) return ',';
+
+    var bestSep = ',';
+    var bestScore = 0;
+    for (final sep in [',', ';', '\t']) {
+      final counts = lines.map((l) => sep.allMatches(l).length).toList();
+      final minCount = counts.reduce((a, b) => a < b ? a : b);
+      final maxCount = counts.reduce((a, b) => a > b ? a : b);
+      // Score: total occurrences, bonus for consistency across lines
+      final total = counts.fold<int>(0, (s, c) => s + c);
+      final consistency = (maxCount - minCount <= 1) ? 10 : 0;
+      final score = total + consistency;
+      if (score > bestScore) {
+        bestScore = score;
+        bestSep = sep;
+      }
+    }
+    return bestSep;
   }
 
   List<int> _matchFoodCategoryIds(
@@ -1747,8 +2036,9 @@ $rowsText
 
   WineEntity _aiWineToEntity(
     WineAiResponse wine,
-    List<int> matchedCategoryIds,
-  ) {
+    List<int> matchedCategoryIds, {
+    String? locationOverride,
+  }) {
     return WineEntity(
       name: wine.name!.trim(),
       appellation: wine.appellation,
@@ -1771,6 +2061,7 @@ $rowsText
       aiDescription: wine.description,
       aiSuggestedFoodPairings: matchedCategoryIds.isNotEmpty,
       foodCategoryIds: matchedCategoryIds,
+      location: locationOverride,
     );
   }
 }
@@ -1839,6 +2130,24 @@ class _BidirectionalScrollableDataTableState
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _SummaryRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
     );
   }
 }
