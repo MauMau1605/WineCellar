@@ -59,6 +59,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
 
   static const double _autoBreakpoint = 900;
 
+  MultiSplitViewController? _hSplitController;
+  MultiSplitViewController? _vSplitController;
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +82,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _hSplitController?.dispose();
+    _vSplitController?.dispose();
     super.dispose();
   }
 
@@ -505,6 +510,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     final isVertical = layout == WineListLayout.masterDetailVertical;
     final axis = isVertical ? Axis.vertical : Axis.horizontal;
 
+    // Lazily create and reuse controllers so state survives rebuilds.
+    final controller = isVertical
+        ? (_vSplitController ??= _createSplitController(isVertical: true))
+        : (_hSplitController ??= _createSplitController(isVertical: false));
+
     final detailWidget = _selectedWineId != null
         ? WineDetailPanel(
             key: ValueKey(_selectedWineId),
@@ -520,18 +530,6 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       detailWidget,
     ];
 
-    final controller = MultiSplitViewController(
-      areas: [
-        Area(
-          flex: isVertical ? 1 : null,
-          size: isVertical ? null : 360,
-          min: isVertical ? 120 : 200,
-          max: isVertical ? null : 600,
-        ),
-        Area(flex: 1, min: isVertical ? 120 : 250),
-      ],
-    );
-
     return MultiSplitViewTheme(
       data: MultiSplitViewThemeData(
         dividerThickness: 8,
@@ -545,12 +543,45 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
       child: MultiSplitView(
         axis: axis,
         controller: controller,
+        onDividerDragEnd: (_) => _persistSplitRatio(controller, isVertical),
         builder: (BuildContext context, Area area) {
           final index = controller.areas.indexOf(area);
           return panels[index];
         },
       ),
     );
+  }
+
+  MultiSplitViewController _createSplitController({required bool isVertical}) {
+    final ratio = isVertical
+        ? ref.read(splitRatioVerticalProvider)
+        : ref.read(splitRatioHorizontalProvider);
+
+    return MultiSplitViewController(
+      areas: [
+        Area(flex: ratio, min: isVertical ? 120 : 200),
+        Area(flex: 1 - ratio, min: isVertical ? 120 : 250),
+      ],
+    );
+  }
+
+  void _persistSplitRatio(
+    MultiSplitViewController controller,
+    bool isVertical,
+  ) {
+    final areas = controller.areas;
+    if (areas.length != 2) return;
+    final flex0 = areas[0].flex ?? 0;
+    final flex1 = areas[1].flex ?? 0;
+    final total = flex0 + flex1;
+    if (total <= 0) return;
+    final ratio = flex0 / total;
+
+    if (isVertical) {
+      ref.read(splitRatioVerticalProvider.notifier).setRatio(ratio);
+    } else {
+      ref.read(splitRatioHorizontalProvider.notifier).setRatio(ratio);
+    }
   }
 
   Widget _buildDetailPlaceholder(ThemeData theme) {

@@ -159,6 +159,53 @@ class WineListLayoutNotifier extends StateNotifier<WineListLayout> {
   }
 }
 
+/// Persistent split ratio for master-detail divider.
+/// Stores a value between 0.0 and 1.0 representing the proportion
+/// of the first (master) panel.
+final splitRatioHorizontalProvider =
+    StateNotifierProvider<SplitRatioNotifier, double>((ref) {
+  return SplitRatioNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keySplitRatioHorizontal,
+    0.35,
+  );
+});
+
+final splitRatioVerticalProvider =
+    StateNotifierProvider<SplitRatioNotifier, double>((ref) {
+  return SplitRatioNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keySplitRatioVertical,
+    0.45,
+  );
+});
+
+class SplitRatioNotifier extends StateNotifier<double> {
+  final FlutterSecureStorage _storage;
+  final String _key;
+
+  SplitRatioNotifier(this._storage, this._key, double defaultValue)
+      : super(defaultValue) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final value = await _storage.read(key: _key);
+    if (value != null && value.isNotEmpty) {
+      final parsed = double.tryParse(value);
+      if (parsed != null && parsed > 0.0 && parsed < 1.0) {
+        state = parsed;
+      }
+    }
+  }
+
+  Future<void> setRatio(double ratio) async {
+    final clamped = ratio.clamp(0.1, 0.9);
+    state = clamped;
+    await _storage.write(key: _key, value: clamped.toString());
+  }
+}
+
 // ============ Settings ============
 
 /// Current AI provider setting

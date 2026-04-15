@@ -53,6 +53,8 @@ class AppConstants {
 
   // Wine list layout
   static const String keyWineListLayout = 'wine_list_layout';
+  static const String keySplitRatioHorizontal = 'split_ratio_horizontal';
+  static const String keySplitRatioVertical = 'split_ratio_vertical';
 
   // Wine defaults
   static const int maxRating = 5;
