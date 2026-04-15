@@ -51,6 +51,9 @@ class AppConstants {
   // Developer mode
   static const String keyDeveloperMode = 'developer_mode';
 
+  // Wine list layout
+  static const String keyWineListLayout = 'wine_list_layout';
+
   // Wine defaults
   static const int maxRating = 5;
   static const int defaultQuantity = 1;

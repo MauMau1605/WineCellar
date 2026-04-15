@@ -128,6 +128,37 @@ class AppVisualThemeNotifier extends StateNotifier<VirtualCellarTheme?> {
   }
 }
 
+/// Persistent wine list layout preference chosen in Settings.
+final wineListLayoutProvider =
+    StateNotifierProvider<WineListLayoutNotifier, WineListLayout>((ref) {
+  return WineListLayoutNotifier(ref.watch(secureStorageProvider));
+});
+
+class WineListLayoutNotifier extends StateNotifier<WineListLayout> {
+  final FlutterSecureStorage _storage;
+
+  WineListLayoutNotifier(this._storage) : super(WineListLayout.auto) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final value =
+        await _storage.read(key: AppConstants.keyWineListLayout);
+    if (value != null && value.isNotEmpty) {
+      state = WineListLayout.values.firstWhere(
+        (l) => l.name == value,
+        orElse: () => WineListLayout.auto,
+      );
+    }
+  }
+
+  Future<void> setLayout(WineListLayout layout) async {
+    state = layout;
+    await _storage.write(
+        key: AppConstants.keyWineListLayout, value: layout.name);
+  }
+}
+
 // ============ Settings ============
 
 /// Current AI provider setting

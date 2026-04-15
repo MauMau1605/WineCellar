@@ -5,896 +5,166 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
-import 'package:wine_cellar/core/usecases/usecase.dart';
-import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
-import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
-/// Settings screen for AI provider configuration
-class SettingsScreen extends ConsumerStatefulWidget {
+/// Main settings screen — clean hub navigating to sub-screens.
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _apiKeyController = TextEditingController();
-  final _geminiApiKeyController = TextEditingController();
-  final _mistralApiKeyController = TextEditingController();
-  final _ollamaUrlController = TextEditingController();
-  final _modelController = TextEditingController();
-  final _visionModelController = TextEditingController();
-  final _visionApiKeyController = TextEditingController();
-  final _geminiFallbackKeyController = TextEditingController();
-  AiProvider? _visionProviderOverride;
-  bool _obscureApiKey = true;
-  bool _obscureVisionApiKey = true;
-  bool _obscureFallbackKey = true;
-  bool _testingConnection = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    // Wait for providers to load initial values
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (!mounted) return;
-
-    final apiKey = ref.read(openAiApiKeyProvider);
-    final geminiApiKey = ref.read(geminiApiKeyProvider);
-    final mistralApiKey = ref.read(mistralApiKeyProvider);
-    final ollamaUrl = ref.read(ollamaUrlProvider);
-    final model = ref.read(selectedModelProvider);
-    final visionProviderName = ref.read(visionProviderOverrideProvider);
-    final visionModel = ref.read(visionModelOverrideProvider);
-    final visionApiKey = ref.read(visionApiKeyOverrideProvider);
-    final geminiFallbackKey = ref.read(geminiFallbackApiKeyProvider);
-
-    final parsedVisionProvider = AiProvider.values.where(
-      (provider) => provider.name == visionProviderName,
-    );
-
-    setState(() {
-      _apiKeyController.text = apiKey ?? '';
-      _geminiApiKeyController.text = geminiApiKey ?? '';
-      _mistralApiKeyController.text = mistralApiKey ?? '';
-      _ollamaUrlController.text = ollamaUrl ?? AppConstants.defaultOllamaUrl;
-      _modelController.text = model ?? '';
-      _visionProviderOverride = parsedVisionProvider.isEmpty
-          ? null
-          : parsedVisionProvider.first;
-      _visionModelController.text = visionModel ?? '';
-      _visionApiKeyController.text = visionApiKey ?? '';
-      _geminiFallbackKeyController.text = geminiFallbackKey ?? '';
-    });
-  }
-
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    _geminiApiKeyController.dispose();
-    _mistralApiKeyController.dispose();
-    _ollamaUrlController.dispose();
-    _modelController.dispose();
-    _visionModelController.dispose();
-    _visionApiKeyController.dispose();
-    _geminiFallbackKeyController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final currentProvider = ref.watch(aiProviderSettingProvider);
-    final visionModel = ref.watch(visionModelProvider);
-    final useOcr = ref.watch(useOcrForImagesProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final currentProvider = ref.watch(aiProviderSettingProvider);
+    final currentLayout = ref.watch(wineListLayoutProvider);
+    final devMode = ref.watch(developerModeProvider);
+    final currentTheme = ref.watch(appVisualThemeProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Paramètres')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          // Section: AI Provider
-          Text(
-            'Fournisseur d\'IA',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-            ),
+          // -------- Intelligence artificielle --------
+          _SettingsTile(
+            icon: Icons.smart_toy_outlined,
+            iconColor: theme.colorScheme.primary,
+            title: 'Intelligence artificielle',
+            subtitle: currentProvider.label,
+            onTap: () => context.push('/settings/ai'),
           ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.help_outline),
-              title: const Text('Aide: creation de token API'),
-              subtitle: const Text(
-                'Guide pas a pas pour appairer un modele IA.',
-              ),
-              trailing: const Icon(Icons.open_in_new),
-              onTap: () => context.go('/manual?section=ai-tokens'),
-            ),
+          const Divider(height: 0, indent: 72),
+
+          // -------- Affichage --------
+          _SettingsTile(
+            icon: Icons.palette_outlined,
+            iconColor: Colors.deepPurple,
+            title: 'Affichage',
+            subtitle: _displaySubtitle(currentLayout, currentTheme),
+            onTap: () => context.push('/settings/display'),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: RadioGroup<AiProvider>(
-              groupValue: currentProvider,
-              onChanged: (value) {
-                if (value != null) {
-                  ref
-                      .read(aiProviderSettingProvider.notifier)
-                      .setProvider(value);
-                }
-              },
-              child: Column(
-                children: AiProvider.values.map((provider) {
-                  return RadioListTile<AiProvider>(
-                    title: Text(provider.label),
-                    subtitle: Text(switch (provider) {
-                      AiProvider.openai =>
-                        'GPT-4o-mini recommandé. Nécessite une clé API.',
-                      AiProvider.gemini =>
-                        'Gemini 2.0 Flash gratuit. Nécessite une clé API Google.',
-                      AiProvider.mistral =>
-                        'Mistral Small performant. Nécessite une clé API Mistral.',
-                      AiProvider.ollama =>
-                        'Gratuit, fonctionne hors-ligne. Nécessite Ollama installé.',
-                    }),
-                    value: provider,
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
+          const Divider(height: 0, indent: 72),
 
-          // Section: Provider-specific settings
-          if (currentProvider == AiProvider.openai) ...[
-            Text(
-              'Configuration OpenAI',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _apiKeyController,
-                      decoration: InputDecoration(
-                        labelText: 'Clé API OpenAI',
-                        hintText: 'sk-...',
-                        prefixIcon: const Icon(Icons.key),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureApiKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscureApiKey = !_obscureApiKey),
-                        ),
-                      ),
-                      obscureText: _obscureApiKey,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _modelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modèle',
-                        hintText: 'gpt-4o-mini',
-                        prefixIcon: Icon(Icons.smart_toy),
-                        helperText:
-                            'Recommandé : gpt-4o-mini (pas cher et efficace)',
-                      ),
-                    ),
-                    if (visionModel.hasValue && visionModel.value != null) ...[
-                      const SizedBox(height: 12),
-                      _VisionModelChip(modelName: visionModel.value!),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
+          // -------- Développeur --------
+          _DeveloperSection(devMode: devMode),
+          const Divider(height: 0, indent: 72),
 
-          if (currentProvider == AiProvider.gemini) ...[
-            Text(
-              'Configuration Google Gemini',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _geminiApiKeyController,
-                      decoration: InputDecoration(
-                        labelText: 'Clé API Gemini',
-                        hintText: 'AIza...',
-                        prefixIcon: const Icon(Icons.key),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureApiKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscureApiKey = !_obscureApiKey),
-                        ),
-                      ),
-                      obscureText: _obscureApiKey,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _modelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modèle',
-                        hintText: 'gemini-2.5-flash-lite',
-                        prefixIcon: Icon(Icons.smart_toy),
-                        helperText: 'Recommandé : gemini-2.5-flash-lite',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Obtenez votre clé gratuite sur aistudio.google.com',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          if (currentProvider == AiProvider.mistral) ...[
-            Text(
-              'Configuration Mistral AI',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _mistralApiKeyController,
-                      decoration: InputDecoration(
-                        labelText: 'Clé API Mistral',
-                        hintText: '',
-                        prefixIcon: const Icon(Icons.key),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureApiKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscureApiKey = !_obscureApiKey),
-                        ),
-                      ),
-                      obscureText: _obscureApiKey,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _modelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modèle',
-                        hintText: 'mistral-small-latest',
-                        prefixIcon: Icon(Icons.smart_toy),
-                        helperText:
-                            'Recommandé : mistral-small-latest (bon rapport qualité/prix)',
-                      ),
-                    ),
-                    if (visionModel.hasValue && visionModel.value != null) ...[
-                      const SizedBox(height: 8),
-                      _VisionModelChip(modelName: visionModel.value!),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      'Obtenez votre clé sur console.mistral.ai',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          if (currentProvider == AiProvider.ollama) ...[
-            Text(
-              'Configuration Ollama',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _ollamaUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'URL du serveur Ollama',
-                        hintText: 'http://localhost:11434',
-                        prefixIcon: Icon(Icons.link),
-                        helperText: 'Défaut: http://localhost:11434',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _modelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modèle',
-                        hintText: 'llama3',
-                        prefixIcon: Icon(Icons.smart_toy),
-                        helperText: 'Recommandé : llama3 ou mistral',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // -------- Section : Recherche web Gemini --------
-          if (currentProvider != AiProvider.gemini) ...[
-            Text(
-              'Recherche web (Gemini)',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Permet de compléter automatiquement les informations '
-                      'manquantes d\u2019un vin (fenêtre de dégustation, notes\u2026) '
-                      'via la recherche internet Gemini.\n\n'
-                      'Actuellement, seul Google Gemini permet d\u2019accéder '
-                      'à internet en direct grâce au Search Grounding. '
-                      'Vous pouvez utiliser un autre fournisseur (Mistral, '
-                      'OpenAI\u2026) comme modèle principal pour l\u2019ajout '
-                      'de vins, et configurer ici une clé Gemini uniquement '
-                      'pour la complétion d\u2019informations à la demande.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _geminiFallbackKeyController,
-                      decoration: InputDecoration(
-                        labelText: 'Clé API Gemini (recherche web)',
-                        hintText: 'AIza...',
-                        prefixIcon: const Icon(Icons.travel_explore),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureFallbackKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscureFallbackKey = !_obscureFallbackKey,
-                          ),
-                        ),
-                      ),
-                      obscureText: _obscureFallbackKey,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Gratuit — obtenez votre clé sur aistudio.google.com',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // -------- Section : Analyse d'image --------
-          Text(
-            'Analyse d\'image',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const Icon(Icons.text_fields_outlined),
-                    title: const Text('OCR local (Google MLKit)'),
-                    subtitle: const Text(
-                      'Extrait le texte de l\'étiquette sur l\'appareil, '
-                      'sans envoyer l\'image à l\'IA.\n'
-                      'Recommandé si votre fournisseur ne supporte pas la vision.',
-                    ),
-                    value: useOcr,
-                    onChanged: (value) => ref
-                        .read(useOcrForImagesProvider.notifier)
-                        .setValue(value),
-                  ),
-                  if (!useOcr) ...[
-                    const Divider(height: 24),
-                    Text(
-                      'Overrides vision IA (optionnels)',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<AiProvider?>(
-                      initialValue: _visionProviderOverride,
-                      decoration: const InputDecoration(
-                        labelText: 'Fournisseur pour l\'analyse d\'image',
-                        prefixIcon: Icon(Icons.hub_outlined),
-                        helperText: 'Par défaut: même fournisseur que le chat.',
-                      ),
-                      items: [
-                        const DropdownMenuItem<AiProvider?>(
-                          value: null,
-                          child: Text('Utiliser le fournisseur principal'),
-                        ),
-                        ...AiProvider.values
-                            .where((provider) => provider != AiProvider.ollama)
-                            .map(
-                              (provider) => DropdownMenuItem<AiProvider?>(
-                                value: provider,
-                                child: Text(provider.label),
-                              ),
-                            ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _visionProviderOverride = value);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _visionModelController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modèle dédié à la vision',
-                        hintText: 'ex: gpt-4o, gemini-2.0-flash-exp…',
-                        prefixIcon: Icon(Icons.camera_alt_outlined),
-                        helperText:
-                            'Laissez vide pour utiliser le modèle principal.',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _visionApiKeyController,
-                      decoration: InputDecoration(
-                        labelText: 'Clé API dédiée à la vision',
-                        hintText: 'sk-… / AIza… / …',
-                        prefixIcon: const Icon(Icons.vpn_key_outlined),
-                        helperText:
-                            'Laissez vide pour utiliser la clé principale.',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureVisionApiKey
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscureVisionApiKey = !_obscureVisionApiKey,
-                          ),
-                        ),
-                      ),
-                      obscureText: _obscureVisionApiKey,
-                    ),
-                    const SizedBox(height: 8),
-                    if (visionModel.hasValue && visionModel.value != null) ...[
-                      _VisionModelChip(modelName: visionModel.value!),
-                      const SizedBox(height: 4),
-                    ],
-                    Text(
-                      'OpenAI : gpt-4o-mini  •  Gemini : gemini-2.0-flash  •  Mistral : pixtral-12b-latest',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Section: Visual Theme
-          _VisualThemeSection(),
-
-          const SizedBox(height: 24),
-
-          // Save & Test buttons
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _saveSettings,
-                  icon: const Icon(Icons.save),
-                  label: const Text('Enregistrer'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _testingConnection ? null : _testConnection,
-                  icon: _testingConnection
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.network_check),
-                  label: Text(
-                    _testingConnection ? 'Test...' : 'Tester la connexion',
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 32),
-
-          // Section: Developer Mode
-          _DeveloperModeSection(),
-
-          const SizedBox(height: 16),
-
-          // About section
-          Text(
-            'À propos',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.wine_bar),
-              title: const Text(AppConstants.appName),
-              subtitle: Text('Version ${AppConstants.appVersion}'),
-            ),
+          // -------- À propos --------
+          _SettingsTile(
+            icon: Icons.info_outline,
+            iconColor: Colors.blueGrey,
+            title: AppConstants.appName,
+            subtitle: 'Version ${AppConstants.appVersion}',
+            onTap: null,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _saveSettings() async {
-    final currentProvider = ref.read(aiProviderSettingProvider);
-
-    await ref
-        .read(openAiApiKeyProvider.notifier)
-        .setValue(
-          _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        );
-
-    await ref
-        .read(geminiApiKeyProvider.notifier)
-        .setValue(
-          _geminiApiKeyController.text.isNotEmpty
-              ? _geminiApiKeyController.text
-              : null,
-        );
-
-    await ref
-        .read(mistralApiKeyProvider.notifier)
-        .setValue(
-          _mistralApiKeyController.text.isNotEmpty
-              ? _mistralApiKeyController.text
-              : null,
-        );
-
-    await ref
-        .read(ollamaUrlProvider.notifier)
-        .setValue(
-          _ollamaUrlController.text.isNotEmpty
-              ? _ollamaUrlController.text
-              : null,
-        );
-
-    final defaultModel = switch (currentProvider) {
-      AiProvider.openai => AppConstants.defaultOpenAiModel,
-      AiProvider.gemini => AppConstants.defaultGeminiModel,
-      AiProvider.mistral => AppConstants.defaultMistralModel,
-      AiProvider.ollama => AppConstants.defaultOllamaModel,
-    };
-    await ref
-        .read(selectedModelProvider.notifier)
-        .setValue(
-          _modelController.text.isNotEmpty
-              ? _modelController.text
-              : defaultModel,
-        );
-
-    // Overrides vision (stockés que si non vides)
-    await ref
-        .read(visionProviderOverrideProvider.notifier)
-        .setValue(_visionProviderOverride?.name);
-    await ref
-        .read(visionModelOverrideProvider.notifier)
-        .setValue(
-          _visionModelController.text.isNotEmpty
-              ? _visionModelController.text
-              : null,
-        );
-    await ref
-        .read(visionApiKeyOverrideProvider.notifier)
-        .setValue(
-          _visionApiKeyController.text.isNotEmpty
-              ? _visionApiKeyController.text
-              : null,
-        );
-
-    await ref
-        .read(geminiFallbackApiKeyProvider.notifier)
-        .setValue(
-          _geminiFallbackKeyController.text.isNotEmpty
-              ? _geminiFallbackKeyController.text
-              : null,
-        );
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Paramètres enregistrés !')));
+  String _displaySubtitle(
+    WineListLayout layout,
+    dynamic currentTheme,
+  ) {
+    final parts = <String>[];
+    parts.add(layout.label);
+    if (currentTheme != null) {
+      parts.add('Thème : ${currentTheme.label}');
     }
-  }
-
-  Future<void> _testConnection() async {
-    // Invalidate vision model cache so it re-discovers with updated settings
-    ref.invalidate(visionModelProvider);
-
-    // Save first
-    await _saveSettings();
-
-    setState(() => _testingConnection = true);
-
-    final testUseCase = ref.read(testAiConnectionUseCaseProvider);
-    if (testUseCase == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Veuillez configurer la clé API d\'abord'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      setState(() => _testingConnection = false);
-      return;
-    }
-
-    final result = await testUseCase(const NoParams());
-
-    setState(() => _testingConnection = false);
-
-    if (mounted) {
-      result.fold(
-        (failure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Échec : ${failure.message}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
-        (_) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Connexion réussie ! ✅'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        },
-      );
-    }
+    return parts.join(' · ');
   }
 }
 
-/// Small info chip displayed below the model field when a vision-capable model
-/// has been auto-discovered for the current provider.
-class _VisionModelChip extends StatelessWidget {
-  const _VisionModelChip({required this.modelName});
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
 
-  final String modelName;
+  const _SettingsTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer.withAlpha(100),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.colorScheme.secondary.withAlpha(60)),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 22),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.camera_alt_outlined,
-            size: 14,
-            color: theme.colorScheme.secondary,
+      title: Text(title, style: theme.textTheme.titleSmall),
+      subtitle: Text(
+        subtitle,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+      trailing: onTap != null
+          ? const Icon(Icons.chevron_right, size: 20)
+          : null,
+      onTap: onTap,
+    );
+  }
+}
+
+class _DeveloperSection extends ConsumerWidget {
+  final bool devMode;
+  const _DeveloperSection({required this.devMode});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        SwitchListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          secondary: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child:
+                const Icon(Icons.developer_mode, color: Colors.orange, size: 22),
           ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              'Vision disponible : $modelName',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSecondaryContainer,
+          title: Text('Mode développeur', style: theme.textTheme.titleSmall),
+          subtitle: Text(
+            devMode
+                ? 'Activé — outils avancés disponibles'
+                : 'Désactivé',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          value: devMode,
+          onChanged: (v) =>
+              ref.read(developerModeProvider.notifier).setValue(v),
+        ),
+        if (devMode) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 72, right: 20, bottom: 8),
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/developer'),
+              icon: const Icon(Icons.build_circle_outlined, size: 18),
+              label: const Text('Outils développeur'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(40),
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Section letting the user pick a global visual theme for the app.
-class _VisualThemeSection extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentTheme = ref.watch(appVisualThemeProvider);
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Thème visuel',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Le thème choisi s\'applique à l\'ensemble de l\'interface. '
-          'Les celliers thémés l\'activent automatiquement pendant la consultation.',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: RadioGroup<VirtualCellarTheme?>(
-              groupValue: currentTheme,
-              onChanged: (value) {
-                ref.read(appVisualThemeProvider.notifier).setTheme(value);
-              },
-              child: Column(
-                children: [
-                  // Default choice
-                  RadioListTile<VirtualCellarTheme?>(
-                    title: const Text('Classique'),
-                    subtitle:
-                        const Text('Thème clair vin & crème par défaut'),
-                    secondary: const Icon(Icons.wb_sunny_outlined),
-                    value: null,
-                  ),
-                  // Dynamic entries from VirtualCellarTheme where an override exists
-                  ...VirtualCellarTheme.values
-                      .where((t) =>
-                          t != VirtualCellarTheme.classic)
-                      .map((t) => RadioListTile<VirtualCellarTheme?>(
-                            title: Text(t.label),
-                            subtitle: Text(
-                                descriptionForVirtualCellarTheme(t)),
-                            secondary:
-                                Icon(iconForVirtualCellarTheme(t)),
-                            value: t,
-                          )),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================
-//  Developer Mode section
-// ============================================================
-
-class _DeveloperModeSection extends ConsumerWidget {
-  const _DeveloperModeSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final devMode = ref.watch(developerModeProvider);
-    final theme = Theme.of(context);
-
-    // TODO(release): uncomment the following line to hide in production builds:
-    // if (kReleaseMode) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Développeur',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.developer_mode),
-                title: const Text('Mode développeur'),
-                subtitle: const Text(
-                  'Active des outils de test avancés (réévaluation IA, etc.).',
-                ),
-                value: devMode,
-                onChanged: (v) =>
-                    ref.read(developerModeProvider.notifier).setValue(v),
-              ),
-              if (devMode) ...[
-                const Divider(height: 0),
-                ListTile(
-                  leading: const Icon(Icons.build_circle_outlined),
-                  title: const Text('Outils développeur'),
-                  subtitle: const Text(
-                    'Réévaluation IA, tests et utilitaires.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/developer'),
-                ),
-              ],
-            ],
-          ),
-        ),
       ],
     );
   }

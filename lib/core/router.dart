@@ -6,6 +6,8 @@ import 'package:wine_cellar/features/developer/presentation/screens/developer_sc
 import 'package:wine_cellar/features/developer/presentation/screens/reevaluation_preview_screen.dart';
 import 'package:wine_cellar/features/developer/presentation/screens/wine_reevaluation_screen.dart';
 import 'package:wine_cellar/features/settings/presentation/screens/settings_screen.dart';
+import 'package:wine_cellar/features/settings/presentation/screens/ai_settings_screen.dart';
+import 'package:wine_cellar/features/settings/presentation/screens/display_settings_screen.dart';
 import 'package:wine_cellar/features/user_manual/presentation/screens/user_manual_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_detail_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/virtual_cellar_list_screen.dart';
@@ -83,6 +85,16 @@ final GoRouter appRouter = GoRouter(
           path: '/settings',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: SettingsScreen()),
+          routes: [
+            GoRoute(
+              path: 'ai',
+              builder: (context, state) => const AiSettingsScreen(),
+            ),
+            GoRoute(
+              path: 'display',
+              builder: (context, state) => const DisplaySettingsScreen(),
+            ),
+          ],
         ),
         GoRoute(
           path: '/developer',

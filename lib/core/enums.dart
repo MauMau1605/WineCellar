@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Wine color enumeration
 enum WineColor {
   red,
@@ -108,6 +110,46 @@ enum WineSortField {
         return 'Note';
       case WineSortField.location:
         return 'Localisation';
+    }
+  }
+}
+
+/// Wine list layout mode
+enum WineListLayout {
+  auto,
+  list,
+  masterDetail;
+
+  String get label {
+    switch (this) {
+      case WineListLayout.auto:
+        return 'Automatique';
+      case WineListLayout.list:
+        return 'Liste';
+      case WineListLayout.masterDetail:
+        return 'Maître-détail';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case WineListLayout.auto:
+        return 'S\'adapte à la largeur de l\'écran';
+      case WineListLayout.list:
+        return 'Liste simple, clic ouvre le détail en plein écran';
+      case WineListLayout.masterDetail:
+        return 'Liste à gauche, détail à droite en permanence';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case WineListLayout.auto:
+        return Icons.auto_awesome;
+      case WineListLayout.list:
+        return Icons.view_list;
+      case WineListLayout.masterDetail:
+        return Icons.view_sidebar;
     }
   }
 }

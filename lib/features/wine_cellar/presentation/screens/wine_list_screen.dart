@@ -56,7 +56,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   List<String> _availableLocations = const [];
   int? _selectedWineId;
 
-  static const double _masterDetailBreakpoint = 900;
+  static const double _autoBreakpoint = 900;
 
   @override
   void initState() {
@@ -81,13 +81,20 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     super.dispose();
   }
 
-  bool get _isWideScreen =>
-      MediaQuery.of(context).size.width >= _masterDetailBreakpoint;
+  bool _computeIsWide(WineListLayout layout) {
+    return switch (layout) {
+      WineListLayout.list => false,
+      WineListLayout.masterDetail => true,
+      WineListLayout.auto =>
+          MediaQuery.of(context).size.width >= _autoBreakpoint,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     final winesAsync = ref.watch(filteredWinesProvider(_filter));
-    final isWide = _isWideScreen;
+    final layout = ref.watch(wineListLayoutProvider);
+    final isWide = _computeIsWide(layout);
 
     // On narrow screen with a selected wine, show detail view
     if (!isWide && _selectedWineId != null) {
