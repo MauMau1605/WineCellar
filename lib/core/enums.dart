@@ -118,7 +118,8 @@ enum WineSortField {
 enum WineListLayout {
   auto,
   list,
-  masterDetail;
+  masterDetail,
+  masterDetailVertical;
 
   String get label {
     switch (this) {
@@ -127,7 +128,9 @@ enum WineListLayout {
       case WineListLayout.list:
         return 'Liste';
       case WineListLayout.masterDetail:
-        return 'Maître-détail';
+        return 'Maître-détail horizontal';
+      case WineListLayout.masterDetailVertical:
+        return 'Maître-détail vertical';
     }
   }
 
@@ -138,7 +141,9 @@ enum WineListLayout {
       case WineListLayout.list:
         return 'Liste simple, clic ouvre le détail en plein écran';
       case WineListLayout.masterDetail:
-        return 'Liste à gauche, détail à droite en permanence';
+        return 'Liste à gauche, détail à droite (séparation ajustable)';
+      case WineListLayout.masterDetailVertical:
+        return 'Liste en haut, détail en bas (séparation ajustable)';
     }
   }
 
@@ -150,8 +155,14 @@ enum WineListLayout {
         return Icons.view_list;
       case WineListLayout.masterDetail:
         return Icons.view_sidebar;
+      case WineListLayout.masterDetailVertical:
+        return Icons.view_stream;
     }
   }
+
+  /// Whether this layout shows a master-detail split.
+  bool get isMasterDetail =>
+      this == masterDetail || this == masterDetailVertical;
 }
 
 /// AI provider enumeration

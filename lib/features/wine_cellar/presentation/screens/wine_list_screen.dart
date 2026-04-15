@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:multi_split_view/multi_split_view.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -81,10 +82,11 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     super.dispose();
   }
 
-  bool _computeIsWide(WineListLayout layout) {
+  bool _computeIsMasterDetail(WineListLayout layout) {
     return switch (layout) {
       WineListLayout.list => false,
       WineListLayout.masterDetail => true,
+      WineListLayout.masterDetailVertical => true,
       WineListLayout.auto =>
           MediaQuery.of(context).size.width >= _autoBreakpoint,
     };
@@ -94,10 +96,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   Widget build(BuildContext context) {
     final winesAsync = ref.watch(filteredWinesProvider(_filter));
     final layout = ref.watch(wineListLayoutProvider);
-    final isWide = _computeIsWide(layout);
+    final isMasterDetail = _computeIsMasterDetail(layout);
 
     // On narrow screen with a selected wine, show detail view
-    if (!isWide && _selectedWineId != null) {
+    if (!isMasterDetail && _selectedWineId != null) {
       return _buildNarrowDetailView();
     }
 
@@ -231,8 +233,8 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                   return _buildEmptyState();
                 }
 
-                if (isWide) {
-                  return _buildMasterDetail(context, filtered);
+                if (isMasterDetail) {
+                  return _buildMasterDetail(context, filtered, layout);
                 }
                 return _buildWineList(context, filtered);
               },
@@ -493,36 +495,61 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
-  /// Master-detail two-column layout for wide screens.
-  Widget _buildMasterDetail(BuildContext context, List<WineEntity> wines) {
+  /// Master-detail split layout (horizontal or vertical) with resizable divider.
+  Widget _buildMasterDetail(
+    BuildContext context,
+    List<WineEntity> wines,
+    WineListLayout layout,
+  ) {
     final theme = Theme.of(context);
+    final isVertical = layout == WineListLayout.masterDetailVertical;
+    final axis = isVertical ? Axis.vertical : Axis.horizontal;
 
-    return Row(
-      children: [
-        // Left: wine list
-        SizedBox(
-          width: 360,
-          child: _buildWineList(context, wines, compact: true),
+    final detailWidget = _selectedWineId != null
+        ? WineDetailPanel(
+            key: ValueKey(_selectedWineId),
+            wineId: _selectedWineId!,
+            onWineDeleted: () {
+              setState(() => _selectedWineId = null);
+            },
+          )
+        : _buildDetailPlaceholder(theme);
+
+    final panels = [
+      _buildWineList(context, wines, compact: true),
+      detailWidget,
+    ];
+
+    final controller = MultiSplitViewController(
+      areas: [
+        Area(
+          flex: isVertical ? 1 : null,
+          size: isVertical ? null : 360,
+          min: isVertical ? 120 : 200,
+          max: isVertical ? null : 600,
         ),
-        // Divider
-        VerticalDivider(
-          width: 1,
-          thickness: 1,
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
-        // Right: detail panel
-        Expanded(
-          child: _selectedWineId != null
-              ? WineDetailPanel(
-                  key: ValueKey(_selectedWineId),
-                  wineId: _selectedWineId!,
-                  onWineDeleted: () {
-                    setState(() => _selectedWineId = null);
-                  },
-                )
-              : _buildDetailPlaceholder(theme),
-        ),
+        Area(flex: 1, min: isVertical ? 120 : 250),
       ],
+    );
+
+    return MultiSplitViewTheme(
+      data: MultiSplitViewThemeData(
+        dividerThickness: 8,
+        dividerPainter: DividerPainters.grooved2(
+          color: theme.colorScheme.outlineVariant,
+          highlightedColor: theme.colorScheme.primary,
+          thickness: 3,
+          size: 32,
+        ),
+      ),
+      child: MultiSplitView(
+        axis: axis,
+        controller: controller,
+        builder: (BuildContext context, Area area) {
+          final index = controller.areas.indexOf(area);
+          return panels[index];
+        },
+      ),
     );
   }
 
