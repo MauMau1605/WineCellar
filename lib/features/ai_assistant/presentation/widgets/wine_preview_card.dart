@@ -7,12 +7,14 @@ class WinePreviewCard extends StatelessWidget {
   final WineAiResponse wineData;
   final VoidCallback? onConfirm;
   final VoidCallback? onEdit;
+  final VoidCallback? onForceAdd;
 
   const WinePreviewCard({
     super.key,
     required this.wineData,
     this.onConfirm,
     this.onEdit,
+    this.onForceAdd,
   });
 
   @override
@@ -204,12 +206,42 @@ class WinePreviewCard extends StatelessWidget {
                 ],
               )
             else
-              Text(
-                'Continuez la conversation pour compléter les informations.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.orange,
-                  fontStyle: FontStyle.italic,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Champs obligatoires manquants : ${wineData.missingRequiredFields.join(', ')}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.orange,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (onEdit != null)
+                        OutlinedButton.icon(
+                          onPressed: onEdit,
+                          icon: const Icon(Icons.edit, size: 18),
+                          label: const Text('Modifier'),
+                        ),
+                      if (onForceAdd != null) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: onForceAdd,
+                          icon: const Icon(Icons.warning_amber_rounded,
+                              size: 18, color: Colors.orange),
+                          label: const Text('Ajouter quand même'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                            side: const BorderSide(color: Colors.orange),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
           ],
         ),

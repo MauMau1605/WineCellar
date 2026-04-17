@@ -32,6 +32,7 @@ import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_strategy.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/csv_batch_validation_dialog.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/csv_column_mapping_dialog.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_consumption_highlight.dart';
 
 enum _CsvImportMode { direct, withAi }
 
@@ -101,6 +102,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   Widget build(BuildContext context) {
     final winesAsync = ref.watch(filteredWinesProvider(_filter));
     final layout = ref.watch(wineListLayoutProvider);
+    final highlightLastConsumptionYear =
+      ref.watch(highlightLastConsumptionYearProvider);
+    final highlightPastOptimalConsumption =
+      ref.watch(highlightPastOptimalConsumptionProvider);
     final isMasterDetail = _computeIsMasterDetail(layout);
 
     // On narrow screen with a selected wine, show detail view
@@ -241,7 +246,13 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 if (isMasterDetail) {
                   return _buildMasterDetail(context, filtered, layout);
                 }
-                return _buildWineList(context, filtered);
+                return _buildWineList(
+                  context,
+                  filtered,
+                  highlightLastConsumptionYear: highlightLastConsumptionYear,
+                  highlightPastOptimalConsumption:
+                      highlightPastOptimalConsumption,
+                );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, stack) => Center(child: Text('Erreur: $err')),
@@ -526,7 +537,17 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         : _buildDetailPlaceholder(theme);
 
     final panels = [
-      _buildWineList(context, wines, compact: true),
+      _buildWineList(
+        context,
+        wines,
+        compact: true,
+        highlightLastConsumptionYear: ref.read(
+          highlightLastConsumptionYearProvider,
+        ),
+        highlightPastOptimalConsumption: ref.read(
+          highlightPastOptimalConsumptionProvider,
+        ),
+      ),
       detailWidget,
     ];
 
@@ -610,16 +631,24 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     BuildContext context,
     List<WineEntity> wines, {
     bool compact = false,
+    required bool highlightLastConsumptionYear,
+    required bool highlightPastOptimalConsumption,
   }) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       itemCount: wines.length,
       itemBuilder: (context, index) {
         final wine = wines[index];
+        final consumptionHighlight = computeWineConsumptionHighlight(
+          wine,
+          highlightLastConsumptionYear: highlightLastConsumptionYear,
+          highlightPastOptimalWindow: highlightPastOptimalConsumption,
+        );
         return WineCard(
           wine: wine,
           selected: _selectedWineId == wine.id,
           compact: compact,
+          consumptionHighlight: consumptionHighlight,
           onTap: () {
             setState(() => _selectedWineId = wine.id);
           },

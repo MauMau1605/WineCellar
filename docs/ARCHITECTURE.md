@@ -178,10 +178,39 @@ lib/
 │   │           ├── chat_bubble.dart
 │   │           └── wine_preview_card.dart
 │   │
+│   ├── statistics/                    # Feature statistiques
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   └── cellar_statistics.dart
+│   │   │   ├── repositories/
+│   │   │   │   └── statistics_repository.dart
+│   │   │   └── usecases/
+│   │   │       └── get_cellar_statistics.dart
+│   │   ├── data/
+│   │   │   └── repositories/
+│   │   │       └── statistics_repository_impl.dart
+│   │   └── presentation/
+│   │       ├── providers/
+│   │       │   └── statistics_providers.dart
+│   │       ├── screens/
+│   │       │   └── statistics_screen.dart
+│   │       └── widgets/
+│   │           ├── stat_donut_chart.dart
+│   │           ├── stat_bar_chart.dart
+│   │           ├── overview_section.dart
+│   │           ├── color_distribution_chart.dart
+│   │           ├── maturity_distribution_chart.dart
+│   │           ├── geography_section.dart
+│   │           ├── vintage_distribution_chart.dart
+│   │           ├── grape_distribution_chart.dart
+│   │           ├── ratings_price_section.dart
+│   │           └── producer_distribution_chart.dart
+│   │
 │   └── settings/                      # Feature paramètres
 │       └── presentation/
 │           └── screens/
-│               └── settings_screen.dart
+│               ├── settings_screen.dart
+│               └── display_settings_screen.dart
 │
 │   └── user_manual/                   # Feature manuel utilisateur
 │       └── presentation/
@@ -269,7 +298,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 
 ### `router.dart`
 - Configuration GoRouter avec `ShellRoute` pour la navigation bottom bar/rail
-- 5 routes principales : `/cellar`, `/chat`, `/cellars`, `/settings`, `/manual`
+- 6 routes principales : `/cellar`, `/chat`, `/cellars`, `/statistics`, `/settings`, `/manual`
 - Sous-routes : `/cellar/add`, `/cellar/wine/:id`, `/cellar/wine/:id/edit`, `/cellars/:id`
 
 ### `theme.dart` — `AppTheme`
@@ -295,7 +324,7 @@ Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dé
 ### `widgets/shell_scaffold.dart` — `ShellScaffold`
 - Shell layout adaptatif : `NavigationBar` (mobile) / `NavigationRail` (desktop)
 - Panneau latéral desktop repliable/dépliable via un bouton de bascule intégré au rail
-- 4 destinations : Cave, Assistant IA, Celliers, Paramètres
+- 5 destinations : Cave, Assistant IA, Celliers, Statistiques, Paramètres
 - **Utilisé par :** `core/router.dart` (ShellRoute builder)
 
 ---
@@ -531,6 +560,8 @@ Providers Riverpod déclaratifs :
 - Validation utilisateur à chaque lot via `CsvBatchValidationDialog` (édition inline, suppression, réévaluation IA individuelle, retry du lot)
 - Résumé final détaillé de l'import (lots traités, vins importés, supprimés)
 - Gestion quantité via `UpdateWineQuantityUseCase` avec dialogue confirmation
+- Surbrillance visuelle (option A) des vins en dernière année théorique de consommation et des vins au-delà de la fenêtre optimale (bordure + badge distincts)
+- Surbrillance pilotée par 2 réglages séparés dans `display_settings_screen.dart`, activés par défaut
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
 
 #### `wine_add_screen.dart` — `WineAddScreen`
@@ -568,6 +599,7 @@ Providers Riverpod déclaratifs :
 - Ajoute un filtrage multi-sélection par stade de fenetre de degustation (pret a boire, apogee, etc.) pour n'afficher que les bouteilles correspondantes dans la grille
 - **Mode déplacement** : sélection multiple de bouteilles, drag & drop pour déplacer un groupe, avec détection de collisions et vérification des bornes
 - Thème visuel appliqué dynamiquement selon le `VirtualCellarTheme` du cellier (classic, premium cave, stone cave, garage industrial)
+- Surbrillance visuelle des bouteilles en fin de fenêtre (pastille ambre + liseré) et au-delà de la fenêtre optimale (pastille rouge + liseré), selon les réglages utilisateur
 
 #### `expert_cellar_editor_screen.dart` — `ExpertCellarEditorScreen`
 - Éditeur avancé de cellier : personnalisation des dimensions, thème, sélection de cellules
@@ -726,16 +758,81 @@ Interface d'extraction OCR pour les photos d'étiquette :
 
 ---
 
+## Feature `statistics/`
+
+Tableaux de bord et graphiques d'analyse de la cave.
+
+### domain/entities/
+
+#### `cellar_statistics.dart`
+- `CellarStatistics` — agrégation de toutes les statistiques de la cave
+- `OverviewStats` — KPI globaux (références, bouteilles, valeur, note moyenne, millésimes)
+- `ColorStat`, `MaturityStat`, `RegionStat`, `AppellationStat`, `CountryStat`, `VintageStat`, `GrapeVarietyStat`, `RatingStat`, `ProducerStat` — entrées de distribution
+- `PriceStats` — statistiques de prix (min, max, médiane, moyenne, tranches)
+
+### domain/repositories/
+
+#### `statistics_repository.dart` — `StatisticsRepository` (abstract)
+- `getCellarStatistics()` → `CellarStatistics`
+
+### domain/usecases/
+
+#### `get_cellar_statistics.dart` — `GetCellarStatisticsUseCase`
+- Retourne `Either<Failure, CellarStatistics>`, mappe les exceptions en `CacheFailure`
+
+### data/repositories/
+
+#### `statistics_repository_impl.dart` — `StatisticsRepositoryImpl`
+- Calcule toutes les distributions à partir de `WineRepository.getAllWines()`
+- Comptage en bouteilles (`wine.quantity`), pas en références
+- Distributions triées par ordre décroissant de volume
+- Tranches de prix prédéfinies (0-5€, 5-10€, … 100+€)
+
+### presentation/providers/
+
+#### `statistics_providers.dart`
+- `statisticsRepositoryProvider` — injecte `StatisticsRepositoryImpl`
+- `getCellarStatisticsUseCaseProvider` — use case
+- `cellarStatisticsProvider` — `FutureProvider<CellarStatistics>` réactif (se rafraîchit quand la cave change)
+- `selectedStatCategoryProvider` — catégorie sélectionnée (`StatCategory` enum)
+- `StatCategory` — 8 catégories : overview, color, maturity, geography, vintages, grapes, ratingsPrice, producers
+
+### presentation/screens/
+
+#### `statistics_screen.dart` — `StatisticsScreen`
+- Écran principal avec sélecteur de catégorie (chips horizontales scrollables, mobile-friendly)
+- Chaque catégorie affiche des graphiques dédiés : donut charts (couleur, maturité), bar charts (géographie, cépages, producteurs), timeline (millésimes), KPI (vue d'ensemble), hybride (notes & prix)
+- Gère l'état vide (aucun vin) et les erreurs de chargement
+- Données réactives : les statistiques se recalculent automatiquement quand la cave change
+
+### presentation/widgets/
+
+| Widget | Rôle |
+|--------|------|
+| `stat_donut_chart.dart` | Donut chart réutilisable avec légende (fl_chart) |
+| `stat_bar_chart.dart` | Bar chart horizontal + vertical réutilisable (fl_chart) |
+| `overview_section.dart` | Grille de cartes KPI (références, bouteilles, valeur, note, millésimes) |
+| `color_distribution_chart.dart` | Donut par couleur de vin |
+| `maturity_distribution_chart.dart` | Donut par stade de maturité |
+| `geography_section.dart` | Tabs pays/régions/appellations avec bar charts |
+| `vintage_distribution_chart.dart` | Bar chart vertical des millésimes |
+| `grape_distribution_chart.dart` | Bar chart horizontal des cépages |
+| `ratings_price_section.dart` | Tabs notes/prix avec graphiques et KPI |
+| `producer_distribution_chart.dart` | Bar chart horizontal des producteurs |
+
+---
+
 ## Feature `settings/`
 
 ### `settings_screen.dart` — `SettingsScreen`
-- Sélection du fournisseur IA (RadioListTile pour chaque `AiProvider`)
-- Configuration contextuelle : clé API (OpenAI/Gemini/Mistral) ou URL (Ollama) + modèle
-- Section **Recherche web (Gemini)** : clé API Gemini dédiée à la recherche web. Visible uniquement quand le fournisseur principal n'est pas Gemini (permet de garder un autre modèle pour l'ajout tout en utilisant Gemini comme fallback pour la complétion)
-- Section **Analyse d'image** : OCR local vs vision IA, overrides fournisseur/modèle/clé vision
-- Bouton « Enregistrer » → persiste dans flutter_secure_storage
-- Bouton « Tester la connexion » → via `TestAiConnectionUseCase`
-- Section « À propos »
+- Hub de réglages qui regroupe IA, affichage, mode développeur et informations de version
+
+### `display_settings_screen.dart` — `DisplaySettingsScreen`
+- Paramètres d'affichage de la cave : disposition liste/master-detail et thème visuel global
+- Section **Alertes de consommation** :
+  - Toggle « Dernière année de consommation » (activé par défaut)
+  - Toggle « Fenêtre optimale dépassée » (activé par défaut)
+- Ces réglages pilotent la surbrillance dans `WineListScreen` et `VirtualCellarDetailScreen`
 
 ---
 
@@ -784,6 +881,8 @@ Tout passe par `core/providers.dart`. Voici la hiérarchie complète des provide
 | `geminiFallbackApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API Gemini dédiée à la recherche web (fallback) |
 | `useOcrForImagesProvider` | `StateNotifierProvider<…, bool>` | Si `true`, analyse image via OCR local (MLKit) plutôt que vision IA |
 | `appVisualThemeProvider` | `StateNotifierProvider<…, VirtualCellarTheme?>` | Thème visuel global persisté (cave premium, pierre, garage…). `null` = thème classique par défaut |
+| `highlightLastConsumptionYearProvider` | `StateNotifierProvider<…, bool>` | Si `true`, met en évidence les vins dans leur dernière année théorique de consommation |
+| `highlightPastOptimalConsumptionProvider` | `StateNotifierProvider<…, bool>` | Si `true`, met en évidence les vins dont la fenêtre optimale est dépassée |
 | `immersiveCellarThemeProvider` | `StateProvider<VirtualCellarTheme?>` | Override temporaire de thème quand l'utilisateur navigue dans un cellier thémé (réinitialisé en sortie) |
 | `visionProviderOverrideProvider` | `StateNotifierProvider<…, String?>` | Fournisseur IA dédié à l'analyse d'image (optionnel, override du fournisseur principal) |
 

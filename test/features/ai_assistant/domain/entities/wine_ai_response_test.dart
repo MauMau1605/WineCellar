@@ -262,5 +262,27 @@ void main() {
             WineAiResponse.fieldWasCompleted('unknownField', other), isFalse);
       });
     });
+
+    group('missingRequiredFields', () {
+      test('retourne liste vide quand name et color sont renseignés', () {
+        const response = WineAiResponse(name: 'Margaux', color: 'red');
+        expect(response.missingRequiredFields, isEmpty);
+      });
+
+      test('retourne [Nom] quand name est null', () {
+        const response = WineAiResponse(color: 'red');
+        expect(response.missingRequiredFields, ['Nom']);
+      });
+
+      test('retourne [Couleur] quand color est null', () {
+        const response = WineAiResponse(name: 'Margaux');
+        expect(response.missingRequiredFields, ['Couleur']);
+      });
+
+      test('retourne [Nom, Couleur] quand les deux sont null', () {
+        const response = WineAiResponse();
+        expect(response.missingRequiredFields, ['Nom', 'Couleur']);
+      });
+    });
   });
 }

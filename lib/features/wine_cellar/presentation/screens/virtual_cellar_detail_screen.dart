@@ -23,6 +23,7 @@ import 'package:wine_cellar/features/wine_cellar/presentation/widgets/stone_cave
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/garage_industrial_screen_background.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/garage_industrial_wrapper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_consumption_highlight.dart';
 
 class VirtualCellarDetailScreen extends ConsumerStatefulWidget {
   final int cellarId;
@@ -339,6 +340,11 @@ class _VirtualCellarDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final highlightLastConsumptionYear =
+        ref.watch(highlightLastConsumptionYearProvider);
+    final highlightPastOptimalConsumption =
+        ref.watch(highlightPastOptimalConsumptionProvider);
+
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -483,6 +489,9 @@ class _VirtualCellarDetailScreenState
                         allPlacements: allPlacements,
                         cellar: cellar,
                       ),
+                  highlightLastConsumptionYear: highlightLastConsumptionYear,
+                  highlightPastOptimalConsumption:
+                      highlightPastOptimalConsumption,
                 ),
               ),
             ],
@@ -1311,6 +1320,8 @@ class _CellarGridView extends ConsumerStatefulWidget {
   final void Function(int row, int col) onSlotTap;
   final int cellarId;
   final int? highlightWineId;
+  final bool highlightLastConsumptionYear;
+  final bool highlightPastOptimalConsumption;
   final void Function(int placementId) onLongPressPlacement;
   final Future<void> Function({
     required int anchorPlacementId,
@@ -1328,6 +1339,8 @@ class _CellarGridView extends ConsumerStatefulWidget {
     required this.onSlotTap,
     required this.cellarId,
     this.highlightWineId,
+    required this.highlightLastConsumptionYear,
+    required this.highlightPastOptimalConsumption,
     required this.onLongPressPlacement,
     required this.onMovePlacement,
   });
@@ -1883,6 +1896,10 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                           isHighlighted: _highlightActive &&
                               placement != null &&
                               placement.wineId == widget.highlightWineId,
+                            highlightLastConsumptionYear:
+                              widget.highlightLastConsumptionYear,
+                            highlightPastOptimalConsumption:
+                              widget.highlightPastOptimalConsumption,
                         );
                       },
                     ),
@@ -1915,6 +1932,8 @@ class _SlotCell extends ConsumerStatefulWidget {
   final void Function(Offset globalPosition) onDragPointerUpdate;
   final bool hideBottleVisual;
   final bool showDragGhost;
+  final bool highlightLastConsumptionYear;
+  final bool highlightPastOptimalConsumption;
 
   const _SlotCell({
     this.placement,
@@ -1933,6 +1952,8 @@ class _SlotCell extends ConsumerStatefulWidget {
     required this.onDragPointerUpdate,
     required this.hideBottleVisual,
     required this.showDragGhost,
+    required this.highlightLastConsumptionYear,
+    required this.highlightPastOptimalConsumption,
     this.isHighlighted = false,
   });
 
@@ -1989,6 +2010,16 @@ class _SlotCellState extends ConsumerState<_SlotCell>
     final hasWine = wine != null;
     final visibleWine = hasWine && !widget.hideBottleVisual;
     final wineColor = hasWine ? AppTheme.colorForWine(wine.color.name) : null;
+    final consumptionHighlight = hasWine
+      ? computeWineConsumptionHighlight(
+        wine,
+        highlightLastConsumptionYear: widget.highlightLastConsumptionYear,
+        highlightPastOptimalWindow: widget.highlightPastOptimalConsumption,
+        )
+      : WineConsumptionHighlight.none;
+    final hasConsumptionHighlight =
+      consumptionHighlight != WineConsumptionHighlight.none;
+    final consumptionColor = colorForConsumptionHighlight(consumptionHighlight);
     final isPremiumCave = widget.cellarTheme == VirtualCellarTheme.premiumCave;
     final isStoneCave = widget.cellarTheme == VirtualCellarTheme.stoneCave;
     final isGarageIndustrial = widget.cellarTheme == VirtualCellarTheme.garageIndustrial;
@@ -2006,6 +2037,8 @@ class _SlotCellState extends ConsumerState<_SlotCell>
               : theme.colorScheme.error)
         : isSelected
         ? theme.colorScheme.primary
+      : hasConsumptionHighlight
+      ? consumptionColor
         : visibleWine
         ? wineColor!.withValues(alpha: 0.75)
         : theme.colorScheme.outlineVariant;
@@ -2156,6 +2189,22 @@ class _SlotCellState extends ConsumerState<_SlotCell>
                   ),
                 ),
               ),
+            if (hasConsumptionHighlight && !widget.showDragGhost)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: consumptionColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
             if (widget.isHighlighted && _blinkController != null)
               Positioned.fill(
                 child: AnimatedBuilder(
@@ -2165,12 +2214,18 @@ class _SlotCellState extends ConsumerState<_SlotCell>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: theme.colorScheme.tertiary.withValues(
+                          color: (hasConsumptionHighlight
+                                  ? consumptionColor
+                                  : theme.colorScheme.tertiary)
+                              .withValues(
                             alpha: _blinkController!.value * 0.9,
                           ),
                           width: 2.5,
                         ),
-                        color: theme.colorScheme.tertiary.withValues(
+                        color: (hasConsumptionHighlight
+                                ? consumptionColor
+                                : theme.colorScheme.tertiary)
+                            .withValues(
                           alpha: _blinkController!.value * 0.25,
                         ),
                       ),

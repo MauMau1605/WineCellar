@@ -620,6 +620,13 @@ class _VirtualCellarTab extends StatelessWidget {
           'Visualisez rapidement ou se trouve chaque vin.',
           'Apres ajout d un vin, vous pouvez l associer a un cellier existant, le placer directement sur une case, ou creer un nouveau cellier standard 5x5.',
         ]),
+        _BlockTitle('Surbrillance de consommation'),
+        _Bullets([
+          'Par defaut, les vins en derniere annee theorique de consommation sont marques "A boire cette annee" avec une couleur ambre.',
+          'Les vins au-dela de la fenetre optimale sont marques "Fenetre depassee" avec une couleur rouge.',
+          'Ces indicateurs apparaissent dans la liste de cave et dans la grille de cave virtuelle.',
+          'Vous pouvez activer/desactiver chaque indicateur separement dans Parametres > Affichage > Alertes de consommation.',
+        ]),
         _BlockTitle('Placer des bouteilles'),
         _Paragraph(
           'Pour ajouter une bouteille dans votre cellar, tapez sur une cellule vide. '

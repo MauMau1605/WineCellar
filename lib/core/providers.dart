@@ -134,6 +134,28 @@ final wineListLayoutProvider =
   return WineListLayoutNotifier(ref.watch(secureStorageProvider));
 });
 
+/// Highlights wines that are in their last theoretical consumption year.
+/// Enabled by default.
+final highlightLastConsumptionYearProvider =
+    StateNotifierProvider<SecureBoolNotifier, bool>((ref) {
+  return SecureBoolNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyHighlightLastConsumptionYear,
+    defaultValue: true,
+  );
+});
+
+/// Highlights wines that are past their optimal consumption window.
+/// Enabled by default.
+final highlightPastOptimalConsumptionProvider =
+    StateNotifierProvider<SecureBoolNotifier, bool>((ref) {
+  return SecureBoolNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyHighlightPastOptimalConsumption,
+    defaultValue: true,
+  );
+});
+
 class WineListLayoutNotifier extends StateNotifier<WineListLayout> {
   final FlutterSecureStorage _storage;
 
@@ -363,7 +385,8 @@ class SecureBoolNotifier extends StateNotifier<bool> {
   final FlutterSecureStorage _storage;
   final String _key;
 
-  SecureBoolNotifier(this._storage, this._key) : super(false) {
+  SecureBoolNotifier(this._storage, this._key, {bool defaultValue = false})
+      : super(defaultValue) {
     _load();
   }
 

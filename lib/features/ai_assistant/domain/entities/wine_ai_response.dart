@@ -106,6 +106,14 @@ class WineAiResponse {
   /// Check if we have enough info to create a wine entry
   bool get isComplete => name != null && color != null;
 
+  /// Returns the labels of required fields that are null.
+  List<String> get missingRequiredFields {
+    final missing = <String>[];
+    if (name == null) missing.add('Nom');
+    if (color == null) missing.add('Couleur');
+    return missing;
+  }
+
   /// Returns a copy with non-null fields from [other] overwriting this instance.
   /// Only overwrites fields that are non-null/non-empty in [other].
   WineAiResponse mergeWith(WineAiResponse other) {

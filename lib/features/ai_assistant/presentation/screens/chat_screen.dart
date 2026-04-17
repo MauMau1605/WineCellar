@@ -920,6 +920,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           wineData: wineData,
           onConfirm: alreadyAdded ? null : () => _addWineToCellar(context, i),
           onEdit: alreadyAdded ? null : () => _editWineDataDialog(i),
+          onForceAdd: (alreadyAdded || wineData.isComplete)
+              ? null
+              : () => _forceAddIncompleteWine(context, i),
         ),
       );
 
@@ -1149,6 +1152,141 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       // Multiple wines → single grouped placement dialog.
       _askPlaceInCellarGrouped(addedWines);
     }
+  }
+
+  /// Forces adding an incomplete wine by asking the user to fill in only the
+  /// missing required fields (name and/or color) via a mini-dialog.
+  Future<void> _forceAddIncompleteWine(
+    BuildContext context,
+    int wineIndex,
+  ) async {
+    if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return;
+    final wineData = _currentWineDataList[wineIndex];
+    final completed =
+        await _showCompleteMissingFieldsDialog(context, wineData);
+    if (completed == null || !context.mounted) return;
+    setState(() {
+      _currentWineDataList[wineIndex] = completed;
+    });
+    await _addWineToCellar(context, wineIndex, askManualEditBeforeAdd: false);
+  }
+
+  /// Shows a dialog with only the missing required fields (name and/or color)
+  /// and returns a completed [WineAiResponse], or null if cancelled.
+  Future<WineAiResponse?> _showCompleteMissingFieldsDialog(
+    BuildContext context,
+    WineAiResponse wineData,
+  ) async {
+    final nameController = TextEditingController(text: wineData.name ?? '');
+    WineColor? selectedColor = wineData.color != null
+        ? WineColor.values.where((c) => c.name == wineData.color).firstOrNull
+        : null;
+
+    final result = await showDialog<WineAiResponse>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final nameEmpty =
+              wineData.name == null && nameController.text.trim().isEmpty;
+          final colorMissing = wineData.color == null && selectedColor == null;
+          final canConfirm = !nameEmpty && !colorMissing;
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Compléter les champs manquants'),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (wineData.name == null) ...[
+                    const Text('Nom *',
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        hintText: 'Nom du vin',
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (wineData.color == null) ...[
+                    const Text('Couleur *',
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: WineColor.values.map((color) {
+                        return ChoiceChip(
+                          label: Text('${color.emoji} ${color.label}'),
+                          selected: selectedColor == color,
+                          onSelected: (selected) => setDialogState(() {
+                            selectedColor = selected ? color : null;
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: canConfirm
+                    ? () => Navigator.of(context).pop(
+                          WineAiResponse(
+                            name: wineData.name ?? nameController.text.trim(),
+                            color: wineData.color ?? selectedColor!.name,
+                            appellation: wineData.appellation,
+                            producer: wineData.producer,
+                            region: wineData.region,
+                            country: wineData.country,
+                            vintage: wineData.vintage,
+                            grapeVarieties: wineData.grapeVarieties,
+                            quantity: wineData.quantity,
+                            purchasePrice: wineData.purchasePrice,
+                            drinkFromYear: wineData.drinkFromYear,
+                            drinkUntilYear: wineData.drinkUntilYear,
+                            tastingNotes: wineData.tastingNotes,
+                            suggestedFoodPairings: wineData.suggestedFoodPairings,
+                            description: wineData.description,
+                            needsMoreInfo: wineData.needsMoreInfo,
+                            followUpQuestion: wineData.followUpQuestion,
+                            estimatedFields: wineData.estimatedFields,
+                            confidenceNotes: wineData.confidenceNotes,
+                          ),
+                        )
+                    : null,
+                child: const Text('Ajouter'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    nameController.dispose();
+    return result;
   }
 
   /// Adds a single wine and returns its new database ID on success, or null.

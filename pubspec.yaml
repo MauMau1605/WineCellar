@@ -62,6 +62,7 @@ dependencies:
   google_generative_ai: ^0.4.7
   flutter_markdown_plus: ^1.0.7
   fpdart: ^1.2.0
+  fl_chart: ^0.70.2
   multi_split_view: ^3.6.1
 
 dev_dependencies:

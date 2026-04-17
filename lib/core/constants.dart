@@ -56,6 +56,12 @@ class AppConstants {
   static const String keySplitRatioHorizontal = 'split_ratio_horizontal';
   static const String keySplitRatioVertical = 'split_ratio_vertical';
 
+    // Consumption highlight settings
+    static const String keyHighlightLastConsumptionYear =
+      'highlight_last_consumption_year';
+    static const String keyHighlightPastOptimalConsumption =
+      'highlight_past_optimal_consumption';
+
   // Wine defaults
   static const int maxRating = 5;
   static const int defaultQuantity = 1;

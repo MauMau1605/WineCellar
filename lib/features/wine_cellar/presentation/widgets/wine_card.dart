@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wine_cellar/core/theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_consumption_highlight.dart';
 
 /// Card widget displaying a wine in the list.
 ///
@@ -13,6 +14,7 @@ class WineCard extends StatelessWidget {
   final ValueChanged<int> onQuantityChanged;
   final bool selected;
   final bool compact;
+  final WineConsumptionHighlight consumptionHighlight;
 
   const WineCard({
     super.key,
@@ -21,12 +23,18 @@ class WineCard extends StatelessWidget {
     required this.onQuantityChanged,
     this.selected = false,
     this.compact = false,
+    this.consumptionHighlight = WineConsumptionHighlight.none,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final wineColor = AppTheme.colorForWine(wine.color.name);
+    final consumptionBorderColor = colorForConsumptionHighlight(
+      consumptionHighlight,
+    );
+    final hasConsumptionHighlight =
+        consumptionHighlight != WineConsumptionHighlight.none;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -36,12 +44,14 @@ class WineCard extends StatelessWidget {
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        border: selected
-            ? Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                width: 1.5,
-              )
-            : null,
+        border: Border.all(
+          color: hasConsumptionHighlight
+              ? consumptionBorderColor
+              : selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.3)
+              : Colors.transparent,
+          width: hasConsumptionHighlight ? 2 : (selected ? 1.5 : 1),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -97,6 +107,10 @@ class WineCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (hasConsumptionHighlight) ...[
+                        const SizedBox(height: 6),
+                        _buildConsumptionBadge(theme),
+                      ],
                     ],
                   ),
                 ),
@@ -170,6 +184,33 @@ class WineCard extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
       ],
+    );
+  }
+
+  Widget _buildConsumptionBadge(ThemeData theme) {
+    final label = labelForConsumptionHighlight(consumptionHighlight);
+    if (label == null) {
+      return const SizedBox.shrink();
+    }
+
+    final accent = colorForConsumptionHighlight(consumptionHighlight);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: accent.withValues(alpha: 0.65)),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: accent,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }

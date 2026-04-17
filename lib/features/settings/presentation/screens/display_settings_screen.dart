@@ -15,6 +15,10 @@ class DisplaySettingsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final currentLayout = ref.watch(wineListLayoutProvider);
     final currentTheme = ref.watch(appVisualThemeProvider);
+    final highlightLastConsumptionYear =
+      ref.watch(highlightLastConsumptionYearProvider);
+    final highlightPastOptimalConsumption =
+      ref.watch(highlightPastOptimalConsumptionProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Affichage')),
@@ -106,6 +110,49 @@ class DisplaySettingsScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // -------- Alertes de consommation --------
+          _SectionHeader(
+            icon: Icons.notifications_active_outlined,
+            title: 'Alertes de consommation',
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Mettez en surbrillance les bouteilles proches ou au-dela de leur '
+            'fenetre theorique de consommation dans la liste et la cave virtuelle.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Derniere annee de consommation'),
+                  subtitle: const Text('Indique "A boire cette annee"'),
+                  value: highlightLastConsumptionYear,
+                  onChanged: (value) {
+                    ref
+                        .read(highlightLastConsumptionYearProvider.notifier)
+                        .setValue(value);
+                  },
+                ),
+                const Divider(height: 0),
+                SwitchListTile(
+                  title: const Text('Fenetre optimale depassee'),
+                  subtitle: const Text('Indique "Fenetre depassee"'),
+                  value: highlightPastOptimalConsumption,
+                  onChanged: (value) {
+                    ref
+                        .read(highlightPastOptimalConsumptionProvider.notifier)
+                        .setValue(value);
+                  },
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),
