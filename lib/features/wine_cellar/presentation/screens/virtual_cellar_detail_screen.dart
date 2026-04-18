@@ -1662,15 +1662,17 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
               child: Scrollbar(
                 controller: _verticalController,
                 thumbVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _verticalController,
-                  padding: const EdgeInsets.only(bottom: 80),
-                  child: Scrollbar(
-                    controller: _horizontalController,
-                    thumbVisibility: true,
-                    notificationPredicate: (notification) =>
-                        notification.depth == 1,
-                    scrollbarOrientation: ScrollbarOrientation.bottom,
+                notificationPredicate: (notification) =>
+                    notification.metrics.axis == Axis.vertical,
+                child: Scrollbar(
+                  controller: _horizontalController,
+                  thumbVisibility: true,
+                  notificationPredicate: (notification) =>
+                      notification.metrics.axis == Axis.horizontal,
+                  scrollbarOrientation: ScrollbarOrientation.bottom,
+                  child: SingleChildScrollView(
+                    controller: _verticalController,
+                    padding: const EdgeInsets.only(bottom: 80),
                     child: SingleChildScrollView(
                       controller: _horizontalController,
                       scrollDirection: Axis.horizontal,

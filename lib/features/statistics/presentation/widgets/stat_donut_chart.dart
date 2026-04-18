@@ -4,18 +4,43 @@ import 'package:flutter/material.dart';
 /// A generic reusable donut chart widget.
 ///
 /// Each [DonutSegment] maps to a pie section with label, value, color, and
-/// optional emoji.
+/// optional emoji. Segments below [groupThresholdPercent] are merged into
+/// an "Autres" group to keep the chart readable.
 class StatDonutChart extends StatelessWidget {
   final List<DonutSegment> segments;
   final double size;
   final String? centerLabel;
+  final double groupThresholdPercent;
+  final int maxSegments;
 
   const StatDonutChart({
     super.key,
     required this.segments,
     this.size = 200,
     this.centerLabel,
+    this.groupThresholdPercent = 3.0,
+    this.maxSegments = 8,
   });
+
+  List<DonutSegment> _groupedSegments() {
+    if (segments.length <= maxSegments) return segments;
+    final sorted = [...segments]
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = sorted.take(maxSegments - 1).toList();
+    final rest = sorted.skip(maxSegments - 1).toList();
+    if (rest.isEmpty) return top;
+    final otherValue = rest.fold<double>(0, (s, e) => s + e.value);
+    final otherCount = rest.fold<int>(0, (s, e) => s + e.count);
+    return [
+      ...top,
+      DonutSegment(
+        label: 'Autres',
+        value: otherValue,
+        count: otherCount,
+        color: Colors.grey,
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +52,7 @@ class StatDonutChart extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
+    final displaySegments = _groupedSegments();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -38,18 +64,20 @@ class StatDonutChart extends StatelessWidget {
             children: [
               PieChart(
                 PieChartData(
-                  sections: segments.map((s) {
+                  sections: displaySegments.map((s) {
+                    final showLabel = s.value >= 5;
                     return PieChartSectionData(
                       value: s.value,
                       color: s.color,
                       radius: size / 4,
-                      title: s.value >= 5
-                          ? '${s.value.toStringAsFixed(1)}%'
+                      title: showLabel
+                          ? '${s.count}\n${s.value.toStringAsFixed(1)}%'
                           : '',
                       titleStyle: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 11,
+                        fontSize: 10,
+                        height: 1.2,
                       ),
                       titlePositionPercentageOffset: 0.55,
                     );
@@ -75,7 +103,8 @@ class StatDonutChart extends StatelessWidget {
           spacing: 12,
           runSpacing: 8,
           alignment: WrapAlignment.center,
-          children: segments.map((s) => _LegendItem(segment: s)).toList(),
+          children:
+              displaySegments.map((s) => _LegendItem(segment: s)).toList(),
         ),
       ],
     );
@@ -110,7 +139,7 @@ class _LegendItem extends StatelessWidget {
         ),
         const SizedBox(width: 2),
         Text(
-          '(${segment.count})',
+          '(${segment.count} — ${segment.value.toStringAsFixed(1)}%)',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
           ),

@@ -76,3 +76,11 @@ enum StatCategory {
 
 final selectedStatCategoryProvider =
     StateProvider<StatCategory>((ref) => StatCategory.overview);
+
+/// Whether to show pie chart (true) or bar chart (false) per category.
+final chartModePieProvider =
+    StateProvider.family<bool, StatCategory>((ref, category) {
+  // Default: donut for color/maturity, bar for the rest
+  return category == StatCategory.color ||
+      category == StatCategory.maturity;
+});

@@ -2,19 +2,28 @@ import 'package:flutter/material.dart';
 
 import 'package:wine_cellar/features/statistics/domain/entities/cellar_statistics.dart';
 import 'package:wine_cellar/features/statistics/presentation/widgets/stat_bar_chart.dart';
+import 'package:wine_cellar/features/statistics/presentation/widgets/stat_donut_chart.dart';
 
 /// Geography section with tabs for country, region, and appellation.
 class GeographySection extends StatefulWidget {
   final List<CountryStat> countryData;
   final List<RegionStat> regionData;
   final List<AppellationStat> appellationData;
+  final bool _showAsPie;
 
   const GeographySection({
     super.key,
     required this.countryData,
     required this.regionData,
     required this.appellationData,
-  });
+  }) : _showAsPie = false;
+
+  const GeographySection.asPie({
+    super.key,
+    required this.countryData,
+    required this.regionData,
+    required this.appellationData,
+  }) : _showAsPie = true;
 
   @override
   State<GeographySection> createState() => _GeographySectionState();
@@ -25,10 +34,21 @@ class _GeographySectionState extends State<GeographySection> {
 
   static const _tabLabels = ['Pays', 'Régions', 'Appellations'];
 
+  static const _pieColors = [
+    Color(0xFF1976D2),
+    Color(0xFFD32F2F),
+    Color(0xFF388E3C),
+    Color(0xFFF57C00),
+    Color(0xFF7B1FA2),
+    Color(0xFF00838F),
+    Color(0xFFC2185B),
+    Color(0xFF5D4037),
+    Color(0xFF455A64),
+    Color(0xFFAFB42B),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -49,12 +69,17 @@ class _GeographySectionState extends State<GeographySection> {
           ),
         ),
         const SizedBox(height: 16),
-        _buildChart(theme),
+        _buildChart(Theme.of(context)),
       ],
     );
   }
 
   Widget _buildChart(ThemeData theme) {
+    if (widget._showAsPie) return _buildPieChart();
+    return _buildBarChart(theme);
+  }
+
+  Widget _buildBarChart(ThemeData theme) {
     switch (_selectedTab) {
       case 0:
         return StatBarChart(
@@ -81,6 +106,63 @@ class _GeographySectionState extends State<GeographySection> {
         );
       default:
         return const SizedBox();
+    }
+  }
+
+  Widget _buildPieChart() {
+    final totalBottles = _totalForTab();
+    final segments = _segmentsForTab(totalBottles);
+    return StatDonutChart(
+      segments: segments,
+      centerLabel: '$totalBottles\nbtl',
+    );
+  }
+
+  int _totalForTab() {
+    switch (_selectedTab) {
+      case 0:
+        return widget.countryData.fold<int>(0, (s, e) => s + e.bottles);
+      case 1:
+        return widget.regionData.fold<int>(0, (s, e) => s + e.bottles);
+      case 2:
+        return widget.appellationData.fold<int>(0, (s, e) => s + e.bottles);
+      default:
+        return 0;
+    }
+  }
+
+  List<DonutSegment> _segmentsForTab(int total) {
+    if (total == 0) return [];
+    switch (_selectedTab) {
+      case 0:
+        return widget.countryData.asMap().entries.map((e) {
+          return DonutSegment(
+            label: e.value.country,
+            value: e.value.percentage,
+            count: e.value.bottles,
+            color: _pieColors[e.key % _pieColors.length],
+          );
+        }).toList();
+      case 1:
+        return widget.regionData.asMap().entries.map((e) {
+          return DonutSegment(
+            label: e.value.region,
+            value: e.value.percentage,
+            count: e.value.bottles,
+            color: _pieColors[e.key % _pieColors.length],
+          );
+        }).toList();
+      case 2:
+        return widget.appellationData.asMap().entries.map((e) {
+          return DonutSegment(
+            label: e.value.appellation,
+            value: e.value.percentage,
+            count: e.value.bottles,
+            color: _pieColors[e.key % _pieColors.length],
+          );
+        }).toList();
+      default:
+        return [];
     }
   }
 }

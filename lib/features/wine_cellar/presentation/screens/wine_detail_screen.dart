@@ -683,10 +683,17 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       padding: const EdgeInsets.all(6),
       child: Scrollbar(
         thumbVisibility: true,
-        child: SingleChildScrollView(
+        notificationPredicate: (notification) =>
+            notification.metrics.axis == Axis.vertical,
+        child: Scrollbar(
+          thumbVisibility: true,
+          notificationPredicate: (notification) =>
+              notification.metrics.axis == Axis.horizontal,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: gridContent,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: gridContent,
+            ),
           ),
         ),
       ),

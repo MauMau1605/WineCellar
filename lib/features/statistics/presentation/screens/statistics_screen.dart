@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:wine_cellar/features/statistics/domain/entities/cellar_statistics.dart';
 import 'package:wine_cellar/features/statistics/presentation/providers/statistics_providers.dart';
 import 'package:wine_cellar/features/statistics/presentation/widgets/color_distribution_chart.dart';
 import 'package:wine_cellar/features/statistics/presentation/widgets/geography_section.dart';
@@ -100,7 +101,7 @@ class StatisticsScreen extends ConsumerWidget {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
-                  child: _buildSection(selectedCategory, stats, context),
+                  child: _buildSection(selectedCategory, stats, context, ref),
                 ),
               ),
             ],
@@ -111,8 +112,12 @@ class StatisticsScreen extends ConsumerWidget {
   }
 
   Widget _buildSection(
-      StatCategory category, dynamic stats, BuildContext context) {
+      StatCategory category, CellarStatistics stats, BuildContext context,
+      WidgetRef ref) {
     final theme = Theme.of(context);
+    final isPie = ref.watch(chartModePieProvider(category));
+    final hasToggle = category != StatCategory.overview &&
+        category != StatCategory.ratingsPrice;
 
     Widget wrapWithTitle(String title, IconData icon, Widget child) {
       return Column(
@@ -122,12 +127,22 @@ class StatisticsScreen extends ConsumerWidget {
             children: [
               Icon(icon, size: 22, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+              if (hasToggle)
+                IconButton(
+                  icon: Icon(isPie ? Icons.bar_chart : Icons.pie_chart),
+                  tooltip: isPie ? 'Voir en barres' : 'Voir en camembert',
+                  onPressed: () => ref
+                      .read(chartModePieProvider(category).notifier)
+                      .state = !isPie,
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -147,35 +162,50 @@ class StatisticsScreen extends ConsumerWidget {
         return wrapWithTitle(
           'Répartition par couleur',
           Icons.palette,
-          ColorDistributionChart(data: stats.colorDistribution),
+          isPie
+              ? ColorDistributionChart(data: stats.colorDistribution)
+              : ColorDistributionChart.asBar(data: stats.colorDistribution),
         );
       case StatCategory.maturity:
         return wrapWithTitle(
           'Stade de maturité',
           Icons.timelapse,
-          MaturityDistributionChart(data: stats.maturityDistribution),
+          isPie
+              ? MaturityDistributionChart(data: stats.maturityDistribution)
+              : MaturityDistributionChart.asBar(
+                  data: stats.maturityDistribution),
         );
       case StatCategory.geography:
         return wrapWithTitle(
           'Géographie',
           Icons.public,
-          GeographySection(
-            countryData: stats.countryDistribution,
-            regionData: stats.regionDistribution,
-            appellationData: stats.appellationDistribution,
-          ),
+          isPie
+              ? GeographySection.asPie(
+                  countryData: stats.countryDistribution,
+                  regionData: stats.regionDistribution,
+                  appellationData: stats.appellationDistribution,
+                )
+              : GeographySection(
+                  countryData: stats.countryDistribution,
+                  regionData: stats.regionDistribution,
+                  appellationData: stats.appellationDistribution,
+                ),
         );
       case StatCategory.vintages:
         return wrapWithTitle(
           'Distribution des millésimes',
           Icons.calendar_today,
-          VintageDistributionChart(data: stats.vintageDistribution),
+          isPie
+              ? VintageDistributionChart.asPie(data: stats.vintageDistribution)
+              : VintageDistributionChart(data: stats.vintageDistribution),
         );
       case StatCategory.grapes:
         return wrapWithTitle(
           'Cépages',
           Icons.grass,
-          GrapeDistributionChart(data: stats.grapeDistribution),
+          isPie
+              ? GrapeDistributionChart.asPie(data: stats.grapeDistribution)
+              : GrapeDistributionChart(data: stats.grapeDistribution),
         );
       case StatCategory.ratingsPrice:
         return wrapWithTitle(
@@ -190,7 +220,10 @@ class StatisticsScreen extends ConsumerWidget {
         return wrapWithTitle(
           'Producteurs',
           Icons.business,
-          ProducerDistributionChart(data: stats.producerDistribution),
+          isPie
+              ? ProducerDistributionChart.asPie(
+                  data: stats.producerDistribution)
+              : ProducerDistributionChart(data: stats.producerDistribution),
         );
     }
   }

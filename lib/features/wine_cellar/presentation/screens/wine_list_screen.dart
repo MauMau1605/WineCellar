@@ -2209,13 +2209,15 @@ class _BidirectionalScrollableDataTableState
       child: Scrollbar(
         controller: _verticalController,
         thumbVisibility: true,
-        child: SingleChildScrollView(
-          controller: _verticalController,
-          child: Scrollbar(
-            controller: _horizontalController,
-            thumbVisibility: true,
-            notificationPredicate: (notification) =>
-                notification.metrics.axis == Axis.horizontal,
+        notificationPredicate: (notification) =>
+            notification.metrics.axis == Axis.vertical,
+        child: Scrollbar(
+          controller: _horizontalController,
+          thumbVisibility: true,
+          notificationPredicate: (notification) =>
+              notification.metrics.axis == Axis.horizontal,
+          child: SingleChildScrollView(
+            controller: _verticalController,
             child: SingleChildScrollView(
               controller: _horizontalController,
               scrollDirection: Axis.horizontal,
