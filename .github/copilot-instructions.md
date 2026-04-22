@@ -56,6 +56,38 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le détail complet.
 - Lors d'une correction de bug, créer ou mettre à jour des tests associés qui reproduisent le bug corrigé afin de limiter les régressions futures.
 - En cas de demande ambiguë, demander une clarification avant d'implémenter.
 
+## Déclenchement du prompt Create Feature
+
+- Si la demande utilisateur exprime une **nouvelle fonctionnalité** (exemples : "nouvelle fonctionnalité", "ajouter une feature", "implémenter X", "nouvel écran", "nouveau parcours"), suivre le workflow du prompt `Create Feature` (`.github/prompts/create-feature.prompt.md`).
+- Le workflow doit rester strictement aligné avec ce prompt :
+  1. Poser les questions de clarification (scope, données, UI/navigation, IA, transversal).
+  2. Proposer un sketch d'implémentation (fichiers/couches concernés).
+  3. Implémenter en respectant `Presentation → Domain ← Data`.
+  4. Vérifier la checklist de conformité (tests, localisation, routes, migrations, docs).
+- Si la demande est clairement complète et non ambiguë, l'implémentation peut démarrer sans attendre, tout en appliquant la checklist du prompt.
+
+## Règle de taille de fichier et refactorisation
+
+- Objectif : garder des fichiers lisibles et cohérents avec la Clean Architecture.
+- Seuils recommandés (hors fichiers générés `*.g.dart`) :
+  - > 300 lignes : signal faible, envisager extraction ciblée.
+  - > 500 lignes : refactorisation fortement recommandée.
+  - > 700 lignes : refactorisation prioritaire avant d'ajouter de nouvelles responsabilités.
+- Seuils indicatifs par type de fichier (priorité à la cohésion, pas au chiffre seul) :
+  - `presentation/screens/*_screen.dart` : viser < 400 lignes (au-delà : extraire widgets, logique d'orchestration, sections UI).
+  - `presentation/providers/*` : viser < 250 lignes (au-delà : extraire state, actions, sélecteurs, helpers métier).
+  - `presentation/widgets/*` : viser < 200 lignes par widget (au-delà : composer en sous-widgets).
+  - `domain/usecases/*_usecase.dart` : viser < 120 lignes (1 responsabilité stricte).
+  - `data/repositories/*_repository_impl.dart` : viser < 300 lignes (extraire mappers/datasources si nécessaire).
+  - `database/daos/*_dao.dart` : viser < 300 lignes (extraire requêtes complexes ou helpers SQL/Drift).
+- Si un fichier dépasse ces seuils ou cumule plusieurs responsabilités :
+  1. **Notifier explicitement l'utilisateur** qu'un refactor est recommandé/nécessaire.
+  2. Proposer un découpage concret en plusieurs fichiers (par couche et responsabilité).
+  3. Si le refactor est effectué, conserver le comportement fonctionnel et ajouter/adapter les tests.
+  4. Mettre à jour `docs/ARCHITECTURE.md` si le découpage introduit une nouvelle organisation ou convention.
+- En cas de doute, privilégier ce principe : forte cohésion, faible couplage, et extraction incrémentale sans réécriture massive.
+- Ne jamais utiliser cette règle pour justifier un refactor massif non nécessaire : privilégier des extractions incrémentales et sûres.
+
 ## Base de données (Drift)
 
 - Schéma versionné (actuellement **v5**), migrations non-destructives

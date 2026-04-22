@@ -346,14 +346,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
       (extractedText) async {
         setState(() => _isLoading = false);
-        // Texte visible dans le chat (résumé).
-        const displayText = '🔍 Texte extrait par OCR — analyse en cours…';
-        // Prompt complet envoyé à l\'IA.
-        final aiPrompt =
-            'J\'ai photographié une étiquette de vin. '
-            'Voici le texte extrait par OCR :\n\n$extractedText\n\n'
-            'Analyse ces informations et retourne la réponse '
-            'au format JSON habituel, sans raisonnement long.';
+        final displayText = _buildPhotoSentMessage();
+        final aiPrompt = _buildImagePromptForCurrentMode(
+          extractedText: extractedText,
+        );
         await _sendText(displayText, aiMessage: aiPrompt);
       },
     );
@@ -383,8 +379,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       AnalyzeWineFromImageParams(
         imageBytes: imageBytes,
         mimeType: mimeType,
-        userMessage:
-            'Extrait les informations du vin visibles sur l\'image et retourne la réponse au format JSON habituel, sans raisonnement long.',
+        userMessage: _buildImagePromptForCurrentMode(),
         conversationHistory: history,
       ),
     );
@@ -410,7 +405,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               timestamp: DateTime.now(),
             ),
           );
-          _currentWineDataList = result.wineDataList;
+          _currentWineDataList = _chatMode == _ChatMode.addWine
+              ? result.wineDataList
+              : const [];
           _addedWineIndices.clear();
           _isLoading = false;
         });
@@ -449,6 +446,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (lowerPath.endsWith('.png')) return 'image/png';
     if (lowerPath.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
+  }
+
+  String _buildImagePromptForCurrentMode({String? extractedText}) {
+    switch (_chatMode) {
+      case _ChatMode.addWine:
+        return AiPrompts.buildAddWineImageMessage(
+          extractedText: extractedText,
+        );
+      case _ChatMode.foodPairing:
+        return AiPrompts.buildFoodPairingFromImageMessage(
+          extractedText: extractedText,
+        );
+      case _ChatMode.wineReview:
+        return AiPrompts.buildWineReviewFromImageMessage(
+          extractedText: extractedText,
+        );
+    }
+  }
+
+  String _buildPhotoSentMessage() {
+    switch (_chatMode) {
+      case _ChatMode.addWine:
+        return '🔍 Photo analysée en mode ajout...';
+      case _ChatMode.foodPairing:
+        return '🔍 Photo analysée en mode accords mets-vin...';
+      case _ChatMode.wineReview:
+        return '🔍 Photo analysée en mode avis...';
+    }
   }
 
   /// Sends a message to the AI.
@@ -646,7 +671,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           );
 
-          if (recoveredWineDataList.isNotEmpty) {
+          if (_chatMode == _ChatMode.addWine &&
+              recoveredWineDataList.isNotEmpty) {
             _currentWineDataList = recoveredWineDataList;
             _addedWineIndices.clear();
             _autoWebCompletionAttemptedIndices.clear();

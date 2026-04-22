@@ -177,6 +177,51 @@ void main() {
       });
     });
 
+    group('buildAddWineImageMessage', () {
+      test('demande le format JSON habituel', () {
+        final message = AiPrompts.buildAddWineImageMessage();
+
+        expect(message, contains('format JSON habituel'));
+      });
+
+      test('inclut le texte OCR quand fourni', () {
+        final message = AiPrompts.buildAddWineImageMessage(
+          extractedText: 'Chateau Margaux 2018',
+        );
+
+        expect(message, contains('Texte OCR extrait'));
+        expect(message, contains('Chateau Margaux 2018'));
+      });
+    });
+
+    group('buildFoodPairingFromImageMessage', () {
+      test('interdit explicitement le JSON', () {
+        final message = AiPrompts.buildFoodPairingFromImageMessage();
+
+        expect(message, contains('Ne retourne PAS de bloc JSON'));
+      });
+
+      test('demande des suggestions de plats', () {
+        final message = AiPrompts.buildFoodPairingFromImageMessage();
+
+        expect(message, contains('suggestions de plats'));
+      });
+    });
+
+    group('buildWineReviewFromImageMessage', () {
+      test('interdit explicitement le JSON', () {
+        final message = AiPrompts.buildWineReviewFromImageMessage();
+
+        expect(message, contains('Ne retourne PAS de bloc JSON'));
+      });
+
+      test('interdit d\'inventer des notes chiffrées', () {
+        final message = AiPrompts.buildWineReviewFromImageMessage();
+
+        expect(message, contains('N\'invente jamais de notes chiffrées'));
+      });
+    });
+
     group('systemPrompt', () {
       test('contient les instructions estimatedFields', () {
         final prompt = AiPrompts.systemPrompt;

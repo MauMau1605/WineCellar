@@ -135,6 +135,78 @@ QUESTION DE L'UTILISATEUR : $userQuestion
 ''';
   }
 
+  /// Build an image-based message for add-wine mode.
+  /// Returns the usual structured JSON response format.
+  static String buildAddWineImageMessage({
+    String? extractedText,
+  }) {
+    final hasExtractedText =
+        extractedText != null && extractedText.trim().isNotEmpty;
+    return '''
+[MODE AJOUT VIN A PARTIR D'UNE PHOTO]
+Analyse l'image de bouteille de vin et retourne la réponse au format JSON habituel, sans raisonnement long.
+${hasExtractedText ? '\nTexte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n' : ''}
+''';
+  }
+
+  /// Build an image-based message for food pairing mode.
+  /// This mode must always return plain text (no JSON).
+  static String buildFoodPairingFromImageMessage({
+    String? extractedText,
+  }) {
+    final hasExtractedText =
+        extractedText != null && extractedText.trim().isNotEmpty;
+    final ocrContext = hasExtractedText
+        ? 'Texte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n\n'
+        : '';
+
+    return '''
+[MODE ACCORD METS-VIN A PARTIR D'UNE PHOTO]
+IMPORTANT : dans ce message, tu dois IGNORER l'instruction de retourner un bloc JSON.
+Ne retourne PAS de bloc JSON. Réponds uniquement en texte.
+
+L'utilisateur a pris en photo une bouteille de vin et veut des idées de repas adaptés a ce vin.
+L'année actuelle est ${DateTime.now().year}.
+
+${ocrContext}CONSIGNES :
+1. Identifie le plus précisément possible le style du vin visible sur la photo.
+2. Propose 3 a 5 suggestions de plats compatibles avec ce vin.
+3. Explique brièvement pourquoi chaque accord fonctionne.
+4. Si l'identification exacte du vin est incertaine, indique-le clairement et base les suggestions sur le style de vin le plus probable.
+5. Réponds en français, avec un ton convivial de sommelier.
+6. NE RETOURNE PAS de bloc JSON.
+''';
+  }
+
+  /// Build an image-based message for wine review mode.
+  /// This mode must always return plain text (no JSON).
+  static String buildWineReviewFromImageMessage({
+    String? extractedText,
+  }) {
+    final hasExtractedText =
+        extractedText != null && extractedText.trim().isNotEmpty;
+    final ocrContext = hasExtractedText
+        ? 'Texte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n\n'
+        : '';
+
+    return '''
+[MODE AVIS SUR UN VIN A PARTIR D'UNE PHOTO]
+IMPORTANT : dans ce message, tu dois IGNORER l'instruction de retourner un bloc JSON.
+Ne retourne PAS de bloc JSON. Réponds uniquement en texte.
+
+L'utilisateur souhaite un avis sur le vin visible sur la photo.
+L'année actuelle est ${DateTime.now().year}.
+
+${ocrContext}CONSIGNES :
+1. Identifie le vin (ou le type de vin) a partir de la photo.
+2. Donne un avis qualitatif et le profil habituel du vin (ou de l'appellation) avec transparence sur les incertitudes.
+3. N'invente jamais de notes chiffrées ni d'avis attribués a une source précise.
+4. Propose 2 a 3 conseils de service ou de dégustation utiles.
+5. Réponds en français, avec un ton convivial de sommelier.
+6. NE RETOURNE PAS de bloc JSON.
+''';
+  }
+
   /// System prompt used when Gemini Search Grounding is active.
   /// The model receives web results automatically — this prompt tells it
   /// how to present them honestly.
