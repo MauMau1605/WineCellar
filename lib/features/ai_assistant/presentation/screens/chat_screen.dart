@@ -19,11 +19,15 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_str
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_auto_web_completion_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_completion_parser.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_duplicate_matcher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_wine_draft_builder.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_web_completion_result.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
@@ -712,44 +716,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_chatMode != _ChatMode.addWine) return;
     if (!_isAutoWebCompletionEnabled()) return;
 
-    // Collect all indices requiring web completion.
-    final indicesToComplete = <int>[];
-    for (var i = 0; i < _currentWineDataList.length; i++) {
-      if (_autoWebCompletionAttemptedIndices.contains(i)) continue;
-      if (_addedWineIndices.contains(i)) continue;
+    final plan = ChatAutoWebCompletionPlanner.build(
+      wines: _currentWineDataList,
+      attemptedIndices: _autoWebCompletionAttemptedIndices,
+      addedIndices: _addedWineIndices,
+      batchSize: _webCompletionBatchSize,
+    );
 
-      final wine = _currentWineDataList[i];
-      if (wine.name == null || wine.estimatedFields.isEmpty) continue;
+    _autoWebCompletionAttemptedIndices.addAll(plan.indicesToMarkAttempted);
 
-      final decision = AiRequestStrategy.decideWebSearchForWineCompletion(wine);
-      if (!decision.shouldUseWebSearch) {
-        _autoWebCompletionAttemptedIndices.add(i);
-        continue;
-      }
+    if (!plan.hasWork) return;
 
-      indicesToComplete.add(i);
-    }
-
-    if (indicesToComplete.isEmpty) return;
-
-    final totalBatches =
-        (indicesToComplete.length / _webCompletionBatchSize).ceil();
-
-    for (var batchNum = 0; batchNum < totalBatches; batchNum++) {
-      final start = batchNum * _webCompletionBatchSize;
-      final end = (start + _webCompletionBatchSize)
-          .clamp(0, indicesToComplete.length);
-      final batchIndices = indicesToComplete.sublist(start, end);
+    for (var batchIndex = 0; batchIndex < plan.totalBatches; batchIndex++) {
+      final batchIndices = plan.completionBatches[batchIndex];
 
       // Show a progress message only when multiple batches are needed.
-      if (totalBatches > 1) {
+      if (plan.totalBatches > 1) {
         setState(() {
           _messages.add(
             ChatMessage(
               id: _uuid.v4(),
-              content:
-                  '🌐 Complétion internet — lot ${batchNum + 1}/$totalBatches '
-                  '(${batchIndices.length} vin(s))…',
+              content: ChatAutoWebCompletionPlanner.buildBatchProgressMessage(
+                batchNumber: batchIndex + 1,
+                totalBatches: plan.totalBatches,
+                batchSize: batchIndices.length,
+              ),
               role: ChatRole.system,
               timestamp: DateTime.now(),
             ),
@@ -918,45 +909,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return;
       }
 
-      // Try to parse the JSON complement from the response
-      final complementData = ChatCompletionParser.extractCompletionJson(
-        result.textResponse,
+      final completionResult = ChatWebCompletionResolver.resolve(
+        wine: wine,
+        responseText: result.textResponse,
+        triggeredAutomatically: triggeredAutomatically,
       );
 
-      if (complementData == null) {
+      if (!completionResult.isSuccess) {
         setState(() {
           _isLoading = false;
           _messages.add(
             ChatMessage(
               id: _uuid.v4(),
-              content: '⚠️ Aucune information complémentaire trouvée '
-                  'dans les résultats de recherche.\n\n'
-                  '${result.textResponse}',
-              role: ChatRole.assistant,
-              timestamp: DateTime.now(),
-            ),
-          );
-        });
-        _scrollToBottom();
-        return;
-      }
-
-      final complement = WineAiResponse.fromJson(complementData);
-
-      // Count how many fields were actually completed
-      final completedFields = wine.estimatedFields
-          .where((f) => WineAiResponse.fieldWasCompleted(f, complement))
-          .toList();
-
-      if (completedFields.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _messages.add(
-            ChatMessage(
-              id: _uuid.v4(),
-              content: '⚠️ La recherche n\'a pas permis de confirmer '
-                  'les informations estimées.\n\n'
-                  '${result.textResponse}',
+              content: completionResult.assistantMessage,
               role: ChatRole.assistant,
               timestamp: DateTime.now(),
             ),
@@ -967,24 +932,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
 
       // Merge and update
-      final merged = wine.mergeWith(complement);
       final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
         result.webSources,
       );
       setState(() {
-        _currentWineDataList[wineIndex] = merged;
+        _currentWineDataList[wineIndex] = completionResult.mergedWine!;
         _isLoading = false;
 
         _messages.add(
           ChatMessage(
             id: _uuid.v4(),
-            content: triggeredAutomatically
-                ? '✅ **${completedFields.length} champ(s) auto-complété(s)** '
-                    'via la recherche internet :\n'
-                    '${completedFields.map((f) => '• $f').join('\n')}'
-                : '✅ **${completedFields.length} champ(s) complété(s)** '
-                    'via la recherche Google :\n'
-                    '${completedFields.map((f) => '• $f').join('\n')}',
+            content: completionResult.assistantMessage,
             role: ChatRole.assistant,
             timestamp: DateTime.now(),
             webSources: chatSources,
@@ -1229,42 +1187,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final addWineUseCase = ref.read(addWineUseCaseProvider);
     final foodCategoryRepo = ref.read(foodCategoryRepositoryProvider);
 
-    // Match food pairing names to category IDs
     final allCategories = await foodCategoryRepo.getAllCategories();
-    final matchedCategoryIds = <int>[];
-    for (final pairingName in data.suggestedFoodPairings) {
-      final match = allCategories.where(
-        (c) =>
-            c.name.toLowerCase().contains(pairingName.toLowerCase()) ||
-            pairingName.toLowerCase().contains(c.name.toLowerCase()),
-      );
-      if (match.isNotEmpty) {
-        matchedCategoryIds.add(match.first.id);
-      }
-    }
-
-    final wine = WineEntity(
-      name: data.name!,
-      appellation: data.appellation,
-      producer: data.producer,
-      region: data.region,
-      country: data.country ?? 'France',
-      color: WineColor.values.firstWhere(
-        (c) => c.name == data.color,
-        orElse: () => WineColor.red,
-      ),
-      vintage: data.vintage,
-      grapeVarieties: data.grapeVarieties,
-      quantity: data.quantity ?? 1,
-      purchasePrice: data.purchasePrice,
-      drinkFromYear: data.drinkFromYear,
-      aiSuggestedDrinkFromYear: !manuallyEdited && data.drinkFromYear != null,
-      drinkUntilYear: data.drinkUntilYear,
-      aiSuggestedDrinkUntilYear: !manuallyEdited && data.drinkUntilYear != null,
-      tastingNotes: data.tastingNotes,
-      aiDescription: data.description,
-      aiSuggestedFoodPairings: !manuallyEdited && matchedCategoryIds.isNotEmpty,
-      foodCategoryIds: matchedCategoryIds,
+    final wine = ChatWineDraftBuilder.buildPersistableWine(
+      data: data,
+      allCategories: allCategories,
+      manuallyEdited: manuallyEdited,
     );
 
     final duplicate = await _findPotentialDuplicate(wine);
@@ -1873,19 +1800,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<WineEntity?> _findPotentialDuplicate(WineEntity candidate) async {
     final allWines = await ref.read(wineRepositoryProvider).getAllWines();
-    final normalizedName = _normalizeForDuplicate(candidate.name);
-    final normalizedProducer = _normalizeForDuplicate(candidate.producer ?? '');
-    final candidateVintage = candidate.vintage;
-
-    for (final wine in allWines) {
-      if (_normalizeForDuplicate(wine.name) != normalizedName) continue;
-      if (wine.vintage != candidateVintage) continue;
-      if (_normalizeForDuplicate(wine.producer ?? '') != normalizedProducer) {
-        continue;
-      }
-      return wine;
-    }
-    return null;
+    return ChatDuplicateMatcher.findPotentialDuplicate(
+      candidate: candidate,
+      existingWines: allWines,
+    );
   }
 
   Future<_DuplicateChoice?> _showDuplicateDialog({
@@ -1929,47 +1847,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
       },
     );
-  }
-
-  String _normalizeForDuplicate(String value) {
-    var normalized = value.trim().toLowerCase();
-
-    const replacements = <String, String>{
-      'à': 'a',
-      'á': 'a',
-      'â': 'a',
-      'ã': 'a',
-      'ä': 'a',
-      'å': 'a',
-      'æ': 'ae',
-      'ç': 'c',
-      'è': 'e',
-      'é': 'e',
-      'ê': 'e',
-      'ë': 'e',
-      'ì': 'i',
-      'í': 'i',
-      'î': 'i',
-      'ï': 'i',
-      'ñ': 'n',
-      'ò': 'o',
-      'ó': 'o',
-      'ô': 'o',
-      'õ': 'o',
-      'ö': 'o',
-      'œ': 'oe',
-      'ù': 'u',
-      'ú': 'u',
-      'û': 'u',
-      'ü': 'u',
-      'ÿ': 'y',
-    };
-
-    replacements.forEach((accented, plain) {
-      normalized = normalized.replaceAll(accented, plain);
-    });
-
-    return normalized.replaceAll(RegExp(r'\s+'), ' ');
   }
 
   String? _emptyToNull(String value) {
