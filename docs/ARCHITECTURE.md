@@ -475,6 +475,7 @@ Helpers purs ou quasi purs extraits du chat pour sécuriser les refactors par te
 - `chat_cellar_naming_helper.dart` — nommage automatique des caves créées depuis le chat
 - `chat_assistant_link_resolver.dart` — classification des liens assistant en navigation interne ou ouverture externe
 - `chat_add_intent_helper.dart` — décision “intention résolue” vs “clarification nécessaire” pour l'ajout de vin
+- `chat_prefill_helper.dart` — planification du prefill du chat selon le mode courant et la disponibilité de l'IA
 
 ### presentation/widgets/
 

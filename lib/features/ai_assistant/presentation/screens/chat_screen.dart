@@ -28,6 +28,7 @@ import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_dupl
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_media_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode_transition_planner.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_prefill_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_wine_draft_builder.dart';
@@ -770,22 +771,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
+      final prefillPlan = ChatPrefillHelper.buildPlan(
+        currentMode: _toConversationMode(_chatMode),
+        hasAnalyzeUseCase: ref.read(analyzeWineUseCaseProvider) != null,
+        displayText: data.displayText,
+        aiPrompt: data.aiPrompt,
+      );
+
       // Ensure we are in add-wine mode, not search or review mode.
-      if (_chatMode != _ChatMode.addWine) {
+      if (prefillPlan.shouldSwitchToAddWineMode) {
         _onModeChanged(_ChatMode.addWine);
       }
 
-      final analyzeUseCase = ref.read(analyzeWineUseCaseProvider);
-      if (analyzeUseCase == null) {
-        // AI not configured – just fill the text field so the user can
-        // configure AI and send manually.
-        _textController.text = data.displayText;
-        return;
+      switch (prefillPlan.actionType) {
+        case ChatPrefillActionType.fillTextOnly:
+          // AI not configured – just fill the text field so the user can
+          // configure AI and send manually.
+          _textController.text = prefillPlan.displayText;
+          return;
+        case ChatPrefillActionType.sendPrompt:
+          // Show the field list in the chat bubble but send the full
+          // AI instruction prompt.
+          await _sendText(
+            prefillPlan.displayText,
+            aiMessage: prefillPlan.aiPrompt,
+          );
       }
-
-      // Show the field list in the chat bubble but send the full
-      // AI instruction prompt.
-      await _sendText(data.displayText, aiMessage: data.aiPrompt);
     });
   }
 
