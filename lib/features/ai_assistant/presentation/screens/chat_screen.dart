@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -21,9 +20,10 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_f
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_auto_web_completion_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_flow_planner.dart';
-import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_completion_parser.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_cellar_naming_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_duplicate_matcher.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_media_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode_transition_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
@@ -453,38 +453,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   String _guessMimeTypeFromPath(String path) {
-    final lowerPath = path.toLowerCase();
-    if (lowerPath.endsWith('.png')) return 'image/png';
-    if (lowerPath.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
+    return ChatMediaHelper.guessMimeTypeFromPath(path);
   }
 
   String _buildImagePromptForCurrentMode({String? extractedText}) {
-    switch (_chatMode) {
-      case _ChatMode.addWine:
-        return AiPrompts.buildAddWineImageMessage(
-          extractedText: extractedText,
-        );
-      case _ChatMode.foodPairing:
-        return AiPrompts.buildFoodPairingFromImageMessage(
-          extractedText: extractedText,
-        );
-      case _ChatMode.wineReview:
-        return AiPrompts.buildWineReviewFromImageMessage(
-          extractedText: extractedText,
-        );
-    }
+    return ChatMediaHelper.buildImagePromptForMode(
+      mode: _toChatMediaMode(_chatMode),
+      extractedText: extractedText,
+    );
   }
 
   String _buildPhotoSentMessage() {
-    switch (_chatMode) {
-      case _ChatMode.addWine:
-        return '🔍 Photo analysée en mode ajout...';
-      case _ChatMode.foodPairing:
-        return '🔍 Photo analysée en mode accords mets-vin...';
-      case _ChatMode.wineReview:
-        return '🔍 Photo analysée en mode avis...';
-    }
+    return ChatMediaHelper.buildPhotoSentMessage(
+      mode: _toChatMediaMode(_chatMode),
+    );
   }
 
   /// Sends a message to the AI.
@@ -1226,10 +1208,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         existingWine: duplicate,
         addedQuantity: wine.quantity,
       );
-      if (!mounted || choice == null) return null;
+      if (!mounted) return null;
 
-      if (choice == _DuplicateChoice.incrementExisting) {
-        if (duplicate.id == null) {
+      final duplicateAction = ChatAddFlowPlanner.resolveDuplicate(
+        candidate: wine,
+        duplicate: duplicate,
+        resolution: _toChatDuplicateResolution(choice),
+      );
+
+      switch (duplicateAction.type) {
+        case ChatDuplicateActionType.cancelled:
+          return null;
+        case ChatDuplicateActionType.rejectMissingExistingId:
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -1238,53 +1228,54 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
           }
           return null;
-        }
-
-        final updateResult = await ref
-            .read(updateWineQuantityUseCaseProvider)
-            .call(
-              UpdateQuantityParams(
-                wineId: duplicate.id!,
-                newQuantity: duplicate.quantity + wine.quantity,
-              ),
-            );
-
-        updateResult.fold(
-          (failure) {
-            _chatLogger.logError(
-              'Erreur mise à jour quantité: ${failure.message}',
-            );
-            if (context.mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(failure.message)));
-            }
-          },
-          (_) {
-            _chatLogger.logWineAdded(
-              '${wine.displayName} (quantité incrémentée)',
-            );
-            setState(() {
-              _addedWineIndices.add(wineIndex);
-            });
-            _cacheConversationState();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Quantité incrémentée pour ${duplicate.displayName}.',
-                  ),
-                  showCloseIcon: true,
-                  action: SnackBarAction(
-                    label: 'Voir la cave',
-                    onPressed: () => context.go('/cellar'),
-                  ),
+        case ChatDuplicateActionType.incrementExistingQuantity:
+          final updateResult = await ref
+              .read(updateWineQuantityUseCaseProvider)
+              .call(
+                UpdateQuantityParams(
+                  wineId: duplicateAction.wineId!,
+                  newQuantity: duplicateAction.newQuantity!,
                 ),
               );
-            }
-          },
-        );
-        return null;
+
+          updateResult.fold(
+            (failure) {
+              _chatLogger.logError(
+                'Erreur mise à jour quantité: ${failure.message}',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(failure.message)));
+              }
+            },
+            (_) {
+              _chatLogger.logWineAdded(
+                '${wine.displayName} (quantité incrémentée)',
+              );
+              setState(() {
+                _addedWineIndices.add(wineIndex);
+              });
+              _cacheConversationState();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Quantité incrémentée pour ${duplicate.displayName}.',
+                    ),
+                    showCloseIcon: true,
+                    action: SnackBarAction(
+                      label: 'Voir la cave',
+                      onPressed: () => context.go('/cellar'),
+                    ),
+                  ),
+                );
+              }
+            },
+          );
+          return null;
+        case ChatDuplicateActionType.addNewReference:
+          break;
       }
     }
 
@@ -1467,107 +1458,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<VirtualCellarEntity?> _createDefaultCellar({
     required List<VirtualCellarEntity> existingCellars,
   }) async {
-    final cellarName = _buildDefaultCellarName(existingCellars);
+    final cellarName = ChatCellarNamingHelper.buildDefaultCellarName(
+      existingCellars,
+    );
     final newCellar = VirtualCellarEntity(
       name: cellarName,
       rows: 5,
       columns: 5,
     );
-      if (!mounted) return null;
 
-      final duplicateAction = ChatAddFlowPlanner.resolveDuplicate(
-        candidate: wine,
-        duplicate: duplicate,
-        resolution: _toChatDuplicateResolution(choice),
-      );
+    final createResult = await ref
+        .read(createVirtualCellarUseCaseProvider)
+        .call(newCellar);
+    if (!mounted) return null;
 
-      switch (duplicateAction.type) {
-        case ChatDuplicateActionType.cancelled:
-          );
-        case ChatDuplicateActionType.rejectMissingExistingId:
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Impossible de mettre à jour ce vin existant.'),
-              ),
-            );
-          }
-          return null;
-        case ChatDuplicateActionType.incrementExistingQuantity:
-          final updateResult = await ref
-              .read(updateWineQuantityUseCaseProvider)
-              .call(
-                UpdateQuantityParams(
-                  wineId: duplicateAction.wineId!,
-                  newQuantity: duplicateAction.newQuantity!,
-                ),
-              );
-
-          updateResult.fold(
-            (failure) {
-              _chatLogger.logError(
-                'Erreur mise à jour quantité: ${failure.message}',
-              );
-              if (context.mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(failure.message)));
-              }
-            },
-            (_) {
-              _chatLogger.logWineAdded(
-                '${wine.displayName} (quantité incrémentée)',
-              );
-              setState(() {
-                _addedWineIndices.add(wineIndex);
-              });
-              _cacheConversationState();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Quantité incrémentée pour ${duplicate.displayName}.',
-                    ),
-                    showCloseIcon: true,
-                    action: SnackBarAction(
-                      label: 'Voir la cave',
-                      onPressed: () => context.go('/cellar'),
-                    ),
-                  ),
-                );
-              }
-            },
-          );
-          return null;
-        case ChatDuplicateActionType.addNewReference:
-          break;
-      }
-    }
-
-    int? addedId;
-    final result = await addWineUseCase(wine);
-    result.fold(
+    return createResult.fold(
       (failure) {
-        _chatLogger.logError('Erreur ajout vin: ${failure.message}');
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(failure.message)));
         }
+        return null;
       },
-      (newId) {
-        addedId = newId;
-        _chatLogger.logWineAdded(wine.displayName);
-        setState(() {
-          _addedWineIndices.add(wineIndex);
-        });
-        _cacheConversationState();
-        if (mounted && !skipPlacementDialog) {
-          _askPlaceInCellar(newId, wine.displayName);
-        }
-      },
+      (id) => newCellar.copyWith(id: id),
     );
-    return addedId;
   }
 
   ChatPreAddResolution _toChatPreAddResolution(_PreAddChoice? choice) {
@@ -1586,6 +1501,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       null => ChatDuplicateResolution.cancel,
     };
   }
+
+  Future<Object?> _showCellarPicker(List<VirtualCellarEntity> cellars) {
+    return showDialog<Object>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choisir une cave'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: cellars.length,
+            itemBuilder: (context, index) {
+              final cellar = cellars[index];
+              return ListTile(
+                leading: const Icon(Icons.grid_view_outlined),
+                title: Text(cellar.name),
+                subtitle: Text(
+                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+                ),
+                onTap: () => Navigator.of(ctx).pop(cellar),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annuler'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(_createNewCellarChoice),
+            icon: const Icon(Icons.add),
+            label: const Text('Créer une nouvelle cave (5×5)'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_PreAddChoice?> _askManualEditBeforeAdd() {
+    return showDialog<_PreAddChoice>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Vérification avant ajout'),
+        content: const Text(
+          'Avant de finaliser la mise en cave, souhaitez-vous modifier '
+          'manuellement des informations ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_PreAddChoice.edit),
             child: const Text('Modifier manuellement'),
@@ -2123,6 +2092,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ChatConversationMode.addWine => _ChatMode.addWine,
       ChatConversationMode.foodPairing => _ChatMode.foodPairing,
       ChatConversationMode.wineReview => _ChatMode.wineReview,
+    };
+  }
+
+  ChatMediaMode _toChatMediaMode(_ChatMode mode) {
+    return switch (mode) {
+      _ChatMode.addWine => ChatMediaMode.addWine,
+      _ChatMode.foodPairing => ChatMediaMode.foodPairing,
+      _ChatMode.wineReview => ChatMediaMode.wineReview,
     };
   }
 
