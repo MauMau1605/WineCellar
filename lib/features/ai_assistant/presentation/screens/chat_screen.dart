@@ -19,6 +19,11 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_str
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_completion_parser.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_preview_card.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
@@ -538,57 +543,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       history = const [];
     }
 
-    String messageToSend = aiMessage?.trim() ?? trimmed;
-    List<WineEntity> cellarWinesForSearch = const [];
-    if (aiMessage == null && _chatMode == _ChatMode.foodPairing) {
-      final wines = await ref.read(wineRepositoryProvider).getAllWines();
-      cellarWinesForSearch = wines;
-      final cellarSummary = _buildCellarSummary(wines);
-      messageToSend = AiPrompts.buildCellarSearchMessage(
-        userQuestion: trimmed,
-        cellarSummary: cellarSummary,
-      );
-    } else if (aiMessage == null && _chatMode == _ChatMode.wineReview) {
-      final aiService = ref.read(aiServiceProvider);
-      final geminiWebSearch = ref.read(geminiWebSearchServiceProvider);
-      if (aiService != null && aiService.supportsWebSearch) {
-        messageToSend = AiPrompts.buildGroundedReviewMessage(
-          userQuestion: trimmed,
-        );
-      } else if (geminiWebSearch != null) {
-        // Fallback: use Gemini web search service directly
-        messageToSend = AiPrompts.buildGroundedReviewMessage(
-          userQuestion: trimmed,
-        );
-      } else {
-        messageToSend = AiPrompts.buildWineReviewMessage(
-          userQuestion: trimmed,
-        );
-      }
-    } else if (aiMessage == null && _chatMode == _ChatMode.addWine) {
-      if (addWineIntent == AddWineMessageIntent.newWine) {
-        messageToSend = AiPrompts.buildNewWineStandaloneMessage(
-          userMessage: trimmed,
-        );
-      } else if (addWineIntent == AddWineMessageIntent.refineCurrentWine) {
-        messageToSend = AiPrompts.buildCurrentWineRefinementMessage(
-          userMessage: trimmed,
-          currentWineSummary: _buildCurrentWineSummaryForRefinement(),
-        );
-      }
-    }
-
-    _chatLogger.logUserMessage(trimmed);
-
     final mainServiceSupportsWebSearch =
         ref.read(aiServiceProvider)?.supportsWebSearch == true;
     final geminiWebSearch = ref.read(geminiWebSearchServiceProvider);
-    final useWebSearchForReview = _chatMode == _ChatMode.wineReview &&
-        (mainServiceSupportsWebSearch || geminiWebSearch != null);
+
+    List<WineEntity> cellarWinesForSearch = const [];
+    var cellarSummary = '';
+    if (aiMessage == null && _chatMode == _ChatMode.foodPairing) {
+      final wines = await ref.read(wineRepositoryProvider).getAllWines();
+      cellarWinesForSearch = wines;
+      cellarSummary = ChatContextSummaryBuilder.buildCellarSummary(wines);
+    }
+
+    final plan = ChatRequestPlanner.build(
+      mode: _toChatRequestMode(_chatMode),
+      userMessage: trimmed,
+      aiMessageOverride: aiMessage,
+      addWineIntent: addWineIntent,
+      currentWineSummary:
+          ChatContextSummaryBuilder.buildCurrentWineSummaryForRefinement(
+            _currentWineDataList,
+          ),
+      cellarSummary: cellarSummary,
+      mainServiceSupportsWebSearch: mainServiceSupportsWebSearch,
+      hasFallbackWebSearch: geminiWebSearch != null,
+    );
+    final messageToSend = plan.messageToSend;
+
+    _chatLogger.logUserMessage(trimmed);
 
     // If review mode with fallback Gemini (main service doesn't support web search),
     // call the Gemini service directly instead of going through the main use case.
-    if (useWebSearchForReview && !mainServiceSupportsWebSearch && geminiWebSearch != null) {
+    if (plan.useFallbackWebSearchDirectCall && geminiWebSearch != null) {
       try {
         final result = await geminiWebSearch.analyzeWineWithWebSearch(
           userMessage: messageToSend,
@@ -619,7 +605,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       AnalyzeWineParams(
         userMessage: messageToSend,
         conversationHistory: history,
-        useWebSearch: useWebSearchForReview,
+        useWebSearch: plan.useWebSearchForReview,
       ),
     );
 
@@ -641,7 +627,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       (result) async {
         _chatLogger.logAiResponse(result.textResponse);
         final assistantText = _chatMode == _ChatMode.foodPairing
-            ? _appendWineDetailLinksToResponse(
+            ? ChatResponseEnricher.appendWineDetailLinksToResponse(
                 result.textResponse,
                 cellarWinesForSearch,
               )
@@ -649,15 +635,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         var recoveredWineDataList = result.wineDataList;
         if (_chatMode == _ChatMode.addWine && recoveredWineDataList.isEmpty) {
-          recoveredWineDataList = await _recoverWineDataIfMissing(
+          recoveredWineDataList = await ChatMissingJsonRecovery(
             analyzeUseCase: analyzeUseCase,
+            logError: _chatLogger.logError,
+            logAiResponse: _chatLogger.logAiResponse,
+          ).recoverWineDataIfMissing(
             baseHistory: history,
             originalUserMessage: messageToSend,
             assistantResponse: result.textResponse,
           );
         }
 
-        final chatSources = _chatSourcesFromWebSources(result.webSources);
+        final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
+          result.webSources,
+        );
         setState(() {
           _isLoading = false;
           _messages.add(
@@ -692,7 +683,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _handleWebSearchResult(AiChatResult result) {
     _chatLogger.logAiResponse(result.textResponse);
     final assistantText = result.textResponse;
-    final chatSources = _chatSourcesFromWebSources(result.webSources);
+    final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
+      result.webSources,
+    );
     setState(() {
       _isLoading = false;
       _messages.add(
@@ -773,14 +766,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  List<ChatSource> _chatSourcesFromWebSources(List<WebSource> webSources) {
-    final seen = <String>{};
-    return webSources
-        .where((source) => seen.add(source.uri))
-        .map((source) => ChatSource(title: source.title, uri: source.uri))
-        .toList();
-  }
-
   void _handleAssistantLinkTap(String href) {
     if (!mounted) return;
     // Internal app routes
@@ -799,92 +784,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (uri.scheme == 'https' || uri.scheme == 'http') {
       launchUrl(uri, mode: LaunchMode.externalApplication);
     }
-  }
-
-  Future<List<WineAiResponse>> _recoverWineDataIfMissing({
-    required AnalyzeWineUseCase analyzeUseCase,
-    required List<Map<String, String>> baseHistory,
-    required String originalUserMessage,
-    required String assistantResponse,
-  }) async {
-    if (assistantResponse.trim().isEmpty) return const [];
-
-    final repairHistory = <Map<String, String>>[
-      ...baseHistory,
-      {
-        'role': 'user',
-        'content': originalUserMessage,
-      },
-      {
-        'role': 'assistant',
-        'content': assistantResponse,
-      },
-    ];
-
-    final repairEither = await analyzeUseCase(
-      AnalyzeWineParams(
-        userMessage: AiPrompts.buildMissingJsonRecoveryMessage(
-          originalUserMessage: originalUserMessage,
-          previousAssistantResponse: assistantResponse,
-        ),
-        conversationHistory: repairHistory,
-      ),
-    );
-
-    return repairEither.fold(
-      (failure) {
-        _chatLogger.logError(
-          'Échec de récupération de la fiche vin: ${failure.message}',
-        );
-        return const <WineAiResponse>[];
-      },
-      (repairResult) {
-        if (repairResult.wineDataList.isNotEmpty) {
-          _chatLogger.logAiResponse(repairResult.textResponse);
-        }
-        return repairResult.wineDataList;
-      },
-    );
-  }
-
-  String _appendWineDetailLinksToResponse(
-    String responseText,
-    List<WineEntity> cellarWines,
-  ) {
-    if (cellarWines.isEmpty || responseText.contains('/cellar/wine/')) {
-      return responseText;
-    }
-
-    final normalizedResponse = _normalizeForDuplicate(responseText);
-    final matched = <WineEntity>[];
-
-    for (final wine in cellarWines) {
-      if (wine.id == null) continue;
-      final normalizedDisplayName = _normalizeForDuplicate(wine.displayName);
-      final normalizedName = _normalizeForDuplicate(wine.name);
-      final isMentioned =
-          normalizedDisplayName.isNotEmpty &&
-              normalizedResponse.contains(normalizedDisplayName) ||
-          (normalizedName.isNotEmpty &&
-              normalizedResponse.contains(normalizedName));
-      if (isMentioned) {
-        matched.add(wine);
-      }
-    }
-
-    if (matched.isEmpty) return responseText;
-
-    final uniqueById = <int, WineEntity>{
-      for (final wine in matched) wine.id!: wine,
-    };
-    final links = uniqueById.values
-        .take(5)
-        .map((wine) {
-          return '- [${wine.displayName}](/cellar/wine/${wine.id})';
-        })
-        .join('\n');
-
-    return '$responseText\n\nAcces rapide aux fiches des vins proposes :\n$links';
   }
 
   void _handlePrefillMessage() {
@@ -1020,7 +919,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
 
       // Try to parse the JSON complement from the response
-      final complementData = _extractCompletionJson(result.textResponse);
+      final complementData = ChatCompletionParser.extractCompletionJson(
+        result.textResponse,
+      );
 
       if (complementData == null) {
         setState(() {
@@ -1067,7 +968,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Merge and update
       final merged = wine.mergeWith(complement);
-      final chatSources = _chatSourcesFromWebSources(result.webSources);
+      final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
+        result.webSources,
+      );
       setState(() {
         _currentWineDataList[wineIndex] = merged;
         _isLoading = false;
@@ -1106,31 +1009,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       _scrollToBottom();
     }
-  }
-
-  /// Extract JSON from a Gemini response that may contain markdown code blocks.
-  Map<String, dynamic>? _extractCompletionJson(String text) {
-    // Try to extract JSON from ```json ... ``` block
-    final jsonBlockRegex = RegExp(r'```json\s*([\s\S]*?)\s*```');
-    final match = jsonBlockRegex.firstMatch(text);
-    if (match != null) {
-      try {
-        final decoded = jsonDecode(match.group(1)!);
-        if (decoded is Map<String, dynamic>) return decoded;
-      } catch (_) {}
-    }
-
-    // Try to find a JSON object directly in the text
-    final braceStart = text.indexOf('{');
-    final braceEnd = text.lastIndexOf('}');
-    if (braceStart >= 0 && braceEnd > braceStart) {
-      try {
-        final decoded = jsonDecode(text.substring(braceStart, braceEnd + 1));
-        if (decoded is Map<String, dynamic>) return decoded;
-      } catch (_) {}
-    }
-
-    return null;
   }
 
   Future<void> _addAllWinesToCellar(BuildContext context) async {
@@ -2335,51 +2213,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToBottom();
   }
 
-  String _buildCellarSummary(List<WineEntity> wines) {
-    final available = wines.where((w) => w.quantity > 0).toList();
-    if (available.isEmpty) return '(Cave vide — aucune bouteille disponible)';
-
-    // Sort by drinkUntilYear ascending (urgent first)
-    available.sort((a, b) {
-      final aYear = a.drinkUntilYear ?? 9999;
-      final bYear = b.drinkUntilYear ?? 9999;
-      return aYear.compareTo(bYear);
-    });
-
-    final currentYear = DateTime.now().year;
-    final buffer = StringBuffer();
-    buffer.writeln(
-      '${available.length} vin(s) disponible(s) (année actuelle : $currentYear) :',
-    );
-    buffer.writeln();
-
-    for (final w in available) {
-      buffer.write('• ${w.displayName}');
-      buffer.write(' | ${w.color.emoji} ${w.color.label}');
-      if (w.appellation != null) buffer.write(' | ${w.appellation}');
-      if (w.region != null) buffer.write(', ${w.region}');
-      buffer.writeln();
-      if (w.grapeVarieties.isNotEmpty) {
-        buffer.writeln('  Cépages : ${w.grapeVarieties.join(", ")}');
-      }
-      buffer.write('  Quantité : ${w.quantity}');
-      if (w.drinkFromYear != null || w.drinkUntilYear != null) {
-        buffer.write(
-          ' | À boire : ${w.drinkFromYear ?? "?"} → ${w.drinkUntilYear ?? "?"}',
-        );
-      }
-      buffer.writeln();
-      if (w.tastingNotes != null && w.tastingNotes!.isNotEmpty) {
-        buffer.writeln('  Notes : ${w.tastingNotes}');
-      }
-      buffer.writeln();
-    }
-
-    return buffer.toString();
-  }
-
   void _resetAiServiceChatSession() {
     ref.read(aiServiceProvider)?.resetChat();
+  }
+
+  ChatRequestMode _toChatRequestMode(_ChatMode mode) {
+    switch (mode) {
+      case _ChatMode.addWine:
+        return ChatRequestMode.addWine;
+      case _ChatMode.foodPairing:
+        return ChatRequestMode.foodPairing;
+      case _ChatMode.wineReview:
+        return ChatRequestMode.wineReview;
+    }
   }
 
   Future<AddWineMessageIntent?> _resolveAddWineIntent(String userMessage) async {
@@ -2418,33 +2264,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
-  }
-
-  String _buildCurrentWineSummaryForRefinement() {
-    if (_currentWineDataList.isEmpty) {
-      return 'Aucune fiche active.';
-    }
-
-    final first = _currentWineDataList.first;
-    final parts = <String>[];
-    if ((first.name ?? '').trim().isNotEmpty) {
-      parts.add('Nom: ${first.name}');
-    }
-    if (first.vintage != null) {
-      parts.add('Millésime: ${first.vintage}');
-    }
-    if ((first.appellation ?? '').trim().isNotEmpty) {
-      parts.add('Appellation: ${first.appellation}');
-    }
-    if ((first.producer ?? '').trim().isNotEmpty) {
-      parts.add('Producteur: ${first.producer}');
-    }
-
-    if (parts.isEmpty) {
-      return 'Une fiche vin est en cours mais encore incomplète.';
-    }
-
-    return parts.join(' | ');
   }
 
   void _scrollToBottom() {
