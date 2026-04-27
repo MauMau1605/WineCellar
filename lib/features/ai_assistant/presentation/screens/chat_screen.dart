@@ -20,10 +20,12 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dar
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_auto_web_completion_planner.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_flow_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_completion_parser.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_duplicate_matcher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode_transition_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_wine_draft_builder.dart';
@@ -971,48 +973,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _addAllWinesToCellar(BuildContext context) async {
     final preAddChoice = await _askManualEditBeforeAdd();
-    if (!context.mounted || preAddChoice == null) return;
+    if (!context.mounted) return;
 
-    if (preAddChoice == _PreAddChoice.edit) {
-      final firstEditableIndex = _currentWineDataList.indexWhere(
-        (wine) => wine.isComplete,
-      );
-      if (firstEditableIndex >= 0) {
-        await _editWineDataDialog(firstEditableIndex);
+    final bulkAddPlan = ChatAddFlowPlanner.prepareBulkAdd(
+      wines: _currentWineDataList,
+      addedIndices: _addedWineIndices,
+      resolution: _toChatPreAddResolution(preAddChoice),
+    );
+
+    if (bulkAddPlan.type == ChatBulkAddPreparationType.cancel) {
+      return;
+    }
+
+    if (bulkAddPlan.type == ChatBulkAddPreparationType.editFirstComplete) {
+      final editWineIndex = bulkAddPlan.editWineIndex;
+      if (editWineIndex != null) {
+        await _editWineDataDialog(editWineIndex);
       }
       return;
     }
 
     // Collect all added wine IDs for a single grouped placement dialog.
     final addedWines = <({int id, String name})>[];
-    for (var i = 0; i < _currentWineDataList.length; i++) {
-      if (!_addedWineIndices.contains(i) &&
-          _currentWineDataList[i].isComplete) {
-        final newId = await _addWineToCellar(
-          context,
-          i,
-          askManualEditBeforeAdd: false,
-          skipPlacementDialog: true,
-        );
-        if (!context.mounted) return;
-        if (newId != null) {
-          addedWines.add((
-            id: newId,
-            name: _currentWineDataList[i].name ?? 'Vin $i',
-          ));
-        }
+    for (final i in bulkAddPlan.indicesToAdd) {
+      final newId = await _addWineToCellar(
+        context,
+        i,
+        askManualEditBeforeAdd: false,
+        skipPlacementDialog: true,
+      );
+      if (!context.mounted) return;
+      if (newId != null) {
+        addedWines.add((
+          id: newId,
+          name: _currentWineDataList[i].name ?? 'Vin $i',
+        ));
       }
     }
 
-    if (addedWines.isEmpty) return;
     if (!mounted) return;
 
-    if (addedWines.length == 1) {
-      // Single wine → classic individual dialog.
-      _askPlaceInCellar(addedWines.first.id, addedWines.first.name);
-    } else {
-      // Multiple wines → single grouped placement dialog.
-      _askPlaceInCellarGrouped(addedWines);
+    final placementPlan = ChatAddFlowPlanner.buildPlacementPlan(addedWines);
+    switch (placementPlan.type) {
+      case ChatPlacementPlanType.none:
+        return;
+      case ChatPlacementPlanType.single:
+        final singleWine = placementPlan.singleWine;
+        if (singleWine != null) {
+          _askPlaceInCellar(singleWine.id, singleWine.name);
+        }
+      case ChatPlacementPlanType.grouped:
+        _askPlaceInCellarGrouped(placementPlan.addedWines);
     }
   }
 
@@ -1160,29 +1171,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     bool askManualEditBeforeAdd = true,
     bool skipPlacementDialog = false,
   }) async {
-    if (wineIndex < 0 || wineIndex >= _currentWineDataList.length) return null;
-
+    ChatPreAddResolution preAddResolution = ChatPreAddResolution.continueAdd;
     if (askManualEditBeforeAdd) {
       final preAddChoice = await _askManualEditBeforeAdd();
-      if (!context.mounted || preAddChoice == null) return null;
-      if (preAddChoice == _PreAddChoice.edit) {
-        await _editWineDataDialog(wineIndex);
-        return null;
-      }
+      if (!context.mounted) return null;
+      preAddResolution = _toChatPreAddResolution(preAddChoice);
     }
 
-    final data = _currentWineDataList[wineIndex];
-    final manuallyEdited = _manuallyEditedWineIndices.contains(wineIndex);
-    if (!data.isComplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Informations incomplètes. Continuez la conversation pour compléter.',
+    final guard = ChatAddFlowPlanner.guardSingleAdd(
+      wineIndex: wineIndex,
+      wines: _currentWineDataList,
+      askManualEditBeforeAdd: askManualEditBeforeAdd,
+      resolution: preAddResolution,
+    );
+
+    switch (guard.type) {
+      case ChatSingleAddGuardType.invalidIndex:
+      case ChatSingleAddGuardType.cancelled:
+        return null;
+      case ChatSingleAddGuardType.editRequested:
+        await _editWineDataDialog(wineIndex);
+        return null;
+      case ChatSingleAddGuardType.incompleteWine:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Informations incomplètes. Continuez la conversation pour compléter.',
+            ),
           ),
-        ),
-      );
-      return null;
+        );
+        return null;
+      case ChatSingleAddGuardType.proceed:
+        break;
     }
+
+    final data = guard.wineData!;
+    final manuallyEdited = _manuallyEditedWineIndices.contains(wineIndex);
 
     final addWineUseCase = ref.read(addWineUseCaseProvider);
     final foodCategoryRepo = ref.read(foodCategoryRepositoryProvider);
@@ -1449,94 +1473,119 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       rows: 5,
       columns: 5,
     );
+      if (!mounted) return null;
 
-    final createResult = await ref
-        .read(createVirtualCellarUseCaseProvider)
-        .call(newCellar);
-    if (!mounted) return null;
+      final duplicateAction = ChatAddFlowPlanner.resolveDuplicate(
+        candidate: wine,
+        duplicate: duplicate,
+        resolution: _toChatDuplicateResolution(choice),
+      );
 
-    return createResult.fold(
-      (failure) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(failure.message)),
+      switch (duplicateAction.type) {
+        case ChatDuplicateActionType.cancelled:
           );
-        }
-        return null;
-      },
-      (id) => newCellar.copyWith(id: id),
-    );
-  }
-
-  String _buildDefaultCellarName(List<VirtualCellarEntity> existingCellars) {
-    final lowerNames = existingCellars
-        .map((cellar) => cellar.name.trim().toLowerCase())
-        .toSet();
-
-    if (!lowerNames.contains('ma cave')) {
-      return 'Ma cave';
-    }
-
-    var suffix = 2;
-    while (lowerNames.contains('ma cave $suffix')) {
-      suffix++;
-    }
-    return 'Ma cave $suffix';
-  }
-
-  Future<Object?> _showCellarPicker(List<VirtualCellarEntity> cellars) {
-    return showDialog<Object>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Choisir une cave'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: cellars.length,
-            itemBuilder: (context, index) {
-              final cellar = cellars[index];
-              return ListTile(
-                leading: const Icon(Icons.grid_view_outlined),
-                title: Text(cellar.name),
-                subtitle: Text(
-                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+        case ChatDuplicateActionType.rejectMissingExistingId:
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Impossible de mettre à jour ce vin existant.'),
+              ),
+            );
+          }
+          return null;
+        case ChatDuplicateActionType.incrementExistingQuantity:
+          final updateResult = await ref
+              .read(updateWineQuantityUseCaseProvider)
+              .call(
+                UpdateQuantityParams(
+                  wineId: duplicateAction.wineId!,
+                  newQuantity: duplicateAction.newQuantity!,
                 ),
-                onTap: () => Navigator.of(ctx).pop(cellar),
               );
+
+          updateResult.fold(
+            (failure) {
+              _chatLogger.logError(
+                'Erreur mise à jour quantité: ${failure.message}',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(failure.message)));
+              }
             },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(ctx).pop(_createNewCellarChoice),
-            icon: const Icon(Icons.add),
-            label: const Text('Créer une nouvelle cave (5×5)'),
-          ),
-        ],
-      ),
+            (_) {
+              _chatLogger.logWineAdded(
+                '${wine.displayName} (quantité incrémentée)',
+              );
+              setState(() {
+                _addedWineIndices.add(wineIndex);
+              });
+              _cacheConversationState();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Quantité incrémentée pour ${duplicate.displayName}.',
+                    ),
+                    showCloseIcon: true,
+                    action: SnackBarAction(
+                      label: 'Voir la cave',
+                      onPressed: () => context.go('/cellar'),
+                    ),
+                  ),
+                );
+              }
+            },
+          );
+          return null;
+        case ChatDuplicateActionType.addNewReference:
+          break;
+      }
+    }
+
+    int? addedId;
+    final result = await addWineUseCase(wine);
+    result.fold(
+      (failure) {
+        _chatLogger.logError('Erreur ajout vin: ${failure.message}');
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(failure.message)));
+        }
+      },
+      (newId) {
+        addedId = newId;
+        _chatLogger.logWineAdded(wine.displayName);
+        setState(() {
+          _addedWineIndices.add(wineIndex);
+        });
+        _cacheConversationState();
+        if (mounted && !skipPlacementDialog) {
+          _askPlaceInCellar(newId, wine.displayName);
+        }
+      },
     );
+    return addedId;
   }
 
-  Future<_PreAddChoice?> _askManualEditBeforeAdd() {
-    return showDialog<_PreAddChoice>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Vérification avant ajout'),
-        content: const Text(
-          'Avant de finaliser la mise en cave, souhaitez-vous modifier '
-          'manuellement des informations ?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
+  ChatPreAddResolution _toChatPreAddResolution(_PreAddChoice? choice) {
+    return switch (choice) {
+      _PreAddChoice.edit => ChatPreAddResolution.edit,
+      _PreAddChoice.continueAdd => ChatPreAddResolution.continueAdd,
+      null => ChatPreAddResolution.cancel,
+    };
+  }
+
+  ChatDuplicateResolution _toChatDuplicateResolution(_DuplicateChoice? choice) {
+    return switch (choice) {
+      _DuplicateChoice.incrementExisting =>
+        ChatDuplicateResolution.incrementExisting,
+      _DuplicateChoice.createNew => ChatDuplicateResolution.createNew,
+      null => ChatDuplicateResolution.cancel,
+    };
+  }
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_PreAddChoice.edit),
             child: const Text('Modifier manuellement'),
@@ -1860,12 +1909,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _chatLogger.endSession();
     _chatLogger.startSession();
 
+    final resetState = ChatModeTransitionPlanner.buildResetState(
+      welcomeMessageId: _uuid.v4(),
+      timestamp: DateTime.now(),
+    );
+
     setState(() {
-      _messages.clear();
-      _currentWineDataList = [];
-      _addedWineIndices.clear();
-      _chatMode = _ChatMode.addWine;
-      _messages.add(_buildWelcomeMessage());
+      _messages
+        ..clear()
+        ..addAll(resetState.messages);
+      _currentWineDataList = resetState.wineDataList;
+      _addedWineIndices
+        ..clear()
+        ..addAll(resetState.addedWineIndices);
+      _manuallyEditedWineIndices.clear();
+      _autoWebCompletionAttemptedIndices.clear();
+      _chatMode = _fromConversationMode(resetState.mode);
     });
     _cacheConversationState();
   }
@@ -1897,16 +1956,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   ChatMessage _buildWelcomeMessage() {
-    return ChatMessage(
-      id: _uuid.v4(),
-      content:
-          'Bonjour ! 🍷 Décrivez-moi le ou les vins que vous souhaitez ajouter à votre cave.\n\n'
-          'Par exemple :\n'
-          '• "J\'ai acheté un Château Margaux 2015, rouge, 3 bouteilles à 45€"\n'
-          '• "Un Chablis Premier Cru 2020"\n'
-          '• "Côtes du Rhône rouge 2019, Guigal"\n'
-          '• "3 vins : Sancerre 2022, Pouilly-Fumé 2021 et Vouvray 2020"',
-      role: ChatRole.assistant,
+    return ChatModeTransitionPlanner.buildWelcomeMessage(
+      messageId: _uuid.v4(),
       timestamp: DateTime.now(),
     );
   }
@@ -1996,22 +2047,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _onModeChanged(_ChatMode newMode) async {
     if (_chatMode == newMode) return;
 
+    final hasWebSearch =
+        ref.read(aiServiceProvider)?.supportsWebSearch == true ||
+        ref.read(geminiWebSearchServiceProvider) != null;
+
+    final transitionPlan = ChatModeTransitionPlanner.buildModeTransitionPlan(
+      currentMode: _toConversationMode(_chatMode),
+      newMode: _toConversationMode(newMode),
+      wines: _currentWineDataList,
+      addedIndices: _addedWineIndices,
+      hasWebSearch: hasWebSearch,
+    );
+
     // If we're in addWine mode and there are pending (non-added) wines, warn.
-    if (_chatMode == _ChatMode.addWine) {
-      var pendingCount = 0;
-      for (var i = 0; i < _currentWineDataList.length; i++) {
-        if (!_addedWineIndices.contains(i) &&
-            _currentWineDataList[i].name != null) {
-          pendingCount++;
-        }
-      }
-      if (pendingCount > 0) {
+    if (transitionPlan.requiresPendingConfirmation) {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Changer de mode ?'),
             content: Text(
-              '$pendingCount fiche(s) en cours non ajoutée(s) seront effacées.\n'
+              '${transitionPlan.pendingAddWineCount} fiche(s) en cours non ajoutée(s) seront effacées.\n'
               'Voulez-vous continuer ?',
             ),
             actions: [
@@ -2027,7 +2082,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         );
         if (!mounted || confirmed != true) return;
-      }
     }
 
     // Reset AI session on mode switch for clean context.
@@ -2037,50 +2091,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _chatMode = newMode;
       _currentWineDataList = [];
       _addedWineIndices.clear();
+      _manuallyEditedWineIndices.clear();
+      _autoWebCompletionAttemptedIndices.clear();
       _messages.add(
         ChatMessage(
           id: _uuid.v4(),
-          content: switch (newMode) {
-            _ChatMode.foodPairing =>
-              '🔍 **Mode accord mets-vin activé**\n'
-                  'Décrivez votre repas et je chercherai le meilleur vin '
-                  'dans votre cave. Les vins à boire prochainement seront '
-                  'privilégiés.\n\n'
-                  'Exemples :\n'
-                  '• "Je prépare un gigot d\'agneau"\n'
-                  '• "Plateau de fromages ce soir"\n'
-                  '• "Sushi et cuisine japonaise"',
-            _ChatMode.wineReview => () {
-                final hasWebSearch =
-                    ref.read(aiServiceProvider)?.supportsWebSearch == true ||
-                    ref.read(geminiWebSearchServiceProvider) != null;
-                return hasWebSearch
-                    ? '📋 **Mode avis sur un vin activé**\n'
-                        'Demandez-moi des informations sur un vin et je '
-                        'chercherai des avis et notes sur internet via '
-                        'Google Search.\n\n'
-                        '🌐 Les sources seront citées pour chaque information.\n\n'
-                        'Exemples :\n'
-                        '• "Que vaut le Château Margaux 2015 ?"\n'
-                        '• "Parle-moi du Domaine de la Romanée-Conti"\n'
-                        '• "Le millésime 2020 en Bourgogne est-il bon ?"'
-                    : '📋 **Mode avis sur un vin activé**\n'
-                        'Demandez-moi des informations sur un vin et je vous '
-                        'donnerai ce que je sais avec honnêteté — en distinguant '
-                        'les faits établis de mes estimations.\n\n'
-                        '⚠️ La recherche web n\'est disponible qu\'avec Gemini. '
-                        'Ajoutez une clé API Gemini dans les paramètres pour '
-                        'activer la recherche internet.\n\n'
-                        'Exemples :\n'
-                        '• "Que vaut le Château Margaux 2015 ?"\n'
-                        '• "Parle-moi du Domaine de la Romanée-Conti"\n'
-                        '• "Le millésime 2020 en Bourgogne est-il bon ?"';
-              }(),
-            _ChatMode.addWine =>
-              '🍷 **Mode ajout de vin activé**\n'
-                  'Décrivez-moi les vins que vous souhaitez ajouter à '
-                  'votre cave.',
-          },
+          content: transitionPlan.activationMessage,
           role: ChatRole.assistant,
           timestamp: DateTime.now(),
         ),
@@ -2092,6 +2108,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _resetAiServiceChatSession() {
     ref.read(aiServiceProvider)?.resetChat();
+  }
+
+  ChatConversationMode _toConversationMode(_ChatMode mode) {
+    return switch (mode) {
+      _ChatMode.addWine => ChatConversationMode.addWine,
+      _ChatMode.foodPairing => ChatConversationMode.foodPairing,
+      _ChatMode.wineReview => ChatConversationMode.wineReview,
+    };
+  }
+
+  _ChatMode _fromConversationMode(ChatConversationMode mode) {
+    return switch (mode) {
+      ChatConversationMode.addWine => _ChatMode.addWine,
+      ChatConversationMode.foodPairing => _ChatMode.foodPairing,
+      ChatConversationMode.wineReview => _ChatMode.wineReview,
+    };
   }
 
   ChatRequestMode _toChatRequestMode(_ChatMode mode) {
