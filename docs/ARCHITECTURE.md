@@ -1,487 +1,199 @@
 # Architecture — Wine Cellar
 
-> Document de design détaillant la responsabilité de chaque fichier et les liens entre eux.
-> Dernière mise à jour : 28 mars 2026.
+Vue d'ensemble maintenue pour orienter rapidement l'exploration du dépôt.
+Cette page ne remplace pas les docs détaillées ; elle indique où regarder en premier.
 
----
+Dernière mise à jour : 27 avril 2026.
 
-## Table des matières
+## Démarrer ici
 
-1. [Vue d'ensemble](#vue-densemble)
-2. [Arborescence complète](#arborescence-complète)
-3. [Principes d'architecture](#principes-darchitecture)
-4. [Point d'entrée](#point-dentrée)
-5. [Couche `core/`](#couche-core)
-6. [Couche `database/`](#couche-database)
-7. [Feature `wine_cellar/`](#feature-wine_cellar)
-8. [Feature `ai_assistant/`](#feature-ai_assistant)
-9. [Feature `settings/`](#feature-settings)
-10. [Feature `user_manual/`](#feature-user_manual)
-11. [Injection de dépendances](#injection-de-dépendances)
-12. [Flux de données — Exemples concrets](#flux-de-données--exemples-concrets)
-13. [Conventions de nommage](#conventions-de-nommage)
-14. [Points d'évolution identifiés](#points-dévolution-identifiés)
+Si vous découvrez le projet, l'ordre de lecture recommandé est :
 
----
+1. [QUICK_START.md](QUICK_START.md)
+2. [README.md](README.md)
+3. [technical/routing.md](technical/routing.md)
+4. [technical/providers.md](technical/providers.md)
+5. [technical/database.md](technical/database.md)
+6. Une doc feature dans [features/](features/)
 
-## Vue d'ensemble
+## Résumé exécutif
 
-Wine Cellar est une application Flutter de gestion de cave à vin avec un assistant IA conversationnel. L'architecture suit le pattern **Clean Architecture** organisée en **feature-first** :
+Wine Cellar est une application Flutter de gestion de cave à vin, structurée en feature-first avec Clean Architecture.
 
-```
-Presentation → UseCases → Repositories (interface) ← Repository Impls → Datasources
-```
+La règle de dépendance reste la suivante :
 
-**Flux de dépendances :** les couches internes (domain) ne dépendent jamais des couches externes (data, presentation). L'inversion de dépendance est assurée par des interfaces abstraites dans `domain/` et l'injection via Riverpod dans `core/providers.dart`.
-
-**Stack technique :**
-
-| Responsabilité          | Technologie              |
-| ----------------------- | ------------------------ |
-| Framework UI            | Flutter / Material 3     |
-| State management / DI   | Riverpod                 |
-| Navigation              | GoRouter                 |
-| Base de données         | Drift (SQLite)           |
-| Gestion d'erreurs       | fpdart (`Either<F,T>`)   |
-| Clients IA              | Dio, google_generative_ai, dart_openai |
-| Stockage sécurisé       | flutter_secure_storage   |
-
----
-
-## Arborescence complète
-
-```
-lib/
-├── main.dart                          # Bootstrap
-├── app.dart                           # Widget racine MaterialApp.router
-│
-├── core/                              # Utilitaires partagés (cross-feature)
-│   ├── constants.dart
-│   ├── enums.dart
-│   ├── cellar_theme_data.dart
-│   ├── food_pairing_catalog.dart
-│   ├── errors/
-│   │   └── failures.dart
-│   ├── usecases/
-│   │   └── usecase.dart
-│   ├── providers.dart
-│   ├── router.dart
-│   ├── theme.dart
-│   ├── chat_logger.dart
-│   └── widgets/
-│       └── shell_scaffold.dart
-│
-├── database/                          # Infrastructure Drift (partagée)
-│   ├── app_database.dart (+.g.dart)
-│   ├── tables/
-│   │   ├── wines.dart
-│   │   ├── food_categories.dart
-│   │   ├── wine_food_pairings.dart
-│   │   ├── virtual_cellars.dart
-│   │   └── bottle_placements.dart
-│   └── daos/
-│       ├── wine_dao.dart (+.g.dart)
-│       ├── food_category_dao.dart (+.g.dart)
-│       ├── virtual_cellar_dao.dart (+.g.dart)
-│       └── bottle_placement_dao.dart (+.g.dart)
-│
-├── features/
-│   ├── wine_cellar/                   # Feature principale
-│   │   ├── domain/
-│   │   │   ├── entities/
-│   │   │   │   ├── wine_entity.dart
-│   │   │   │   ├── food_category_entity.dart
-│   │   │   │   ├── virtual_cellar_entity.dart
-│   │   │   │   ├── virtual_cellar_theme.dart
-│   │   │   │   ├── bottle_placement_entity.dart
-│   │   │   │   ├── bottle_move_state_entity.dart
-│   │   │   │   ├── cellar_cell_position.dart
-│   │   │   │   ├── wine_filter.dart
-│   │   │   │   ├── wine_sort.dart
-│   │   │   │   ├── csv_column_mapping.dart
-│   │   │   │   └── csv_import_row.dart
-│   │   │   ├── repositories/
-│   │   │   │   ├── wine_repository.dart
-│   │   │   │   ├── food_category_repository.dart
-│   │   │   │   └── virtual_cellar_repository.dart
-│   │   │   └── usecases/
-│   │   │       ├── add_wine.dart
-│   │   │       ├── delete_wine.dart
-│   │   │       ├── get_wine_by_id.dart
-│   │   │       ├── update_wine.dart
-│   │   │       ├── update_wine_quantity.dart
-│   │   │       ├── export_wines.dart
-│   │   │       ├── import_wines_from_json.dart
-│   │   │       ├── parse_csv_import.dart
-│   │   │       ├── import_wines_from_csv.dart
-│   │   │       ├── get_all_virtual_cellars.dart
-│   │   │       ├── create_virtual_cellar.dart
-│   │   │       ├── update_virtual_cellar.dart
-│   │   │       ├── delete_virtual_cellar.dart
-│   │   │       ├── place_wine_in_cellar.dart
-│   │   │       ├── get_wine_placements.dart
-│   │   │       ├── move_bottles_in_cellar.dart
-│   │   │       └── remove_bottle_placement.dart
-│   │   ├── data/
-│   │   │   └── repositories/
-│   │   │       ├── wine_repository_impl.dart
-│   │   │       ├── food_category_repository_impl.dart
-│   │   │       └── virtual_cellar_repository_impl.dart
-│   │   └── presentation/
-│   │       ├── providers/
-│   │       │   └── wine_list_provider.dart
-│   │       ├── providers/
-│   │       │   ├── wine_list_provider.dart
-│   │       │   └── bottle_move_state_provider.dart
-│   │       ├── screens/
-│   │       │   ├── wine_list_screen.dart
-│   │       │   ├── wine_add_screen.dart
-│   │       │   ├── wine_detail_screen.dart
-│   │       │   ├── wine_edit_screen.dart
-│   │       │   ├── virtual_cellar_list_screen.dart
-│   │       │   ├── virtual_cellar_detail_screen.dart
-│   │       │   └── expert_cellar_editor_screen.dart
-│   │       └── widgets/
-│   │           ├── wine_card.dart
-│   │           ├── csv_column_mapping_dialog.dart
-│   │           ├── csv_batch_validation_dialog.dart
-│   │           ├── virtual_cellar_theme_selector.dart
-│   │           ├── premium_cave_wrapper.dart (+background)
-│   │           ├── stone_cave_wrapper.dart (+background)
-│   │           └── garage_industrial_wrapper.dart (+background)
-│   │
-│   ├── ai_assistant/                  # Feature IA
-│   │   ├── domain/
-│   │   │   ├── entities/
-│   │   │   │   ├── chat_message.dart
-│   │   │   │   └── wine_ai_response.dart
-│   │   │   ├── repositories/
-│   │   │   │   ├── ai_service.dart
-│   │   │   │   └── image_text_extractor.dart
-│   │   │   └── usecases/
-│   │   │       ├── analyze_wine.dart
-│   │   │       ├── analyze_wine_from_image.dart
-│   │   │       ├── extract_text_from_wine_image.dart
-│   │   │       └── test_ai_connection.dart
-│   │   ├── data/
-│   │   │   ├── ai_prompts.dart
-│   │   │   └── datasources/
-│   │   │       ├── openai_service.dart
-│   │   │       ├── gemini_service.dart
-│   │   │       ├── mistral_service.dart
-│   │   │       ├── ollama_service.dart
-│   │   │       └── mlkit_image_text_extractor.dart
-│   │   └── presentation/
-│   │       ├── screens/
-│   │       │   └── chat_screen.dart
-│   │       └── widgets/
-│   │           ├── chat_bubble.dart
-│   │           └── wine_preview_card.dart
-│   │
-│   ├── statistics/                    # Feature statistiques
-│   │   ├── domain/
-│   │   │   ├── entities/
-│   │   │   │   └── cellar_statistics.dart
-│   │   │   ├── repositories/
-│   │   │   │   └── statistics_repository.dart
-│   │   │   └── usecases/
-│   │   │       └── get_cellar_statistics.dart
-│   │   ├── data/
-│   │   │   └── repositories/
-│   │   │       └── statistics_repository_impl.dart
-│   │   └── presentation/
-│   │       ├── providers/
-│   │       │   └── statistics_providers.dart
-│   │       ├── screens/
-│   │       │   └── statistics_screen.dart
-│   │       └── widgets/
-│   │           ├── stat_donut_chart.dart
-│   │           ├── stat_bar_chart.dart
-│   │           ├── overview_section.dart
-│   │           ├── color_distribution_chart.dart
-│   │           ├── maturity_distribution_chart.dart
-│   │           ├── geography_section.dart
-│   │           ├── vintage_distribution_chart.dart
-│   │           ├── grape_distribution_chart.dart
-│   │           ├── ratings_price_section.dart
-│   │           └── producer_distribution_chart.dart
-│   │
-│   └── settings/                      # Feature paramètres
-│       └── presentation/
-│           └── screens/
-│               ├── settings_screen.dart
-│               └── display_settings_screen.dart
-│
-│   └── user_manual/                   # Feature manuel utilisateur
-│       └── presentation/
-│           └── screens/
-│               └── user_manual_screen.dart
-│
-└── l10n/                              # Localisation FR / EN
-    ├── app_localizations.dart
-    ├── app_localizations_en.dart
-    └── app_localizations_fr.dart
-```
-
----
-
-## Principes d'architecture
-
-### Clean Architecture — 3 couches par feature
-
-| Couche | Rôle | Dépend de |
-|--------|------|-----------|
-| **domain/** | Entités, interfaces repositories, use cases. Zéro dépendance Flutter. | Rien (sauf `core/errors`, `core/usecases`) |
-| **data/** | Implémentations concrètes des repositories, datasources, DTOs. | `domain/` + packages externes |
-| **presentation/** | Widgets, écrans, providers Riverpod. | `domain/` via use cases |
-
-### Sens des dépendances (règle d'or)
-
-```
+```text
 presentation → domain ← data
 ```
 
-La couche `domain` ne sait rien de `data` ni de `presentation`. Les implémentations concrètes sont injectées via Riverpod.
+La navigation applicative est centralisée dans `lib/core/router.dart`.
+L'injection de dépendances et l'état transverse sont centralisés dans `lib/core/providers.dart`.
+La persistance locale repose sur Drift dans `lib/database/app_database.dart`.
 
-### Gestion d'erreurs
+## Fichiers de vérité principaux
 
-Tous les use cases retournent `Either<Failure, T>` (fpdart). Les types de `Failure` sont dans `core/errors/failures.dart` :
+Ces fichiers doivent être considérés comme prioritaires quand une documentation devient suspecte :
 
-| Failure | Quand |
-|---------|-------|
-| `ServerFailure` | Erreur API distante |
-| `CacheFailure` | Erreur base de données locale |
-| `AiFailure` | Erreur spécifique au service IA |
-| `ValidationFailure` | Donnée invalide (nom vide, id null…) |
-| `ConfigurationFailure` | Configuration manquante |
+| Sujet | Fichier | Pourquoi |
+| --- | --- | --- |
+| Routes et écrans accessibles | `lib/core/router.dart` | Définit l'arbre GoRouter réel |
+| Injection et état transverse | `lib/core/providers.dart` | Déclare repositories, use cases et préférences globales |
+| Schéma et migrations | `lib/database/app_database.dart` | Source de vérité Drift |
+| Statistiques | `lib/features/statistics/presentation/providers/statistics_providers.dart` | Déclare l'état et le mode de graphe |
+| Outils développeur | `lib/features/developer/presentation/screens/developer_screen.dart` | Utilise les outils globaux exposés par les providers |
 
----
+## Carte rapide du projet
 
-## Point d'entrée
+| Je veux comprendre... | Commencer par | Puis lire |
+| --- | --- | --- |
+| Le shell applicatif et la navigation | [technical/routing.md](technical/routing.md) | [diagrams/architecture-globale.md](diagrams/architecture-globale.md) |
+| Les providers globaux | [technical/providers.md](technical/providers.md) | `lib/core/providers.dart` |
+| La base locale et les migrations | [technical/database.md](technical/database.md) | `lib/database/app_database.dart` |
+| La feature métier principale | [features/wine_cellar.md](features/wine_cellar.md) | [diagrams/class-diagram-wine-cellar.md](diagrams/class-diagram-wine-cellar.md) |
+| L'assistant IA | [features/ai_assistant.md](features/ai_assistant.md) | [diagrams/class-diagram-ai-assistant.md](diagrams/class-diagram-ai-assistant.md) |
+| Les statistiques | [features/statistics.md](features/statistics.md) | `lib/features/statistics/presentation/providers/statistics_providers.dart` |
+| Les réglages | [features/settings.md](features/settings.md) | `lib/features/settings/presentation/screens/` |
+| Les outils développeur | [features/developer.md](features/developer.md) | `lib/features/developer/` |
+| Le manuel utilisateur intégré | [features/user_manual.md](features/user_manual.md) | `lib/features/user_manual/` |
 
-### `main.dart`
-- Appelle `WidgetsFlutterBinding.ensureInitialized()`
-- Encapsule l'app dans un `ProviderScope` (Riverpod)
-- Lance `WineCellarApp`
+## Organisation réelle du dépôt
 
-### `app.dart` — `WineCellarApp`
-- Widget racine `MaterialApp.router`
-- Configure le thème (clair/sombre), la locale (`fr`), et le routeur GoRouter
-- **Dépend de :** `core/theme.dart`, `core/router.dart`
+```text
+lib/
+  app.dart
+  main.dart
+  core/
+    providers.dart
+    router.dart
+    theme.dart
+    constants.dart
+    enums.dart
+    errors/
+    usecases/
+    widgets/
+  database/
+    app_database.dart
+    daos/
+    tables/
+  features/
+    wine_cellar/
+    ai_assistant/
+    statistics/
+    settings/
+    user_manual/
+    developer/
+docs/
+  README.md
+  QUICK_START.md
+  ARCHITECTURE.md
+  features/
+  technical/
+  diagrams/
+```
 
----
+## Features documentées
 
-## Couche `core/`
+| Feature | Responsabilité | Couverture actuelle |
+| --- | --- | --- |
+| `wine_cellar` | CRUD vin, import/export, caves virtuelles, placements | Domain, data, presentation |
+| `ai_assistant` | Chat, analyse de vin, OCR local, orchestration multi-fournisseurs | Domain, data, presentation |
+| `statistics` | Calcul et affichage des statistiques de cave | Domain, data, presentation |
+| `settings` | Paramètres généraux, affichage, IA | Presentation |
+| `user_manual` | Manuel utilisateur embarqué | Presentation |
+| `developer` | Outils internes de réévaluation et purge | Domain, presentation |
 
-Utilitaires **cross-feature** partagés par toute l'application.
+## Navigation réelle
 
-### `constants.dart` — `AppConstants`
-- Noms de clés secure storage, modèles par défaut, versions
-- Classe avec constructeur privé (ne s'instancie pas)
+Routes actuellement déclarées dans `lib/core/router.dart` :
 
-### `enums.dart`
-Trois enums avec extensions :
-- **`WineColor`** (`red`, `white`, `rose`, `sparkling`, `sweet`) — avec `label` fr et `emoji`
-- **`WineMaturity`** (`tooYoung`, `ready`, `peak`, `pastPeak`, `unknown`) — idem
-- **`AiProvider`** (`openai`, `gemini`, `mistral`, `ollama`) — avec `label`
+| Route | Écran principal | Remarques |
+| --- | --- | --- |
+| `/cellar` | Liste des vins | Route initiale |
+| `/cellar/add` | Ajout d'un vin | Sous-route de cave |
+| `/cellar/wine/:id` | Détail d'un vin | Sous-route de cave |
+| `/cellar/wine/:id/edit` | Édition d'un vin | Sous-route de détail |
+| `/chat` | Assistant IA | Intégré au shell |
+| `/cellars` | Liste des caves virtuelles | Intégré au shell |
+| `/cellars/:id` | Détail d'une cave virtuelle | Supporte `wineId` et `highlightWineId` en query string |
+| `/statistics` | Statistiques | Intégré au shell |
+| `/settings` | Réglages | Intégré au shell |
+| `/settings/ai` | Réglages IA | Écran dédié existant |
+| `/settings/display` | Réglages d'affichage | Écran dédié existant |
+| `/developer` | Outils développeur | Route existante dans le router |
+| `/developer/reevaluate` | Réévaluation IA | Workflow développeur |
+| `/developer/reevaluate/preview` | Prévisualisation de réévaluation | Sous-étape du workflow développeur |
+| `/manual` | Manuel utilisateur | Hors shell, section initiale en query string |
 
-### `errors/failures.dart`
-- `sealed class Failure` — classe de base avec `message` et `cause`
-- 5 sous-classes typées : `ServerFailure`, `CacheFailure`, `AiFailure`, `ValidationFailure`, `ConfigurationFailure`
+## Providers transverses notables
 
-### `usecases/usecase.dart`
-- `abstract class UseCase<Type, Params>` — contrat unique : `Future<Either<Failure, Type>> call(Params)`
-- `NoParams` — marqueur pour les use cases sans paramètres
+Les providers suivants existent déjà et méritent une lecture rapide avant toute évolution transversale :
 
-### `providers.dart`
-Centre nerveux de l'injection de dépendances (détaillé dans [Injection de dépendances](#injection-de-dépendances)).
+| Provider | Rôle |
+| --- | --- |
+| `wineListLayoutProvider` | Préférence persistée de layout de la liste des vins |
+| `splitRatioHorizontalProvider` | Taille persistée du split horizontal |
+| `splitRatioVerticalProvider` | Taille persistée du split vertical |
+| `visionProviderOverrideProvider` | Override du fournisseur IA pour la vision |
+| `visionModelOverrideProvider` | Override du modèle de vision |
+| `visionApiKeyOverrideProvider` | Override de clé API dédiée à la vision |
+| `developerModeProvider` | Activation persistée du mode développeur |
+| `deleteAllWinesUseCaseProvider` | Use case global de suppression totale, utilisé par l'écran développeur |
+| `chartModePieProvider` | Mode donut/bar par catégorie statistique |
 
-### `router.dart`
-- Configuration GoRouter avec `ShellRoute` pour la navigation bottom bar/rail
-- 6 routes principales : `/cellar`, `/chat`, `/cellars`, `/statistics`, `/settings`, `/manual`
-- Sous-routes : `/cellar/add`, `/cellar/wine/:id`, `/cellar/wine/:id/edit`, `/cellars/:id`
+## Persistance locale
 
-### `theme.dart` — `AppTheme`
-- Color scheme Material 3 inspiré du vin (rouge `#722F37`, or `#D4A843`)
-- Thèmes clair et sombre
-- Helper `colorForWine(String)` pour mapper une couleur de vin à une `Color`
+La base Drift est définie dans `lib/database/app_database.dart`.
 
-### `chat_logger.dart` — `ChatLogger`
-- Singleton loggant les conversations IA dans des fichiers `.log` horodatés
-- Méthodes : `startSession()`, `logUserMessage()`, `logAiResponse()`, `logError()`, `logWineAdded()`, `endSession()`
-- Stockage desktop : priorité au répertoire d'installation (`wine_cellar_logs/`), fallback sur `<documents>/wine_cellar_logs/` si non écrivable
+Points factuels importants :
 
-### `food_pairing_catalog.dart`
-- `FoodPairingPreset` — classe immutable (`name`, `icon`, `sortOrder`)
-- `defaultFoodPairingCatalog` — liste const de 18 catégories alimentaires prédéfinies (Viande rouge, Volaille, Poisson, Fromage…)
-- Utilisé pour le seeding initial de la base de données
+- Les tables enregistrées sont `Wines`, `FoodCategories`, `WineFoodPairings`, `VirtualCellars` et `BottlePlacements`.
+- Les DAOs enregistrés sont `WineDao`, `FoodCategoryDao`, `VirtualCellarDao` et `BottlePlacementDao`.
+- La stratégie de migration est non destructive et contient une migration héritée vers les placements de bouteilles par ligne physique.
+- Le seed des catégories alimentaires est déclenché à la création et en montée de version.
 
-### `cellar_theme_data.dart` — `CellarThemeData`
-- Mappe chaque variante de `VirtualCellarTheme` vers un `ThemeData` Flutter complet
-- `forTheme()` — retourne le thème visuel d'un cellier (classic, premiumCave, stoneCave, garageIndustrial)
-- `overridesAppTheme()` — indique si le thème remplace le thème global (seul classic ne le fait pas)
+## Clean Architecture appliquée ici
 
-### `widgets/shell_scaffold.dart` — `ShellScaffold`
-- Shell layout adaptatif : `NavigationBar` (mobile) / `NavigationRail` (desktop)
-- Panneau latéral desktop repliable/dépliable via un bouton de bascule intégré au rail
-- 5 destinations : Cave, Assistant IA, Celliers, Statistiques, Paramètres
-- **Utilisé par :** `core/router.dart` (ShellRoute builder)
+| Couche | Contenu attendu | Dépendances autorisées |
+| --- | --- | --- |
+| `domain/` | Entités, interfaces, use cases | Aucun package UI ou data |
+| `data/` | Implémentations concrètes, accès données, intégrations | `domain/` + packages externes |
+| `presentation/` | Screens, widgets, providers locaux | `domain/` via use cases et providers |
 
----
+Exceptions structurelles actuelles connues :
 
-## Couche `database/`
+- `settings` et `user_manual` sont aujourd'hui principalement des features de présentation.
+- Les providers globaux et une partie de l'orchestration applicative sont regroupés dans `lib/core/providers.dart` au lieu d'être dispersés par feature.
 
-Infrastructure SQLite partagée (Drift ORM). Vit au niveau `lib/` car utilisée par plusieurs features.
+## Flux applicatif simplifié
 
-### `tables/wines.dart` — `Wines`
-Table Drift incluant :
-- colonnes métier vin (nom, appellation, producteur, garde, notes, etc.)
-- source IA persistée par champ critique : `aiSuggestedFoodPairings`, `aiSuggestedDrinkFromYear`, `aiSuggestedDrinkUntilYear`
-- rattachement à un cellier virtuel : `cellarId`
-- localisation cave virtuelle : `cellarPositionX`, `cellarPositionY`
+```mermaid
+flowchart LR
+    UI[Presentation<br>screens/widgets/providers] --> UC[Domain<br>use cases]
+    UC --> RI[Repository interfaces]
+    RI --> RImpl[Repository implementations]
+    RImpl --> DB[(Drift / SQLite)]
+    RImpl --> AI[AI services]
+    UI --> Core[core/providers.dart<br>core/router.dart]
+```
 
-### `tables/virtual_cellars.dart` — `VirtualCellars`
-Table Drift des celliers virtuels : `id`, `name`, `rows`, `columns`, `createdAt`, `updatedAt`.
-Chaque bouteille placée dans un cellier référence cette table via `Wines.cellarId`.
+## Documentation associée
 
-### `tables/food_categories.dart` — `FoodCategories`
-Table : `id`, `name`, `icon` (emoji), `sortOrder`.
+Cette page reste volontairement compacte. Pour le détail :
 
-### `tables/wine_food_pairings.dart` — `WineFoodPairings`
-Table de jointure many-to-many : `wineId` → `Wines.id`, `foodCategoryId` → `FoodCategories.id`. Clé primaire composite. Cascade on delete.
-### `tables/bottle_placements.dart` — `BottlePlacements`
-Table des placements physiques individuels de bouteilles dans les celliers virtuels :
-- `id` (auto-increment), `wineId`, `cellarId`, `positionX` (colonne 0-based), `positionY` (ligne 0-based), `createdAt`
-- Contrainte d'unicité `(cellarId, positionX, positionY)` — empêche le double-booking d'un emplacement
-### `app_database.dart` — `AppDatabase`
-- Classe Drift `@DriftDatabase` regroupant 5 tables et 4 DAOs
-- `schemaVersion = 5` (via `AppConstants.databaseVersion`)
-- Stratégie actuelle d'upgrade : migration non destructive (création conditionnelle des tables/colonnes manquantes)
-- Migration v4 : création de `virtual_cellars` et ajout de `wines.cellar_id`
-- Migration v5 : création de `bottle_placements` (découplage des placements individuels des bouteilles)
-- `_seedFoodCategories()` — pré-peuple 18 catégories alimentaires à la création
-- Seeding idempotent des catégories : insertion uniquement des catégories absentes
-- Stockage DB desktop : priorité au répertoire d'installation (si écriture autorisée), fallback sur `<documents>`
-- Migration automatique au démarrage : copie de l'ancienne DB depuis `<documents>` vers le répertoire d'installation si nécessaire
+- Index documentaire : [README.md](README.md)
+- Guide d'entrée rapide : [QUICK_START.md](QUICK_START.md)
+- Docs par feature : [features/](features/)
+- Docs techniques : [technical/](technical/)
+- Diagrammes Mermaid : [diagrams/](diagrams/)
 
-### `daos/wine_dao.dart` — `WineDao`
-DAO pour les opérations sur les vins :
-| Méthode | Description |
-|---------|-------------|
-| `watchAllWines()` | Stream réactif trié par nom |
-| `getAllWines()` | Liste one-shot |
-| `getWineById(int)` | Vin par ID |
-| `getWineWithPairings(int)` | Vin + ses food pairings |
-| `watchWinesByColor(String)` | Stream filtré par couleur |
-| `watchWinesByFoodCategory(int)` | Stream filtré par catégorie (JOIN) |
-| `searchWines(String)` | Stream LIKE sur nom/appellation/région/producteur |
-| `insertWineWithPairings(…)` | Insert transactionnel vin + pairings |
-| `updateWineWithPairings(…)` | Update transactionnel vin + pairings |
-| `deleteWineById(int)` | Suppression (cascade pairings) |
-| `updateQuantity(int, int)` | Mise à jour quantité uniquement |
-| `getWineCount()` / `getTotalBottles()` | Statistiques |
+## Règle de maintenance
 
-### `daos/food_category_dao.dart` — `FoodCategoryDao`
-| Méthode | Description |
-|---------|-------------|
-| `getAllCategories()` | Liste triée par `sortOrder` |
-| `watchAllCategories()` | Stream réactif |
-| `findCategoriesByName(String)` | Recherche LIKE (pour auto-matching IA) |
+Quand une évolution modifie l'un des éléments suivants, la documentation doit être mise à jour dans le même changement :
 
-### `daos/virtual_cellar_dao.dart` — `VirtualCellarDao`
-DAO dédié aux celliers virtuels et à l'occupation de leurs emplacements :
-
-| Méthode | Description |
-|---------|-------------|
-| `watchAll()` / `getAll()` | Liste des celliers triée par nom |
-| `getById(int)` | Chargement d'un cellier |
-| `insertCellar(...)` / `updateCellar(...)` / `deleteCellar(int)` | CRUD cellier |
-| `watchWinesByCellarId(int)` / `getWinesByCellarId(int)` | Bouteilles placées dans un cellier |
-| `clearCellarPlacementsForCellar(int)` | Déplace toutes les bouteilles hors du cellier avant suppression |
-| `updateCellarPlacement(...)` | Place ou retire une bouteille d'un emplacement |
-
-### `daos/bottle_placement_dao.dart` — `BottlePlacementDao`
-DAO dédié aux placements individuels de bouteilles (table `BottlePlacements`) :
-
-| Méthode | Description |
-|---------|-----------|
-| `watchPlacementsByCellarId(int)` | Stream réactif des placements d'un cellier (tri Y puis X) |
-| `getPlacementsByWineId(int)` | Tous les placements d'un vin (cross-celliers) |
-| `getPlacedBottleCountForWine(int)` | Nombre de bouteilles placées pour un vin |
-| `isSlotOccupied(cellarId, x, y)` | Vérifie si un emplacement est occupé |
-| `placeBottle(wineId, cellarId, x, y)` | Place une bouteille (échoue si occupé) |
-| `removePlacement(id)` | Retire un placement |
-| `clearPlacementsForWine(wineId)` | Retire tous les placements d'un vin |
-| `clearPlacementsForCellar(cellarId)` | Vide un cellier |
-| `trimPlacementsForWine(wineId, keep)` | Garde les N placements les plus récents |
-| `moveBottlePlacement(id, newX, newY)` | Déplace une bouteille (échoue si destination occupée) |
-
----
-
-## Feature `wine_cellar/`
-
-Gestion CRUD de la cave à vin.
-
-### domain/entities/
-
-#### `wine_entity.dart` — `WineEntity`
-- Entité métier principale, **immutable** (champs `final`)
-- Inclut le placement virtuel via `cellarId`, `cellarPositionX`, `cellarPositionY`
-- Propriétés calculées : `maturity` (basée sur l'année courante vs fenêtre de dégustation), `displayName`
-- `copyWith()` pour les modifications
-- `toJson()` / `fromJson()` pour l'import/export
-- `grapeVarietiesJson` / `parseGrapeVarieties()` pour la sérialisation DB
-
-#### `virtual_cellar_entity.dart` — `VirtualCellarEntity`
-- Entité métier d'un cellier virtuel
-- Champs : `id`, `name`, `rows`, `columns`, `createdAt`, `updatedAt`, `theme`
-- Propriété calculée : `totalSlots`
-
-#### `virtual_cellar_theme.dart` — `VirtualCellarTheme`
-- Enum des thèmes visuels de cellier : `classic`, `premiumCave`, `stoneCave`, `garageIndustrial`
-- `label` — libellé français localisé
-- `storageValue` / `fromStorage()` — sérialisation pour persistance
-
-#### `bottle_placement_entity.dart` — `BottlePlacementEntity`
-- Placement physique d'une bouteille dans la grille d'un cellier
-- Champs : `id`, `wineId`, `cellarId`, `positionX`, `positionY`, `createdAt`, `wine` (`WineEntity`)
-
-#### `bottle_move_state_entity.dart` — `BottleMoveStateEntity`
-- État UI pour le déplacement de bouteilles (mode mouvement, drag & drop, sélection)
-- Champs : `isMovementMode`, `isDragModeEnabled`, `selectedPlacementIds` (Set), `cellarId`
-- `initial(cellarId)` factory, `copyWith()`, `isSelected()`, `hasSelection`
-
-#### `cellar_cell_position.dart` — `CellarCellPosition`
-- Value object représentant une position (row, col) 1-based dans la grille
-- Implémente `==` / `hashCode` pour utilisation dans Set/Map
-
-#### `food_category_entity.dart` — `FoodCategoryEntity`
-- Entité légère : `id`, `name`, `icon`, `sortOrder`
-
-#### `wine_filter.dart` — `WineFilter`
-- Critères de filtrage : `searchQuery`, `color`, `foodCategoryId`, `maturity`
-- `isEmpty` pour vérifier si aucun filtre n'est actif
-- `copyWith()` avec options `clearX` pour réinitialiser un critère
-#### `wine_sort.dart` — `WineSort` / `WineSortField`
-- Value object de tri des vins : `field` (`WineSortField` : name, vintage, drinkUntilYear, color, region, appellation…) + `ascending`
-- `apply(List<WineEntity>)` — retourne la liste triée
-- `copyWith()` pour modifier le critère ou la direction
-### domain/repositories/
-
-#### `wine_repository.dart` — `WineRepository` (abstract)
-Contrat pour les opérations vin :
-- CRUD : `addWine`, `updateWine`, `deleteWine`, `getWineById`
-- Streams réactifs : `watchAllWines`, `watchFilteredWines`
-- Quantité : `updateQuantity`
-- Stats : `getWineCount`, `getTotalBottles`
-- Export/Import : `exportToJson`, `exportToCsv`, `importFromJson`, `parseCsvRows`, `importFromCsv`
-- Le JSON est un instantané complet de cave : vins, celliers virtuels et placements. Son import restaure cet état complet après confirmation explicite en UI.
-
-#### `food_category_repository.dart` — `FoodCategoryRepository` (abstract)
-- `getAllCategories()`, `watchAllCategories()`, `findByName(String)`
-
-#### `virtual_cellar_repository.dart` — `VirtualCellarRepository` (abstract)
-- Lecture : `watchAll`, `getAll`, `getById`
+- une route dans `lib/core/router.dart`
+- un provider global ou un use case global dans `lib/core/providers.dart`
+- une table, un DAO ou une migration dans `lib/database/app_database.dart`
+- la structure d'une feature ou son point d'entrée principal
 - Écriture : `create`, `update`, `delete`
 - Occupation : `getWinesByCellarId`, `watchWinesByCellarId`, `placeWine`- Placements individuels : `getPlacementsByWineId`, `watchPlacementsByCellarId`, `removePlacement`, `moveBottlePlacement`
 ### domain/usecases/
@@ -808,248 +520,6 @@ Tableaux de bord et graphiques d'analyse de la cave.
 ### presentation/widgets/
 
 | Widget | Rôle |
-|--------|------|
-| `stat_donut_chart.dart` | Donut chart réutilisable avec légende (fl_chart) |
-| `stat_bar_chart.dart` | Bar chart horizontal + vertical réutilisable (fl_chart) |
-| `overview_section.dart` | Grille de cartes KPI (références, bouteilles, valeur, note, millésimes) |
-| `color_distribution_chart.dart` | Donut par couleur de vin |
-| `maturity_distribution_chart.dart` | Donut par stade de maturité |
-| `geography_section.dart` | Tabs pays/régions/appellations avec bar charts |
-| `vintage_distribution_chart.dart` | Bar chart vertical des millésimes |
-| `grape_distribution_chart.dart` | Bar chart horizontal des cépages |
-| `ratings_price_section.dart` | Tabs notes/prix avec graphiques et KPI |
-| `producer_distribution_chart.dart` | Bar chart horizontal des producteurs |
-
----
-
-## Feature `settings/`
-
-### `settings_screen.dart` — `SettingsScreen`
-- Hub de réglages qui regroupe IA, affichage, mode développeur et informations de version
-
-### `display_settings_screen.dart` — `DisplaySettingsScreen`
-- Paramètres d'affichage de la cave : disposition liste/master-detail et thème visuel global
-- Section **Alertes de consommation** :
-  - Toggle « Dernière année de consommation » (activé par défaut)
-  - Toggle « Fenêtre optimale dépassée » (activé par défaut)
-- Ces réglages pilotent la surbrillance dans `WineListScreen` et `VirtualCellarDetailScreen`
-
----
-
-## Feature `user_manual/`
-
-### `presentation/screens/user_manual_screen.dart` — `UserManualScreen`
-- Manuel utilisateur global en onglets (vue d'ensemble, imports/exports, CSV détaillé, IA, accords, cave virtuelle, tokens IA)
-- Route dédiée `/manual` (hors shell de navigation)
-- Paramètre de route optionnel `section` pour ouvrir directement une section (ex: `/manual?section=ai-tokens`)
-- Point d'entrée global depuis l'écran cave (icône `?` dans l'AppBar)
-- Point d'entrée ciblé depuis Paramètres vers la section tokens/appairage IA
-
----
-
-## Injection de dépendances
-
-Tout passe par `core/providers.dart`. Voici la hiérarchie complète des providers :
-
-### Infrastructure
-
-| Provider | Type | Fournit |
-|----------|------|---------|
-| `databaseProvider` | `Provider<AppDatabase>` | Singleton DB, fermeture au dispose |
-| `secureStorageProvider` | `Provider<FlutterSecureStorage>` | Instance unique |
-
-### Repositories
-
-| Provider | Type | Fournit |
-|----------|------|---------|
-| `wineRepositoryProvider` | `Provider<WineRepository>` | `WineRepositoryImpl(wineDao, foodCategoryDao)` |
-| `foodCategoryRepositoryProvider` | `Provider<FoodCategoryRepository>` | `FoodCategoryRepositoryImpl(foodCategoryDao)` |
-| `virtualCellarRepositoryProvider` | `Provider<VirtualCellarRepository>` | `VirtualCellarRepositoryImpl(virtualCellarDao, bottlePlacementDao)` |
-
-### Settings (state persisté)
-
-| Provider | Type | Fournit |
-|----------|------|---------|
-| `aiProviderSettingProvider` | `StateNotifierProvider<…, AiProvider>` | Enum du provider IA actuel |
-| `openAiApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API OpenAI |
-| `geminiApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API Gemini |
-| `mistralApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API Mistral |
-| `ollamaUrlProvider` | `StateNotifierProvider<…, String?>` | URL Ollama |
-| `selectedModelProvider` | `StateNotifierProvider<…, String?>` | Modèle sélectionné |
-| `visionModelOverrideProvider` | `StateNotifierProvider<…, String?>` | Modèle dédié à l'analyse d'image (optionnel) |
-| `visionApiKeyOverrideProvider` | `StateNotifierProvider<…, String?>` | Clé API dédiée à l'analyse d'image (optionnel) |
-| `geminiFallbackApiKeyProvider` | `StateNotifierProvider<…, String?>` | Clé API Gemini dédiée à la recherche web (fallback) |
-| `useOcrForImagesProvider` | `StateNotifierProvider<…, bool>` | Si `true`, analyse image via OCR local (MLKit) plutôt que vision IA |
-| `appVisualThemeProvider` | `StateNotifierProvider<…, VirtualCellarTheme?>` | Thème visuel global persisté (cave premium, pierre, garage…). `null` = thème classique par défaut |
-| `highlightLastConsumptionYearProvider` | `StateNotifierProvider<…, bool>` | Si `true`, met en évidence les vins dans leur dernière année théorique de consommation |
-| `highlightPastOptimalConsumptionProvider` | `StateNotifierProvider<…, bool>` | Si `true`, met en évidence les vins dont la fenêtre optimale est dépassée |
-| `immersiveCellarThemeProvider` | `StateProvider<VirtualCellarTheme?>` | Override temporaire de thème quand l'utilisateur navigue dans un cellier thémé (réinitialisé en sortie) |
-| `visionProviderOverrideProvider` | `StateNotifierProvider<…, String?>` | Fournisseur IA dédié à l'analyse d'image (optionnel, override du fournisseur principal) |
-
-### AI Service
-
-| Provider | Type | Fournit |
-|----------|------|---------|
-| `aiServiceProvider` | `Provider<AiService?>` | L'implémentation IA active (ou `null` si non configuré). Switch sur `aiProviderSettingProvider`. |
-| `visionAiServiceProvider` | `Provider<AiService?>` | Service IA dédié à l'analyse d'images. Applique les overrides de modèle/clé vision si configurés ; sinon délègue à `aiServiceProvider`. Retourne toujours `null` pour Ollama (non supporté). |
-| `geminiWebSearchServiceProvider` | `Provider<GeminiService?>` | Service Gemini dédié à la recherche web. Si Gemini est le fournisseur principal, utilise sa clé ; sinon, utilise la clé fallback (`geminiFallbackApiKeyProvider`). Retourne `null` si aucune clé disponible. |
-| `imageTextExtractorProvider` | `Provider<ImageTextExtractor>` | Implémentation OCR active : `MlKitImageTextExtractor` |
-| `visionModelProvider` | `FutureProvider.autoDispose<String?>` | Découvre le modèle vision disponible via `visionAiServiceProvider.discoverVisionModel()` |
-
-### Use Cases — Wine
-
-| Provider | Type |
-|----------|------|
-| `addWineUseCaseProvider` | `Provider<AddWineUseCase>` |
-| `getWineByIdUseCaseProvider` | `Provider<GetWineByIdUseCase>` |
-| `deleteWineUseCaseProvider` | `Provider<DeleteWineUseCase>` |
-| `updateWineUseCaseProvider` | `Provider<UpdateWineUseCase>` |
-| `updateWineQuantityUseCaseProvider` | `Provider<UpdateWineQuantityUseCase>` |
-| `exportWinesUseCaseProvider` | `Provider<ExportWinesUseCase>` |
-| `importWinesFromJsonUseCaseProvider` | `Provider<ImportWinesFromJsonUseCase>` |
-| `parseCsvImportUseCaseProvider` | `Provider<ParseCsvImportUseCase>` |
-| `importWinesFromCsvUseCaseProvider` | `Provider<ImportWinesFromCsvUseCase>` |
-| `getAllVirtualCellarsUseCaseProvider` | `Provider<GetAllVirtualCellarsUseCase>` |
-| `createVirtualCellarUseCaseProvider` | `Provider<CreateVirtualCellarUseCase>` |
-| `updateVirtualCellarUseCaseProvider` | `Provider<UpdateVirtualCellarUseCase>` |
-| `deleteVirtualCellarUseCaseProvider` | `Provider<DeleteVirtualCellarUseCase>` |
-| `placeWineInCellarUseCaseProvider` | `Provider<PlaceWineInCellarUseCase>` |
-| `getWinePlacementsUseCaseProvider` | `Provider<GetWinePlacementsUseCase>` |
-| `moveBottlesInCellarUseCaseProvider` | `Provider<MoveBottlesInCellar>` |
-| `removeBottlePlacementUseCaseProvider` | `Provider<RemoveBottlePlacementUseCase>` |
-
-### Use Cases — AI
-
-| Provider | Type |
-|----------|------|
-| `analyzeWineUseCaseProvider` | `Provider<AnalyzeWineUseCase?>` |
-| `analyzeWineFromImageUseCaseProvider` | `Provider<AnalyzeWineFromImageUseCase?>` | Utilise `visionAiServiceProvider` |
-| `extractTextFromWineImageUseCaseProvider` | `Provider<ExtractTextFromWineImageUseCase>` |
-| `testAiConnectionUseCaseProvider` | `Provider<TestAiConnectionUseCase?>` |
-
----
-
-## Flux de données — Exemples concrets
-
-### Ajouter un vin via l'IA
-
-```
-1. ChatScreen : l'utilisateur tape "un Margaux 2018"
-2. ChatScreen._sendMessage()
-   → ref.read(analyzeWineUseCaseProvider)
-   → AnalyzeWineUseCase.call(AnalyzeWineParams(...))
-     → AiService.analyzeWine(...)                    [ex: GeminiService]
-       → API Gemini → réponse texte + JSON
-       → _extractWineData() → List<WineAiResponse>
-     ← AiChatResult(textResponse, wineDataList)
-   ← Either<Failure, AiChatResult>
-3. ChatScreen affiche le texte + WinePreviewCard(s)
-   → Les champs estimés par l'IA sont signalés par ✨ (via estimatedFields)
-3b. [Optionnel] L'utilisateur clique "Compléter N champ(s) via Google"
-   → ref.read(geminiWebSearchServiceProvider)
-   → GeminiService.analyzeWineWithWebSearch(
-       buildFieldCompletionMessage(wine, estimatedFields),
-       systemPromptOverride: fieldCompletionSystemPrompt)
-   → API Gemini REST /v1beta/ avec google_search tool
-   → WineAiResponse.mergeWith(completedResponse)
-   → Mise à jour des WinePreviewCard(s)
-4. L'utilisateur clique "Ajouter à la cave"
-5. ChatScreen._addWineToCellar()
-   → Matching des food pairings par nom
-   → Construction WineEntity
-   → ref.read(addWineUseCaseProvider)
-   → AddWineUseCase.call(WineEntity)
-     → Validation nom non-vide
-     → WineRepository.addWine(wine)                  [via WineRepositoryImpl]
-       → WineDao.insertWineWithPairings(...)          [transaction SQLite]
-     ← Either<Failure, int>
-6. SnackBar confirmation + option "Voir la cave"
-```
-
-### Avis sur un vin (recherche web Gemini)
-
-```
-1. ChatScreen en mode « Avis sur un vin »
-2. L'utilisateur tape "Que penses-tu du Château Margaux 2018 ?"
-3. ChatScreen._sendMessage()
-   → Si le provider supporte le web search (Gemini) :
-     → AnalyzeWineUseCase.call(params, useWebSearch: true)
-       → AiService.analyzeWineWithWebSearch(
-           buildGroundedReviewMessage(msg),
-           systemPromptOverride: groundedReviewSystemPrompt)
-       → GeminiService : appel REST /v1beta/ avec google_search tool
-       → Extraction grounding metadata → List<WebSource>
-     ← AiChatResult(textResponse, webSources: [...])
-   → Si le provider ne supporte pas mais clé Gemini fallback dispo :
-     → geminiWebSearchServiceProvider.analyzeWineWithWebSearch(...)
-   → Sinon : analyzeWine classique sans recherche web
-4. ChatScreen affiche la réponse + WebSourcesWidget (liens cliquables)
-```
-
-### Modifier la quantité d'un vin (scénario dernière bouteille)
-
-```
-1. WineListScreen : l'utilisateur clique "-" sur un vin avec quantité = 1
-2. WineListScreen._updateQuantity(wine, 0)
-   → showDialog → l'utilisateur choisit "Supprimer"
-   → ref.read(updateWineQuantityUseCaseProvider)
-   → UpdateWineQuantityUseCase.callWithAction(params, ZeroQuantityAction.delete)
-     → WineRepository.deleteWine(wineId)
-     ← Either<Failure, void>
-3. SnackBar "vin supprimé"
-```
-
-### Export CSV
-
-```
-1. WineListScreen : menu → "Exporter CSV"
-2. ref.read(exportWinesUseCaseProvider)
-3. ExportWinesUseCase.call(ExportFormat.csv)
-   → WineRepository.exportToCsv()
-     → WineDao.getAllWines() → mapping → ListToCsvConverter
-   ← Either<Failure, String>
-4. _saveExport(csvString, "cave_export.csv")
-
-### Import CSV avec mapping + IA (optionnel)
-
-```
-1. WineListScreen : menu → "Importer CSV"
-2. FilePicker : sélection du fichier CSV
-3. Détection automatique du séparateur CSV (virgule, point-virgule, tabulation)
-4. Extraction de 5 lignes d'aperçu
-5. CsvColumnMappingDialog :
-   - Aperçu interactif : clic sur en-tête de colonne → dropdown d'assignation
-   - Auto-détection des en-têtes par mots-clés (fallback)
-   - [Optionnel] Pré-analyse IA : AiPrompts.buildCsvMappingPrompt()
-     → AnalyzeWineUseCase → parsing JSON <json>...</json>
-     → assignation automatique des colonnes
-   - Sélection de la ligne d'en-tête (clic ou champ numérique)
-   - Retourne CsvMappingDialogResult (mapping + headerLine)
-6. ParseCsvImportUseCase.call(ParseCsvImportParams)
-  → WineRepository.parseCsvRows(csvContent, mapping, headerLine)
-  → preview extraction (échantillon)
-7. Choix utilisateur :
-  A) Import direct
-    → Récapitulatif détaillé → confirmation
-    → ImportWinesFromCsvUseCase.call(...)
-    → WineRepository.importFromCsv(...)
-  B) Compléter avec IA
-    → découpage en lots de 20
-    → AiPrompts.buildCsvEnrichmentPrompt() (évaluation complète)
-    → AnalyzeWineUseCase.call(...) pour chaque lot
-    → CsvBatchValidationDialog : édition inline, suppression, réévaluation individuelle
-    → CsvBatchAction.validate : AddWineUseCase pour chaque vin validé
-    → CsvBatchAction.retry : renvoi du lot à l'IA
-    → CsvBatchAction.cancel : arrêt de l'import
-    → Résumé final détaillé (lots traités, vins importés, supprimés)
-```
-```
-
----
-
-## Conventions de nommage
-
-| Élément | Convention | Exemple |
 |---------|-----------|---------|
 | Interface repository | `XxxRepository` (dans `domain/`) | `WineRepository` |
 | Implémentation | `XxxRepositoryImpl` (dans `data/`) | `WineRepositoryImpl` |

@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_import_row.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
@@ -27,7 +28,6 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_impor
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_card.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_detail_panel.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/wine_list_provider.dart';
-import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_strategy.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/csv_batch_validation_dialog.dart';

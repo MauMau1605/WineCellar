@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
 void main() {
   group('AiPrompts', () {

@@ -39,6 +39,8 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_servic
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/ollama_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mlkit_image_text_extractor.dart';
+import 'package:wine_cellar/features/statistics/data/repositories/statistics_repository_impl.dart';
+import 'package:wine_cellar/features/statistics/domain/repositories/statistics_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 
 // ============ Database ============
@@ -76,6 +78,11 @@ final foodCategoryRepositoryProvider = Provider<FoodCategoryRepository>((ref) {
 final virtualCellarRepositoryProvider = Provider<VirtualCellarRepository>((ref) {
   final db = ref.watch(databaseProvider);
   return VirtualCellarRepositoryImpl(db.virtualCellarDao, db.bottlePlacementDao);
+});
+
+final statisticsRepositoryProvider = Provider<StatisticsRepository>((ref) {
+  final wineRepo = ref.watch(wineRepositoryProvider);
+  return StatisticsRepositoryImpl(wineRepo);
 });
 
 // ============ Visual Theme ============

@@ -4,8 +4,8 @@ import 'package:fpdart/fpdart.dart';
 
 import 'package:wine_cellar/core/errors/failures.dart';
 import 'package:wine_cellar/core/food_pairing_catalog.dart';
-import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 import 'package:wine_cellar/features/developer/domain/entities/reevaluation_options.dart';
 import 'package:wine_cellar/features/developer/domain/entities/wine_reevaluation_change.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';

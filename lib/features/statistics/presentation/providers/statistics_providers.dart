@@ -1,18 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:wine_cellar/core/providers.dart';
-import 'package:wine_cellar/features/statistics/data/repositories/statistics_repository_impl.dart';
 import 'package:wine_cellar/features/statistics/domain/entities/cellar_statistics.dart';
-import 'package:wine_cellar/features/statistics/domain/repositories/statistics_repository.dart';
 import 'package:wine_cellar/features/statistics/domain/usecases/get_cellar_statistics.dart';
 import 'package:wine_cellar/core/usecases/usecase.dart';
-
-// ── Repository ──────────────────────────────────────────────────────────
-
-final statisticsRepositoryProvider = Provider<StatisticsRepository>((ref) {
-  final wineRepo = ref.watch(wineRepositoryProvider);
-  return StatisticsRepositoryImpl(wineRepo);
-});
 
 // ── Use Case ────────────────────────────────────────────────────────────
 

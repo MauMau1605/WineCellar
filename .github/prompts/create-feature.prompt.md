@@ -77,7 +77,7 @@ Suggérer automatiquement (applicable?):
 - **Pagination/Filtrage**: si liste, pagination ou chargement infini?
 - **Gestion d'erreur**: timeouts, réessais, fallback?
 - **Tests unitaires**: au moins les use cases
-- **Documentation**: mise à jour de `docs/ARCHITECTURE.md` si pattern nouveau
+- **Documentation**: mise à jour de `docs/ARCHITECTURE.md`, `docs/features/<feature>.md` et des docs transverses concernées
 
 ---
 
@@ -95,6 +95,9 @@ Au terme de l'implémentation, vérifier:
 - [ ] Localisation ajoutée (FR/EN) si textes utilisateur
 - [ ] Routes GoRouter mises à jour
 - [ ] Base de données: migrations versionnées si tables Drift
+- [ ] Documentation feature créée ou mise à jour dans `docs/features/`
+- [ ] `docs/technical/` mis à jour si la feature touche routing, providers globaux ou base de données
+- [ ] `docs/README.md` mis à jour si une nouvelle entrée documentaire doit être indexée
 
 ---
 
@@ -103,6 +106,6 @@ Au terme de l'implémentation, vérifier:
 1. **Clarification** : je pose les questions section 2
 2. **Sketch**: je propose étapes + fichiers à créer
 3. **Implémentation**: je crée entities → repositories → use cases → data → présentation
-4. **Validation**: générér `*.g.dart` si Drift, tester, mettre à jour docs
+4. **Validation**: générer `*.g.dart` si Drift, tester, mettre à jour docs (`docs/ARCHITECTURE.md`, `docs/features/`, `docs/technical/` selon le cas)
 
-Prêt? Décris-moi ta fonctionnalité! 🍷
+Prêt ? Décris-moi ta fonctionnalité.

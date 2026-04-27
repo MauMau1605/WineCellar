@@ -145,7 +145,7 @@ QUESTION DE L'UTILISATEUR : $userQuestion
     return '''
 [MODE AJOUT VIN A PARTIR D'UNE PHOTO]
 Analyse l'image de bouteille de vin et retourne la réponse au format JSON habituel, sans raisonnement long.
-${hasExtractedText ? '\nTexte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n' : ''}
+${hasExtractedText ? '\nTexte OCR extrait de l\'étiquette :\n${extractedText.trim()}\n' : ''}
 ''';
   }
 
@@ -157,7 +157,7 @@ ${hasExtractedText ? '\nTexte OCR extrait de l\'étiquette :\n${extractedText!.t
     final hasExtractedText =
         extractedText != null && extractedText.trim().isNotEmpty;
     final ocrContext = hasExtractedText
-        ? 'Texte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n\n'
+      ? 'Texte OCR extrait de l\'étiquette :\n${extractedText.trim()}\n\n'
         : '';
 
     return '''
@@ -186,7 +186,7 @@ ${ocrContext}CONSIGNES :
     final hasExtractedText =
         extractedText != null && extractedText.trim().isNotEmpty;
     final ocrContext = hasExtractedText
-        ? 'Texte OCR extrait de l\'étiquette :\n${extractedText!.trim()}\n\n'
+      ? 'Texte OCR extrait de l\'étiquette :\n${extractedText.trim()}\n\n'
         : '';
 
     return '''
@@ -546,7 +546,8 @@ ${rowDescriptions.join('\n')}
   }
 
   /// Build the CSV row description for a single wine in the enrichment prompt.
-  static String buildCsvRowDescription(Map<String, String?> fields, int lineNumber) {
+  static String buildCsvRowDescription(
+      Map<String, String?> fields, int lineNumber) {
     final parts = fields.entries
         .where((e) => e.value != null && e.value!.isNotEmpty)
         .map((e) => '${e.key}=${e.value}')

@@ -20,7 +20,14 @@ Couches transversales :
 - `lib/core/` — providers Riverpod, router, thème, enums, constantes, erreurs
 - `lib/database/` — Drift ORM (tables, DAOs, migrations)
 
-Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le détail complet.
+Entrée documentation : [docs/README.md](docs/README.md)
+
+Références documentaires principales :
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — vue d'ensemble
+- [docs/technical/routing.md](docs/technical/routing.md) — navigation réelle
+- [docs/technical/providers.md](docs/technical/providers.md) — DI et providers globaux
+- [docs/technical/database.md](docs/technical/database.md) — schéma Drift, DAOs et migrations
+- `docs/features/*.md` — documentation détaillée par feature
 
 ## Conventions de nommage
 
@@ -51,6 +58,10 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le détail complet.
 - Éviter `dynamic` sauf justification explicite.
 - Privilégier les entités immutables et `copyWith`.
 - Lors d'un changement de responsabilité ou d'architecture, mettre à jour `docs/ARCHITECTURE.md`.
+- Lors d'un changement de route, mettre à jour `docs/technical/routing.md` et la doc feature associée si nécessaire.
+- Lors d'un changement de provider global ou de use case global dans `lib/core/providers.dart`, mettre à jour `docs/technical/providers.md`.
+- Lors d'un changement de schéma Drift, de DAO ou de migration, mettre à jour `docs/technical/database.md`.
+- Lors d'un changement du périmètre ou des points d'entrée d'une feature, mettre à jour `docs/features/<feature>.md`.
 - Lors d'un ajout ou modification de fonctionnalité visible par l'utilisateur, mettre à jour le manuel utilisateur (`lib/features/user_manual/`).
 - Lors d'un ajout de fonctionnalité, ajouter ou mettre à jour les tests unitaires correspondants dans `test/`.
 - Lors d'une correction de bug, créer ou mettre à jour des tests associés qui reproduisent le bug corrigé afin de limiter les régressions futures.
@@ -90,7 +101,7 @@ Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le détail complet.
 
 ## Base de données (Drift)
 
-- Schéma versionné (actuellement **v5**), migrations non-destructives
+- Schéma versionné (actuellement **v6**), migrations non-destructives
 - Fichiers générés : `*.g.dart` — ne jamais modifier manuellement
 - Régénérer après modification des tables : `dart run build_runner build --delete-conflicting-outputs`
 - Tables : `Wines`, `VirtualCellars`, `BottlePlacements`, `FoodCategories`, `WineFoodPairings`

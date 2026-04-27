@@ -5,7 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:wine_cellar/core/chat_logger.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
-import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
 /// Mistral AI implementation of the AI service using the OpenAI-compatible API.
 /// API docs: https://docs.mistral.ai/api/

@@ -5,7 +5,7 @@ import 'package:logger/logger.dart';
 
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
-import 'package:wine_cellar/features/ai_assistant/data/ai_prompts.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
 /// OpenAI implementation of the AI service
 class OpenAiService implements AiService {
