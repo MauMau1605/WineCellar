@@ -20,6 +20,8 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_f
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_auto_web_completion_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_flow_planner.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_intent_helper.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_assistant_link_resolver.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_cellar_naming_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_duplicate_matcher.dart';
@@ -743,21 +745,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _handleAssistantLinkTap(String href) {
     if (!mounted) return;
-    // Internal app routes
-    if (href.startsWith('/')) {
-      context.push(href);
-      return;
-    }
-    final uri = Uri.tryParse(href);
-    if (uri == null) return;
-    // Internal wine detail links
-    if (uri.path.startsWith('/cellar/wine/')) {
-      context.push(uri.path);
-      return;
-    }
-    // External web links (from grounded search sources)
-    if (uri.scheme == 'https' || uri.scheme == 'http') {
-      launchUrl(uri, mode: LaunchMode.externalApplication);
+    final action = ChatAssistantLinkResolver.resolve(href);
+    switch (action.type) {
+      case ChatAssistantLinkActionType.ignore:
+        return;
+      case ChatAssistantLinkActionType.pushRoute:
+        final route = action.route;
+        if (route != null) {
+          context.push(route);
+        }
+      case ChatAssistantLinkActionType.openExternal:
+        final externalUri = action.externalUri;
+        if (externalUri != null) {
+          launchUrl(externalUri, mode: LaunchMode.externalApplication);
+        }
     }
   }
 
@@ -2115,21 +2116,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<AddWineMessageIntent?> _resolveAddWineIntent(String userMessage) async {
-    final detected = AiRequestStrategy.detectAddWineMessageIntent(
+    final resolution = ChatAddIntentHelper.resolve(
       userMessage: userMessage,
       currentWineData: _currentWineDataList,
     );
 
-    if (detected != AddWineMessageIntent.unclear) return detected;
+    if (resolution.type == ChatAddIntentResolutionType.resolved) {
+      return resolution.intent;
+    }
 
     return showDialog<AddWineMessageIntent>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Précision ou nouveau vin ?'),
-        content: const Text(
-          'Je ne suis pas sûr de l intention de ce message.\n'
-          'Souhaitez-vous corriger le vin en cours ou démarrer un nouveau vin ?',
-        ),
+        title: const Text(ChatAddIntentHelper.clarificationDialogTitle),
+        content: const Text(ChatAddIntentHelper.clarificationDialogMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),

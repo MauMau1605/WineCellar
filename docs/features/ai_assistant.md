@@ -26,6 +26,7 @@ Feature dédiée au chat IA, à l'analyse de vin en texte ou en image, et aux in
 | `domain/usecases/` | analyse texte, analyse image, extraction OCR, test de connexion, builders de prompts IA |
 | `data/datasources/` | `OpenAiService`, `GeminiService`, `MistralService`, `OllamaService`, `MlKitImageTextExtractor` |
 | `presentation/screens/` | `chat_screen.dart` |
+| `presentation/helpers/` | orchestration déterministe du chat extraite pour tests unitaires et refactors incrémentaux |
 | `presentation/widgets/` | bulles de chat, aperçu de vin |
 
 ## Abstractions centrales
@@ -84,6 +85,7 @@ flowchart LR
 - Ollama n'est pas utilisé pour la vision dans le provider dédié
 - Gemini peut aussi être mobilisé en web search fallback pour compléter des champs estimés
 - `WineAiResponse` porte les champs estimés et les notes de confiance, utiles pour expliquer les choix de l'IA
+- une partie de la logique non visuelle de `chat_screen.dart` est désormais déplacée dans `presentation/helpers/` pour réduire la taille de l'écran et stabiliser les tests de comportement
 
 ## Points d'extension
 

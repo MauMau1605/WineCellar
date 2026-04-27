@@ -157,7 +157,7 @@ Points factuels importants :
 | --- | --- | --- |
 | `domain/` | Entités, interfaces, use cases | Aucun package UI ou data |
 | `data/` | Implémentations concrètes, accès données, intégrations | `domain/` + packages externes |
-| `presentation/` | Screens, widgets, providers locaux | `domain/` via use cases et providers |
+| `presentation/` | Screens, widgets, providers locaux, helpers de présentation purs | `domain/` via use cases et providers |
 
 Exceptions structurelles actuelles connues :
 
@@ -454,6 +454,27 @@ Interface d'extraction OCR pour les photos d'étiquette :
 - **Complétion web search** : après analyse d'un vin, si des champs sont estimés (✨) et qu'une clé Gemini est disponible, un bouton « Compléter via Google » propose de vérifier/compléter ces champs via la recherche internet
 - Reset de session (réinitialise le chat du service IA sous-jacent)
 - Bouton « Ajouter tous les vins » pour les réponses multi-vins
+- Une part croissante de l'orchestration déterministe est déléguée à `presentation/helpers/` afin de garder l'écran testable et de limiter la logique métier/UI dans un fichier unique
+
+### presentation/helpers/
+
+Helpers purs ou quasi purs extraits du chat pour sécuriser les refactors par tests unitaires :
+
+- `chat_request_planner.dart` — composition du message IA selon le mode et l'intention
+- `chat_context_summary_builder.dart` — résumés de cave et de vin courant pour le raffinage
+- `chat_completion_parser.dart` — extraction de JSON depuis les réponses IA
+- `chat_response_enricher.dart` — enrichissement des réponses avec liens internes et sources web
+- `chat_missing_json_recovery.dart` — relance ciblée quand la réponse ne contient pas de JSON exploitable
+- `chat_auto_web_completion_planner.dart` — sélection et batch des vins à compléter via recherche web
+- `chat_web_completion_result.dart` — interprétation et fusion d'une réponse de complétion web
+- `chat_wine_draft_builder.dart` — mapping `WineAiResponse` → `WineEntity` persistant
+- `chat_duplicate_matcher.dart` — normalisation et détection de doublons potentiels
+- `chat_add_flow_planner.dart` — décisions d'ajout unitaire, d'ajout groupé et de placement post-ajout
+- `chat_mode_transition_planner.dart` — transitions de mode, reset de session et messages d'activation
+- `chat_media_helper.dart` — MIME, prompts image et messages de confirmation photo
+- `chat_cellar_naming_helper.dart` — nommage automatique des caves créées depuis le chat
+- `chat_assistant_link_resolver.dart` — classification des liens assistant en navigation interne ou ouverture externe
+- `chat_add_intent_helper.dart` — décision “intention résolue” vs “clarification nécessaire” pour l'ajout de vin
 
 ### presentation/widgets/
 
