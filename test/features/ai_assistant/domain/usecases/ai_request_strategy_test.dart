@@ -4,6 +4,20 @@ import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_str
 
 void main() {
   group('AiRequestStrategy.decideWebSearchForWineCompletion', () {
+    test('desactive la recherche web si le nom du vin est absent', () {
+      const wine = WineAiResponse(
+        name: '   ',
+        vintage: 2022,
+        estimatedFields: ['producer'],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isFalse);
+      expect(decision.reason, 'Nom du vin absent.');
+    });
+
     test('active la recherche web pour des champs critiques avec identite suffisante', () {
       const wine = WineAiResponse(
         name: 'Chateau Test',
@@ -53,6 +67,23 @@ void main() {
           AiRequestStrategy.decideWebSearchForWineCompletion(wine);
 
       expect(decision.shouldUseWebSearch, isFalse);
+    });
+
+    test('active la recherche web si le producteur suffit a identifier le vin', () {
+      const wine = WineAiResponse(
+        name: 'Cuvee Test',
+        producer: 'Domaine Exemple',
+        estimatedFields: ['drinkFromYear'],
+      );
+
+      final decision =
+          AiRequestStrategy.decideWebSearchForWineCompletion(wine);
+
+      expect(decision.shouldUseWebSearch, isTrue);
+      expect(
+        decision.reason,
+        'Champs critiques à confirmer via sources web.',
+      );
     });
 
     test(
@@ -156,6 +187,50 @@ void main() {
     test('retourne newWine pour message explicite nouveau vin', () {
       final intent = AiRequestStrategy.detectAddWineMessageIntent(
         userMessage: 'Nouveau vin: Domaine X 2019',
+        currentWineData: const [
+          WineAiResponse(name: 'Premier vin', vintage: 2021),
+        ],
+      );
+
+      expect(intent, AddWineMessageIntent.newWine);
+    });
+
+    test('retourne unclear pour un message vide si un vin est deja en cours', () {
+      final intent = AiRequestStrategy.detectAddWineMessageIntent(
+        userMessage: '   ',
+        currentWineData: const [
+          WineAiResponse(name: 'Premier vin', vintage: 2021),
+        ],
+      );
+
+      expect(intent, AddWineMessageIntent.unclear);
+    });
+
+    test('normalise accents et apostrophes pour detecter un nouveau vin', () {
+      final intent = AiRequestStrategy.detectAddWineMessageIntent(
+        userMessage: 'J’ai achete un autre vin : Chablis 2020',
+        currentWineData: const [
+          WineAiResponse(name: 'Premier vin', vintage: 2021),
+        ],
+      );
+
+      expect(intent, AddWineMessageIntent.newWine);
+    });
+
+    test('priorise newWine quand des marqueurs new et refine coexistent', () {
+      final intent = AiRequestStrategy.detectAddWineMessageIntent(
+        userMessage: 'En fait je veux ajouter un autre vin, un Chablis 2021',
+        currentWineData: const [
+          WineAiResponse(name: 'Premier vin', vintage: 2021),
+        ],
+      );
+
+      expect(intent, AddWineMessageIntent.newWine);
+    });
+
+    test('retourne newWine pour millesime et identite implicite', () {
+      final intent = AiRequestStrategy.detectAddWineMessageIntent(
+        userMessage: 'Bordeaux 2019',
         currentWineData: const [
           WineAiResponse(name: 'Premier vin', vintage: 2021),
         ],

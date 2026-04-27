@@ -1,11 +1,13 @@
 import 'dart:convert';
 
+import 'package:csv/csv.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/database/app_database.dart';
 import 'package:wine_cellar/features/wine_cellar/data/repositories/wine_repository_impl.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/csv_column_mapping.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 
 void main() {
@@ -276,6 +278,213 @@ void main() {
       expect(wine.cellarId, isNull);
       expect(wine.cellarPositionX, isNull);
       expect(wine.cellarPositionY, isNull);
+
+      await db.close();
+    });
+
+    test('importe un tableau JSON racine en ignorant les entrées invalides',
+        () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      final jsonArray = jsonEncode([
+        {
+          'id': 1,
+          'name': 'Vin importé',
+          'color': 'white',
+          'quantity': 0,
+          'cellarId': 4,
+          'cellarPositionX': 2,
+          'cellarPositionY': 1,
+          'foodCategoryIds': [1, '2'],
+        },
+        {
+          'id': 2,
+          'color': 'red',
+        },
+      ]);
+
+      final importedCount = await repository.importFromJson(jsonArray);
+      expect(importedCount, 1);
+
+      final wines = await repository.getAllWines();
+      expect(wines, hasLength(1));
+      expect(wines.single.name, 'Vin importé');
+      expect(wines.single.color, WineColor.white);
+      expect(wines.single.quantity, 1);
+      expect(wines.single.cellarId, isNull);
+      expect(wines.single.cellarPositionX, isNull);
+      expect(wines.single.cellarPositionY, isNull);
+
+      await db.close();
+    });
+
+    test('rejette un import JSON dont la racine n est ni une liste ni un objet',
+        () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      await expectLater(
+        () => repository.importFromJson(jsonEncode('format-invalide')),
+        throwsA(isA<FormatException>()),
+      );
+
+      await db.close();
+    });
+  });
+
+  group('WineRepositoryImpl CSV import/export', () {
+    test('parseCsvRows respecte headerLine, ignore les lignes vides et parse les champs utiles',
+        () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      const mapping = CsvColumnMapping(
+        name: 1,
+        vintage: 2,
+        color: 3,
+        grapeVarieties: 4,
+        purchasePrice: 5,
+        quantity: 6,
+        location: 7,
+        notes: 8,
+      );
+
+      const csv = 'Export cave 2026;;;;;;;\n'
+          'Nom;Millésime;Couleur;Cépages;Prix;Quantité;Localisation;Notes\n'
+          'Chablis;2020;Blanc;Chardonnay / Aligoté;12,50;2;Salon;Prêt\n'
+          ';;;;;;;\n'
+          'Champagne;2018;Pétillant;Pinot Noir, Chardonnay;;0;;\n';
+
+      final rows = await repository.parseCsvRows(csv, mapping, headerLine: 2);
+
+      expect(rows, hasLength(2));
+      expect(rows.first.sourceRowNumber, 3);
+      expect(rows.first.name, 'Chablis');
+      expect(rows.first.vintage, 2020);
+      expect(rows.first.grapeVarieties, ['Chardonnay', 'Aligoté']);
+      expect(rows.first.purchasePrice, 12.5);
+      expect(rows.first.quantity, 2);
+      expect(rows.last.sourceRowNumber, 5);
+      expect(rows.last.color, 'Pétillant');
+      expect(rows.last.grapeVarieties, ['Pinot Noir', 'Chardonnay']);
+      expect(rows.last.quantity, 0);
+
+      await db.close();
+    });
+
+    test('importFromCsv applique override de localisation et normalise les valeurs',
+        () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      const mapping = CsvColumnMapping(
+        name: 1,
+        color: 2,
+        quantity: 3,
+        country: 4,
+        location: 5,
+        purchasePrice: 6,
+      );
+
+      const csv = 'Nom;Couleur;Quantité;Pays;Localisation;Prix achat\n'
+          'Liquoreux Test;Moelleux;0;;Cave 1;18,90\n'
+          'Rosé Test;Rosé;-2;Italie;Cave 2;\n'
+          ';Rouge;1;France;;10,00\n';
+
+      final importedCount = await repository.importFromCsv(
+        csv,
+        mapping,
+        headerLine: 1,
+        locationOverride: 'Réserve principale',
+      );
+
+      expect(importedCount, 2);
+
+      final wines = await repository.getAllWines();
+      expect(wines, hasLength(2));
+
+      final sweetWine = wines.firstWhere((wine) => wine.name == 'Liquoreux Test');
+      expect(sweetWine.color, WineColor.sweet);
+      expect(sweetWine.quantity, 1);
+      expect(sweetWine.country, 'France');
+      expect(sweetWine.location, 'Réserve principale');
+      expect(sweetWine.purchasePrice, 18.9);
+
+      final roseWine = wines.firstWhere((wine) => wine.name == 'Rosé Test');
+      expect(roseWine.color, WineColor.rose);
+      expect(roseWine.quantity, 1);
+      expect(roseWine.country, 'Italie');
+      expect(roseWine.location, 'Réserve principale');
+
+      await db.close();
+    });
+
+    test('exportToCsv sérialise les colonnes métier attendues', () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repository = WineRepositoryImpl(
+        db.wineDao,
+        db.foodCategoryDao,
+        db.virtualCellarDao,
+        db.bottlePlacementDao,
+      );
+
+      await repository.addWine(
+        const WineEntity(
+          name: 'Champagne Test',
+          color: WineColor.sparkling,
+          grapeVarieties: ['Pinot Noir', 'Chardonnay'],
+          quantity: 3,
+          purchasePrice: 24.5,
+          drinkFromYear: 2026,
+          drinkUntilYear: 2032,
+          location: 'Cave nord',
+          aiSuggestedFoodPairings: true,
+          aiSuggestedDrinkFromYear: true,
+          aiSuggestedDrinkUntilYear: false,
+        ),
+      );
+
+      final exported = await repository.exportToCsv();
+      final rows = const CsvToListConverter(
+        shouldParseNumbers: false,
+      ).convert(exported);
+
+      expect(rows, hasLength(2));
+      expect(rows.first[0], 'Nom');
+      expect(rows.first[5], 'Couleur');
+      expect(rows.first[17], 'IA: accords mets-vins');
+      expect(rows[1][0], 'Champagne Test');
+      expect(rows[1][5], 'Pétillant');
+      expect(rows[1][7], 'Pinot Noir, Chardonnay');
+      expect(rows[1][8], '3');
+      expect(rows[1][9], '24.50');
+      expect(rows[1][10], '2026');
+      expect(rows[1][11], '2032');
+      expect(rows[1][14], 'Cave nord');
+      expect(rows[1][17], 'true');
+      expect(rows[1][18], 'true');
+      expect(rows[1][19], 'false');
 
       await db.close();
     });

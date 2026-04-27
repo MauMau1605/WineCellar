@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:wine_cellar/core/enums.dart';
+import 'package:wine_cellar/core/errors/failures.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/developer/domain/entities/reevaluation_options.dart';
 import 'package:wine_cellar/features/developer/domain/usecases/reevaluate_batch_usecase.dart';
@@ -16,6 +17,10 @@ class _MockAiService extends Mock implements AiService {}
 
 AiChatResult _successResponse(Map<String, dynamic> json) => AiChatResult(
       textResponse: '<json>${jsonEncode(json)}</json>',
+    );
+
+AiChatResult _codeBlockResponse(Map<String, dynamic> json) => AiChatResult(
+      textResponse: '```json\n${jsonEncode(json)}\n```',
     );
 
 const _bordeaux = WineEntity(
@@ -67,6 +72,24 @@ void main() {
 
       expect(result.isRight(), isTrue);
       result.fold((_) {}, (changes) => expect(changes, isEmpty));
+      verifyNever(() => aiService.analyzeWine(userMessage: any(named: 'userMessage')));
+    });
+
+    test('retourne une validation failure si aucune reevaluation n est selectionnee', () async {
+      final result = await useCase(
+        ReevaluateBatchParams(
+          wines: const [_bordeaux],
+          options: const ReevaluationOptions(types: {}),
+          aiService: aiService,
+          foodCategories: _foodCategories,
+        ),
+      );
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) => expect(failure, isA<ValidationFailure>()),
+        (_) => fail('Une ValidationFailure etait attendue.'),
+      );
       verifyNever(() => aiService.analyzeWine(userMessage: any(named: 'userMessage')));
     });
 
@@ -178,6 +201,42 @@ void main() {
       });
     });
 
+    test('inclut les accords mets-vins actuels dans le prompt de reevaluation', () async {
+      final wine = _bordeaux.copyWith(foodCategoryIds: [1, 7]);
+      late String capturedUserMessage;
+
+      when(
+        () => aiService.analyzeWine(
+          userMessage: any(named: 'userMessage'),
+          conversationHistory: any(named: 'conversationHistory'),
+        ),
+      ).thenAnswer((invocation) async {
+        capturedUserMessage =
+            invocation.namedArguments[#userMessage]! as String;
+        return _successResponse({
+          'results': [
+            {'wineId': 1, 'unchanged': true},
+          ],
+        });
+      });
+
+      final result = await useCase(
+        ReevaluateBatchParams(
+          wines: [wine],
+          options: const ReevaluationOptions(
+            types: {ReevaluationType.foodPairings},
+          ),
+          aiService: aiService,
+          foodCategories: _foodCategories,
+        ),
+      );
+
+      expect(result.isRight(), isTrue);
+      expect(capturedUserMessage, contains('currentFoodPairings'));
+      expect(capturedUserMessage, contains('Viande rouge'));
+      expect(capturedUserMessage, contains('Fromage'));
+    });
+
     test('utilise le service web search en priorité si fourni', () async {
       final webService = _MockAiService();
       when(
@@ -245,6 +304,33 @@ void main() {
       });
     });
 
+    test('retourne une AiFailure si le service IA leve une exception', () async {
+      when(
+        () => aiService.analyzeWine(
+          userMessage: any(named: 'userMessage'),
+          conversationHistory: any(named: 'conversationHistory'),
+        ),
+      ).thenThrow(Exception('boom'));
+
+      final result = await useCase(
+        ReevaluateBatchParams(
+          wines: const [_bordeaux],
+          options: ReevaluationOptions.all,
+          aiService: aiService,
+          foodCategories: _foodCategories,
+        ),
+      );
+
+      expect(result.isLeft(), isTrue);
+      result.fold(
+        (failure) {
+          expect(failure, isA<AiFailure>());
+          expect(failure.message, 'Erreur lors de la réévaluation du lot.');
+        },
+        (_) => fail('Une AiFailure etait attendue.'),
+      );
+    });
+
     test('gère gracieusement une réponse JSON non parsable', () async {
       when(
         () => aiService.analyzeWine(
@@ -268,6 +354,73 @@ void main() {
 
       result.fold((_) {}, (changes) {
         expect(changes.single.hasError, isTrue);
+      });
+    });
+
+    test('parse une reponse JSON dans un bloc de code et convertit les entiers stringifies', () async {
+      when(
+        () => aiService.analyzeWine(
+          userMessage: any(named: 'userMessage'),
+          conversationHistory: any(named: 'conversationHistory'),
+        ),
+      ).thenAnswer(
+        (_) async => _codeBlockResponse({
+          'results': [
+            {
+              'wineId': '1',
+              'drinkFromYear': '2031',
+              'drinkUntilYear': '2044',
+              'unchanged': false,
+            },
+          ],
+        }),
+      );
+
+      final result = await useCase(
+        ReevaluateBatchParams(
+          wines: const [_bordeaux],
+          options: const ReevaluationOptions(
+            types: {ReevaluationType.drinkingWindow},
+          ),
+          aiService: aiService,
+          foodCategories: _foodCategories,
+        ),
+      );
+
+      result.fold((_) {}, (changes) {
+        expect(changes.single.newDrinkFromYear, 2031);
+        expect(changes.single.newDrinkUntilYear, 2044);
+      });
+    });
+
+    test('marque tous les vins en erreur si la reponse JSON ne contient pas results', () async {
+      when(
+        () => aiService.analyzeWine(
+          userMessage: any(named: 'userMessage'),
+          conversationHistory: any(named: 'conversationHistory'),
+        ),
+      ).thenAnswer(
+        (_) async => _successResponse({'status': 'ok'}),
+      );
+
+      final result = await useCase(
+        ReevaluateBatchParams(
+          wines: const [_bordeaux, _chablis],
+          options: ReevaluationOptions.all,
+          aiService: aiService,
+          foodCategories: _foodCategories,
+        ),
+      );
+
+      result.fold((_) {}, (changes) {
+        expect(changes, hasLength(2));
+        expect(changes.every((change) => change.hasError), isTrue);
+        expect(
+          changes.every(
+            (change) => change.errorMessage == 'Format de réponse inattendu',
+          ),
+          isTrue,
+        );
       });
     });
 
