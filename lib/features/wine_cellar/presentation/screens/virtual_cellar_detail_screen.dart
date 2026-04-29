@@ -15,6 +15,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/place_wine_in_cellar.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/helpers/virtual_cellar_detail_helper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/bottle_move_state_provider.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_screen_background.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/premium_cave_wrapper.dart';
@@ -87,11 +88,8 @@ class _VirtualCellarDetailScreenState
   }
 
   void _applyImmersiveTheme(VirtualCellarTheme theme) {
-    if (CellarThemeData.overridesAppTheme(theme)) {
-      ref.read(immersiveCellarThemeProvider.notifier).state = theme;
-    } else {
-      ref.read(immersiveCellarThemeProvider.notifier).state = null;
-    }
+    ref.read(immersiveCellarThemeProvider.notifier).state =
+        VirtualCellarDetailHelper.immersiveThemeFor(theme);
   }
 
   Future<void> _startPreSelectedPlacement(int wineId) async {
@@ -114,7 +112,9 @@ class _VirtualCellarDetailScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Toutes les bouteilles de ${wine.displayName} sont déjà placées.',
+              VirtualCellarDetailHelper.preselectedAlreadyPlacedMessage(
+                wine.displayName,
+              ),
             ),
           ),
         );
@@ -126,19 +126,22 @@ class _VirtualCellarDetailScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Placer ${wine.displayName}'),
+        title: Text(
+          VirtualCellarDetailHelper.preselectedPlacementTitle(
+            wine.displayName,
+          ),
+        ),
         content: Text(
-          '$unplaced bouteille(s) à placer.\n'
-          'Tapez sur les emplacements libres pour positionner chaque bouteille.',
+          VirtualCellarDetailHelper.preselectedPlacementContent(unplaced),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: const Text(VirtualCellarDetailHelper.preselectedCancelLabel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Commencer'),
+            child: const Text(VirtualCellarDetailHelper.preselectedStartLabel),
           ),
         ],
       ),
@@ -189,7 +192,9 @@ class _VirtualCellarDetailScreenState
     if (anchor == null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bouteille d ancrage introuvable.')),
+          const SnackBar(
+            content: Text(VirtualCellarDetailHelper.missingAnchorSnackBar),
+          ),
         );
       }
       return;
@@ -361,20 +366,25 @@ class _VirtualCellarDetailScreenState
         title: Text(cellar.name),
         actions: [
           PopupMenuButton<VirtualCellarTheme>(
-            tooltip: 'Changer la representation',
+            tooltip: VirtualCellarDetailHelper.changeRepresentationTooltip,
             icon: Icon(iconForVirtualCellarTheme(cellar.theme)),
             onSelected: _updateCellarTheme,
             itemBuilder: (context) {
-              return VirtualCellarTheme.values
-                  .map((theme) {
+              return VirtualCellarDetailHelper.buildThemeMenuOptions(
+                    cellar.theme,
+                  )
+                  .map((option) {
                     return PopupMenuItem<VirtualCellarTheme>(
-                      value: theme,
+                      value: option.theme,
                       child: Row(
                         children: [
-                          Icon(iconForVirtualCellarTheme(theme), size: 18),
+                          Icon(
+                            iconForVirtualCellarTheme(option.theme),
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(theme.label)),
-                          if (theme == cellar.theme)
+                          Expanded(child: Text(option.label)),
+                          if (option.selected)
                             Icon(
                               Icons.check,
                               size: 18,
@@ -392,22 +402,19 @@ class _VirtualCellarDetailScreenState
               final moveState = ref.watch(
                 bottleMoveStateProvider(widget.cellarId),
               );
+              final controls = VirtualCellarDetailHelper.movementControlsFor(
+                moveState,
+              );
               final notifier = ref.read(
                 bottleMoveStateProvider(widget.cellarId).notifier,
               );
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (moveState.isMovementMode && moveState.hasSelection)
+                  if (controls.showSelectionToggle)
                     IconButton(
-                      icon: Icon(
-                        moveState.isDragModeEnabled
-                            ? Icons.playlist_add_check_circle_outlined
-                            : Icons.open_with,
-                      ),
-                      tooltip: moveState.isDragModeEnabled
-                          ? 'Revenir au mode sélection'
-                          : 'Passer au mode déplacement',
+                      icon: Icon(controls.selectionToggleIcon),
+                      tooltip: controls.selectionToggleTooltip,
                       onPressed: () {
                         if (moveState.isDragModeEnabled) {
                           notifier.enableSelectionMode();
@@ -417,14 +424,8 @@ class _VirtualCellarDetailScreenState
                       },
                     ),
                   IconButton(
-                    icon: Icon(
-                      moveState.isMovementMode
-                          ? Icons.cancel
-                          : Icons.pan_tool_outlined,
-                    ),
-                    tooltip: moveState.isMovementMode
-                        ? 'Annuler le mode déplacement'
-                        : 'Activer le mode déplacement',
+                    icon: Icon(controls.modeIcon),
+                    tooltip: controls.modeTooltip,
                     onPressed: () {
                       notifier.toggleMovementMode();
                     },
@@ -435,18 +436,21 @@ class _VirtualCellarDetailScreenState
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Modifier le cellier',
+            tooltip: VirtualCellarDetailHelper.editCellarTooltip,
             onPressed: () => _showEditDialog(context, cellar),
           ),
         ],
       ),
       body: Stack(
         children: [
-          if (cellar.theme == VirtualCellarTheme.premiumCave)
+          if (VirtualCellarDetailHelper.backgroundKindFor(cellar.theme) ==
+              VirtualCellarBackgroundKind.premium)
             const PremiumCaveScreenBackground(),
-          if (cellar.theme == VirtualCellarTheme.stoneCave)
+          if (VirtualCellarDetailHelper.backgroundKindFor(cellar.theme) ==
+              VirtualCellarBackgroundKind.stone)
             const StoneCaveScreenBackground(),
-          if (cellar.theme == VirtualCellarTheme.garageIndustrial)
+          if (VirtualCellarDetailHelper.backgroundKindFor(cellar.theme) ==
+              VirtualCellarBackgroundKind.garage)
             const GarageIndustrialScreenBackground(),
           StreamBuilder<List<BottlePlacementEntity>>(
         stream: ref
@@ -504,8 +508,10 @@ class _VirtualCellarDetailScreenState
   }
 
   bool _matchesMaturityFilter(BottlePlacementEntity placement) {
-    if (_maturityFilters.isEmpty) return true;
-    return _maturityFilters.contains(placement.wine.maturity);
+    return VirtualCellarDetailHelper.matchesMaturityFilter(
+      _maturityFilters,
+      placement.wine.maturity,
+    );
   }
 
   Widget _buildMaturityFilterBar(
@@ -521,7 +527,7 @@ class _VirtualCellarDetailScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Filtrer par fenêtre de dégustation',
+              VirtualCellarDetailHelper.maturityFilterTitle,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 6),
@@ -536,25 +542,34 @@ class _VirtualCellarDetailScreenState
                       selected: selected,
                       onSelected: (value) {
                         setState(() {
-                          if (value) {
-                            _maturityFilters.add(maturity);
-                          } else {
-                            _maturityFilters.remove(maturity);
-                          }
+                          _maturityFilters
+                            ..clear()
+                            ..addAll(
+                              VirtualCellarDetailHelper.updateMaturityFilters(
+                                _maturityFilters,
+                                maturity,
+                                value,
+                              ),
+                            );
                         });
                       },
                     );
                   })
                   .toList(growable: false),
             ),
-            if (_maturityFilters.isNotEmpty)
+            if (VirtualCellarDetailHelper.shouldShowMaturitySummary(
+              _maturityFilters,
+            ))
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        '$visibleCount / $totalCount bouteille(s) affichée(s)',
+                        VirtualCellarDetailHelper.maturitySummaryText(
+                          visibleCount,
+                          totalCount,
+                        ),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -563,7 +578,9 @@ class _VirtualCellarDetailScreenState
                         setState(() => _maturityFilters.clear());
                       },
                       icon: const Icon(Icons.filter_alt_off_outlined, size: 16),
-                      label: const Text('Réinitialiser'),
+                      label: const Text(
+                        VirtualCellarDetailHelper.resetFiltersLabel,
+                      ),
                     ),
                   ],
                 ),
@@ -583,7 +600,9 @@ class _VirtualCellarDetailScreenState
   ) async {
     if (cellar.isCellEmpty(oneBasedRow: row + 1, oneBasedCol: col + 1)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zone vide: emplacement inutilisable.')),
+        const SnackBar(
+          content: Text(VirtualCellarDetailHelper.emptyZoneSnackBar),
+        ),
       );
       return;
     }
@@ -594,9 +613,11 @@ class _VirtualCellarDetailScreenState
 
     if (_pendingPlacement != null) {
       if (placementAtSlot != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Emplacement occupé.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(VirtualCellarDetailHelper.occupiedSlotSnackBar),
+          ),
+        );
         return;
       }
       await _placePendingBottleAt(context, row, col);
@@ -702,26 +723,28 @@ class _VirtualCellarDetailScreenState
       }),
     );
 
-    final availableCountByWineId = <int, int>{};
-    final availableWines = <WineEntity>[];
-    for (final pair in countPairs) {
-      final wine = pair.$1;
-      final placedCount = pair.$2;
-      final id = wine.id;
-      if (id == null) continue;
-      final unplaced = wine.quantity - placedCount;
-      if (unplaced > 0) {
-        availableCountByWineId[id] = unplaced;
-        availableWines.add(wine);
-      }
-    }
-
-    availableWines.sort((a, b) => a.displayName.compareTo(b.displayName));
+    final placedCountsByWineId = <int, int>{
+      for (final pair in countPairs)
+        if (pair.$1.id != null) pair.$1.id!: pair.$2,
+    };
+    final availableChoices =
+        VirtualCellarDetailHelper.buildAvailableWineChoices(
+      allWines,
+      placedCountsByWineId,
+    );
+    final availableCountByWineId = <int, int>{
+      for (final choice in availableChoices) choice.wine.id!: choice.unplacedCount,
+    };
+    final availableWines = availableChoices
+        .map((choice) => choice.wine)
+        .toList(growable: false);
 
     if (!context.mounted) return;
     if (availableWines.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune bouteille disponible à placer.')),
+        const SnackBar(
+          content: Text(VirtualCellarDetailHelper.noBottleAvailableSnackBar),
+        ),
       );
       return;
     }
@@ -737,7 +760,8 @@ class _VirtualCellarDetailScreenState
     if (chosen == null || chosen.id == null || !context.mounted) return;
 
     final maxCount = availableCountByWineId[chosen.id!] ?? 1;
-    final selectedCount = maxCount > 1
+    final selectedCount =
+      VirtualCellarDetailHelper.shouldAskHowManyBottles(maxCount)
         ? await _askHowManyBottlesToPlace(context, chosen, maxCount)
         : 1;
 
@@ -763,7 +787,9 @@ class _VirtualCellarDetailScreenState
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Combien placer pour ${wine.displayName} ?'),
+          title: Text(
+            VirtualCellarDetailHelper.askBottleCountTitle(wine.displayName),
+          ),
           content: Row(
             children: [
               IconButton(
@@ -795,7 +821,7 @@ class _VirtualCellarDetailScreenState
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(count),
-              child: const Text('Placer'),
+              child: const Text(VirtualCellarDetailHelper.placeBottleLabel),
             ),
           ],
         ),
@@ -818,7 +844,11 @@ class _VirtualCellarDetailScreenState
     if (occupied.contains((startRow, startCol))) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Emplacement occupé.')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(VirtualCellarDetailHelper.occupiedSlotSnackBar),
+        ),
+      );
       return;
     }
 
@@ -861,7 +891,9 @@ class _VirtualCellarDetailScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$remaining bouteille(s) restante(s). Choisissez les emplacements manuellement.',
+            VirtualCellarDetailHelper.remainingManualPlacementMessage(
+              remaining,
+            ),
           ),
         ),
       );
@@ -892,19 +924,22 @@ class _VirtualCellarDetailScreenState
         final goBack = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Placement terminé !'),
+            title: const Text(VirtualCellarDetailHelper.placementCompleteTitle),
             content: Text(
-              'Toutes les bouteilles de ${pending.wine.displayName} ont été placées.\n'
-              'Souhaitez-vous retourner aux détails du vin ?',
+              VirtualCellarDetailHelper.placementCompletedDialogContent(
+                pending.wine.displayName,
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Rester'),
+                child: const Text(VirtualCellarDetailHelper.stayLabel),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Retourner aux détails'),
+                child: const Text(
+                  VirtualCellarDetailHelper.returnToDetailsLabel,
+                ),
               ),
             ],
           ),
@@ -915,7 +950,11 @@ class _VirtualCellarDetailScreenState
       } else {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Placement terminé.')));
+        ).showSnackBar(
+          const SnackBar(
+            content: Text(VirtualCellarDetailHelper.placementFinishedSnackBar),
+          ),
+        );
       }
       return;
     }
@@ -925,19 +964,20 @@ class _VirtualCellarDetailScreenState
       final continuePlace = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Bouteille placée !'),
+          title: const Text(VirtualCellarDetailHelper.bottlePlacedTitle),
           content: Text(
-            '$left bouteille(s) restante(s).\n'
-            'Souhaitez-vous placer la suivante ?',
+            VirtualCellarDetailHelper.continuePlacementDialogContent(left),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Arrêter'),
+              child: const Text(VirtualCellarDetailHelper.stopPlacementLabel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Placer la suivante'),
+              child: const Text(
+                VirtualCellarDetailHelper.placeNextBottleLabel,
+              ),
             ),
           ],
         ),
