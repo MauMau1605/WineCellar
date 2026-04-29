@@ -24,6 +24,10 @@ Cette feature est aujourd'hui concentrée dans la couche `presentation/` :
 - `settings_screen.dart`
 - `ai_settings_screen.dart`
 - `display_settings_screen.dart`
+- `presentation/helpers/ai_settings_form_helper.dart` pour la normalisation et le chargement initial du formulaire IA
+- `presentation/helpers/ai_settings_provider_config_helper.dart` pour les libellés, hints et règles d'affichage par fournisseur IA
+- `presentation/helpers/settings_overview_helper.dart` pour les sous-titres et règles d'affichage du hub de réglages
+- `presentation/helpers/display_settings_options_helper.dart` pour les options de layout, de thème visuel et d'alertes de consommation
 
 La logique d'état et la persistance associées vivent majoritairement dans `lib/core/providers.dart`.
 

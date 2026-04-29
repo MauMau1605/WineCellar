@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/features/settings/presentation/helpers/settings_overview_helper.dart';
 
 /// Main settings screen — clean hub navigating to sub-screens.
 class SettingsScreen extends ConsumerWidget {
@@ -38,7 +39,10 @@ class SettingsScreen extends ConsumerWidget {
             icon: Icons.palette_outlined,
             iconColor: Colors.deepPurple,
             title: 'Affichage',
-            subtitle: _displaySubtitle(currentLayout, currentTheme),
+            subtitle: SettingsOverviewHelper.displaySubtitle(
+              currentLayout,
+              currentTheme,
+            ),
             onTap: () => context.push('/settings/display'),
           ),
           const Divider(height: 0, indent: 72),
@@ -60,17 +64,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  String _displaySubtitle(
-    WineListLayout layout,
-    dynamic currentTheme,
-  ) {
-    final parts = <String>[];
-    parts.add(layout.label);
-    if (currentTheme != null) {
-      parts.add('Thème : ${currentTheme.label}');
-    }
-    return parts.join(' · ');
-  }
 }
 
 class _SettingsTile extends StatelessWidget {
@@ -141,9 +134,7 @@ class _DeveloperSection extends ConsumerWidget {
           ),
           title: Text('Mode développeur', style: theme.textTheme.titleSmall),
           subtitle: Text(
-            devMode
-                ? 'Activé — outils avancés disponibles'
-                : 'Désactivé',
+            SettingsOverviewHelper.developerModeSubtitle(devMode),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
@@ -152,7 +143,7 @@ class _DeveloperSection extends ConsumerWidget {
           onChanged: (v) =>
               ref.read(developerModeProvider.notifier).setValue(v),
         ),
-        if (devMode) ...[
+        if (SettingsOverviewHelper.shouldShowDeveloperTools(devMode)) ...[
           Padding(
             padding: const EdgeInsets.only(left: 72, right: 20, bottom: 8),
             child: OutlinedButton.icon(

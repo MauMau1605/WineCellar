@@ -5,6 +5,8 @@ import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/usecases/usecase.dart';
+import 'package:wine_cellar/features/settings/presentation/helpers/ai_settings_form_helper.dart';
+import 'package:wine_cellar/features/settings/presentation/helpers/ai_settings_provider_config_helper.dart';
 
 /// Sub-screen for AI provider configuration.
 class AiSettingsScreen extends ConsumerStatefulWidget {
@@ -39,31 +41,28 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
 
-    final apiKey = ref.read(openAiApiKeyProvider);
-    final geminiApiKey = ref.read(geminiApiKeyProvider);
-    final mistralApiKey = ref.read(mistralApiKeyProvider);
-    final ollamaUrl = ref.read(ollamaUrlProvider);
-    final model = ref.read(selectedModelProvider);
-    final visionProviderName = ref.read(visionProviderOverrideProvider);
-    final visionModel = ref.read(visionModelOverrideProvider);
-    final visionApiKey = ref.read(visionApiKeyOverrideProvider);
-    final geminiFallbackKey = ref.read(geminiFallbackApiKeyProvider);
-
-    final parsedVisionProvider = AiProvider.values.where(
-      (provider) => provider.name == visionProviderName,
+    final formState = AiSettingsFormHelper.buildInitialState(
+      openAiApiKey: ref.read(openAiApiKeyProvider),
+      geminiApiKey: ref.read(geminiApiKeyProvider),
+      mistralApiKey: ref.read(mistralApiKeyProvider),
+      ollamaUrl: ref.read(ollamaUrlProvider),
+      model: ref.read(selectedModelProvider),
+      visionProviderName: ref.read(visionProviderOverrideProvider),
+      visionModel: ref.read(visionModelOverrideProvider),
+      visionApiKey: ref.read(visionApiKeyOverrideProvider),
+      geminiFallbackKey: ref.read(geminiFallbackApiKeyProvider),
     );
 
     setState(() {
-      _apiKeyController.text = apiKey ?? '';
-      _geminiApiKeyController.text = geminiApiKey ?? '';
-      _mistralApiKeyController.text = mistralApiKey ?? '';
-      _ollamaUrlController.text = ollamaUrl ?? AppConstants.defaultOllamaUrl;
-      _modelController.text = model ?? '';
-      _visionProviderOverride =
-          parsedVisionProvider.isEmpty ? null : parsedVisionProvider.first;
-      _visionModelController.text = visionModel ?? '';
-      _visionApiKeyController.text = visionApiKey ?? '';
-      _geminiFallbackKeyController.text = geminiFallbackKey ?? '';
+      _apiKeyController.text = formState.openAiApiKey;
+      _geminiApiKeyController.text = formState.geminiApiKey;
+      _mistralApiKeyController.text = formState.mistralApiKey;
+      _ollamaUrlController.text = formState.ollamaUrl;
+      _modelController.text = formState.model;
+      _visionProviderOverride = formState.visionProviderOverride;
+      _visionModelController.text = formState.visionModel;
+      _visionApiKeyController.text = formState.visionApiKey;
+      _geminiFallbackKeyController.text = formState.geminiFallbackKey;
     });
   }
 
@@ -368,17 +367,12 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     AsyncValue<String?> visionModel,
     ThemeData theme,
   ) {
-    final configTitle = switch (currentProvider) {
-      AiProvider.openai => 'Configuration OpenAI',
-      AiProvider.gemini => 'Configuration Google Gemini',
-      AiProvider.mistral => 'Configuration Mistral AI',
-      AiProvider.ollama => 'Configuration Ollama',
-    };
+    final config = AiSettingsProviderConfigHelper.build(currentProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(icon: Icons.settings, title: configTitle),
+        _SectionHeader(icon: Icons.settings, title: config.title),
         const SizedBox(height: 8),
         Card(
           child: Padding(
@@ -386,66 +380,73 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (currentProvider == AiProvider.openai) ...[
+                if (config.usesApiKeyField && currentProvider == AiProvider.openai) ...[
                   _buildApiKeyField(
                     controller: _apiKeyController,
-                    label: 'Clé API OpenAI',
-                    hint: 'sk-...',
+                    label: config.apiKeyLabel!,
+                    hint: config.apiKeyHint!,
                   ),
                   const SizedBox(height: 12),
                   _buildModelField(
-                    hint: 'gpt-4o-mini',
-                    helper: 'Recommandé : gpt-4o-mini (pas cher et efficace)',
+                    hint: config.modelHint,
+                    helper: config.modelHelper,
                   ),
-                  if (visionModel.hasValue && visionModel.value != null) ...[
+                  if (config.showsVisionModelChip &&
+                      visionModel.hasValue &&
+                      visionModel.value != null) ...[
                     const SizedBox(height: 12),
                     _VisionModelChip(modelName: visionModel.value!),
                   ],
                 ],
-                if (currentProvider == AiProvider.gemini) ...[
+                if (config.usesApiKeyField && currentProvider == AiProvider.gemini) ...[
                   _buildApiKeyField(
                     controller: _geminiApiKeyController,
-                    label: 'Clé API Gemini',
-                    hint: 'AIza...',
+                    label: config.apiKeyLabel!,
+                    hint: config.apiKeyHint!,
                   ),
                   const SizedBox(height: 12),
                   _buildModelField(
-                    hint: 'gemini-2.5-flash-lite',
-                    helper: 'Recommandé : gemini-2.5-flash-lite',
+                    hint: config.modelHint,
+                    helper: config.modelHelper,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Obtenez votre clé gratuite sur aistudio.google.com',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
+                  if (config.providerInfoText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      config.providerInfoText!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-                if (currentProvider == AiProvider.mistral) ...[
+                if (config.usesApiKeyField && currentProvider == AiProvider.mistral) ...[
                   _buildApiKeyField(
                     controller: _mistralApiKeyController,
-                    label: 'Clé API Mistral',
-                    hint: '',
+                    label: config.apiKeyLabel!,
+                    hint: config.apiKeyHint!,
                   ),
                   const SizedBox(height: 12),
                   _buildModelField(
-                    hint: 'mistral-small-latest',
-                    helper:
-                        'Recommandé : mistral-small-latest (bon rapport qualité/prix)',
+                    hint: config.modelHint,
+                    helper: config.modelHelper,
                   ),
-                  if (visionModel.hasValue && visionModel.value != null) ...[
+                  if (config.showsVisionModelChip &&
+                      visionModel.hasValue &&
+                      visionModel.value != null) ...[
                     const SizedBox(height: 8),
                     _VisionModelChip(modelName: visionModel.value!),
                   ],
-                  const SizedBox(height: 8),
-                  Text(
-                    'Obtenez votre clé sur console.mistral.ai',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
+                  if (config.providerInfoText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      config.providerInfoText!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-                if (currentProvider == AiProvider.ollama) ...[
+                if (config.usesOllamaUrlField && currentProvider == AiProvider.ollama) ...[
                   TextField(
                     controller: _ollamaUrlController,
                     decoration: const InputDecoration(
@@ -457,8 +458,8 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                   ),
                   const SizedBox(height: 12),
                   _buildModelField(
-                    hint: 'llama3',
-                    helper: 'Recommandé : llama3 ou mistral',
+                    hint: config.modelHint,
+                    helper: config.modelHelper,
                   ),
                 ],
               ],
@@ -505,72 +506,47 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
 
   Future<void> _saveSettings() async {
     final currentProvider = ref.read(aiProviderSettingProvider);
+    final saveData = AiSettingsFormHelper.buildSaveData(
+      currentProvider: currentProvider,
+      openAiApiKey: _apiKeyController.text,
+      geminiApiKey: _geminiApiKeyController.text,
+      mistralApiKey: _mistralApiKeyController.text,
+      ollamaUrl: _ollamaUrlController.text,
+      model: _modelController.text,
+      visionProviderOverride: _visionProviderOverride,
+      visionModel: _visionModelController.text,
+      visionApiKey: _visionApiKeyController.text,
+      geminiFallbackKey: _geminiFallbackKeyController.text,
+    );
 
     await ref
         .read(openAiApiKeyProvider.notifier)
-        .setValue(
-          _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        );
+        .setValue(saveData.openAiApiKey);
     await ref
         .read(geminiApiKeyProvider.notifier)
-        .setValue(
-          _geminiApiKeyController.text.isNotEmpty
-              ? _geminiApiKeyController.text
-              : null,
-        );
+        .setValue(saveData.geminiApiKey);
     await ref
         .read(mistralApiKeyProvider.notifier)
-        .setValue(
-          _mistralApiKeyController.text.isNotEmpty
-              ? _mistralApiKeyController.text
-              : null,
-        );
+        .setValue(saveData.mistralApiKey);
     await ref
         .read(ollamaUrlProvider.notifier)
-        .setValue(
-          _ollamaUrlController.text.isNotEmpty
-              ? _ollamaUrlController.text
-              : null,
-        );
-
-    final defaultModel = switch (currentProvider) {
-      AiProvider.openai => AppConstants.defaultOpenAiModel,
-      AiProvider.gemini => AppConstants.defaultGeminiModel,
-      AiProvider.mistral => AppConstants.defaultMistralModel,
-      AiProvider.ollama => AppConstants.defaultOllamaModel,
-    };
+        .setValue(saveData.ollamaUrl);
     await ref
         .read(selectedModelProvider.notifier)
-        .setValue(
-          _modelController.text.isNotEmpty
-              ? _modelController.text
-              : defaultModel,
-        );
+        .setValue(saveData.selectedModel);
 
     await ref
         .read(visionProviderOverrideProvider.notifier)
-        .setValue(_visionProviderOverride?.name);
+        .setValue(saveData.visionProviderOverrideName);
     await ref
         .read(visionModelOverrideProvider.notifier)
-        .setValue(
-          _visionModelController.text.isNotEmpty
-              ? _visionModelController.text
-              : null,
-        );
+        .setValue(saveData.visionModel);
     await ref
         .read(visionApiKeyOverrideProvider.notifier)
-        .setValue(
-          _visionApiKeyController.text.isNotEmpty
-              ? _visionApiKeyController.text
-              : null,
-        );
+        .setValue(saveData.visionApiKey);
     await ref
         .read(geminiFallbackApiKeyProvider.notifier)
-        .setValue(
-          _geminiFallbackKeyController.text.isNotEmpty
-              ? _geminiFallbackKeyController.text
-              : null,
-        );
+        .setValue(saveData.geminiFallbackKey);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

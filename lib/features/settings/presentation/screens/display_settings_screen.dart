@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/features/settings/presentation/helpers/display_settings_options_helper.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
@@ -16,9 +17,11 @@ class DisplaySettingsScreen extends ConsumerWidget {
     final currentLayout = ref.watch(wineListLayoutProvider);
     final currentTheme = ref.watch(appVisualThemeProvider);
     final highlightLastConsumptionYear =
-      ref.watch(highlightLastConsumptionYearProvider);
+        ref.watch(highlightLastConsumptionYearProvider);
     final highlightPastOptimalConsumption =
-      ref.watch(highlightPastOptimalConsumptionProvider);
+        ref.watch(highlightPastOptimalConsumptionProvider);
+    final layoutOptions = DisplaySettingsOptionsHelper.layoutOptions();
+    final themeOptions = DisplaySettingsOptionsHelper.themeOptions();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Affichage')),
@@ -32,7 +35,7 @@ class DisplaySettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Choisissez comment afficher votre liste de vins.',
+            DisplaySettingsOptionsHelper.layoutSectionDescription,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -48,12 +51,12 @@ class DisplaySettingsScreen extends ConsumerWidget {
               }
             },
             child: Column(
-              children: WineListLayout.values.map(
+              children: layoutOptions.map(
                 (layout) => Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   clipBehavior: Clip.antiAlias,
                   child: RadioListTile<WineListLayout>(
-                    value: layout,
+                    value: layout.value,
                     secondary: Icon(layout.icon),
                     title: Text(layout.label),
                     subtitle: Text(layout.description),
@@ -71,8 +74,7 @@ class DisplaySettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Le thème choisi s\'applique à l\'ensemble de l\'interface. '
-            'Les celliers thémés l\'activent automatiquement pendant la consultation.',
+            DisplaySettingsOptionsHelper.themeSectionDescription,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -87,27 +89,16 @@ class DisplaySettingsScreen extends ConsumerWidget {
                   ref.read(appVisualThemeProvider.notifier).setTheme(value);
                 },
                 child: Column(
-                  children: [
-                    RadioListTile<VirtualCellarTheme?>(
-                      title: const Text('Classique'),
-                      subtitle:
-                          const Text('Thème clair vin & crème par défaut'),
-                      secondary: const Icon(Icons.wb_sunny_outlined),
-                      value: null,
-                    ),
-                    ...VirtualCellarTheme.values
-                        .where((t) => t != VirtualCellarTheme.classic)
-                        .map(
-                          (t) => RadioListTile<VirtualCellarTheme?>(
-                            title: Text(t.label),
-                            subtitle:
-                                Text(descriptionForVirtualCellarTheme(t)),
-                            secondary:
-                                Icon(iconForVirtualCellarTheme(t)),
-                            value: t,
-                          ),
+                  children: themeOptions
+                      .map(
+                        (option) => RadioListTile<VirtualCellarTheme?>(
+                          title: Text(option.label),
+                          subtitle: Text(option.description),
+                          secondary: Icon(option.icon),
+                          value: option.value,
                         ),
-                  ],
+                      )
+                      .toList(growable: false),
                 ),
               ),
             ),
@@ -121,8 +112,7 @@ class DisplaySettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Mettez en surbrillance les bouteilles proches ou au-dela de leur '
-            'fenetre theorique de consommation dans la liste et la cave virtuelle.',
+            DisplaySettingsOptionsHelper.consumptionAlertsSectionDescription,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -132,8 +122,13 @@ class DisplaySettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 SwitchListTile(
-                  title: const Text('Derniere annee de consommation'),
-                  subtitle: const Text('Indique "A boire cette annee"'),
+                  title: const Text(
+                    DisplaySettingsOptionsHelper.lastConsumptionYearAlert.title,
+                  ),
+                  subtitle: const Text(
+                    DisplaySettingsOptionsHelper
+                        .lastConsumptionYearAlert.subtitle,
+                  ),
                   value: highlightLastConsumptionYear,
                   onChanged: (value) {
                     ref
@@ -143,8 +138,14 @@ class DisplaySettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 0),
                 SwitchListTile(
-                  title: const Text('Fenetre optimale depassee'),
-                  subtitle: const Text('Indique "Fenetre depassee"'),
+                  title: const Text(
+                    DisplaySettingsOptionsHelper
+                        .pastOptimalConsumptionAlert.title,
+                  ),
+                  subtitle: const Text(
+                    DisplaySettingsOptionsHelper
+                        .pastOptimalConsumptionAlert.subtitle,
+                  ),
                   value: highlightPastOptimalConsumption,
                   onChanged: (value) {
                     ref

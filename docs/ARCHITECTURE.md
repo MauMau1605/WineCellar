@@ -52,7 +52,7 @@ Ces fichiers doivent être considérés comme prioritaires quand une documentati
 | La feature métier principale | [features/wine_cellar.md](features/wine_cellar.md) | [diagrams/class-diagram-wine-cellar.md](diagrams/class-diagram-wine-cellar.md) |
 | L'assistant IA | [features/ai_assistant.md](features/ai_assistant.md) | [diagrams/class-diagram-ai-assistant.md](diagrams/class-diagram-ai-assistant.md) |
 | Les statistiques | [features/statistics.md](features/statistics.md) | `lib/features/statistics/presentation/providers/statistics_providers.dart` |
-| Les réglages | [features/settings.md](features/settings.md) | `lib/features/settings/presentation/screens/` |
+| Les réglages | [features/settings.md](features/settings.md) | `lib/features/settings/presentation/` |
 | Les outils développeur | [features/developer.md](features/developer.md) | `lib/features/developer/` |
 | Le manuel utilisateur intégré | [features/user_manual.md](features/user_manual.md) | `lib/features/user_manual/` |
 
@@ -99,6 +99,8 @@ docs/
 | `ai_assistant` | Chat, analyse de vin, OCR local, orchestration multi-fournisseurs | Domain, data, presentation |
 | `statistics` | Calcul et affichage des statistiques de cave | Domain, data, presentation |
 | `settings` | Paramètres généraux, affichage, IA | Presentation |
+
+- La feature `settings` isole progressivement ses décisions d'affichage déterministes dans `presentation/helpers/` pour limiter la logique déclarative imbriquée dans les écrans de réglages.
 | `user_manual` | Manuel utilisateur embarqué | Presentation |
 | `developer` | Outils internes de réévaluation et purge | Domain, presentation |
 
