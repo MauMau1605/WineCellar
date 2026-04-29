@@ -31,6 +31,8 @@ import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_miss
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_fields_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode_transition_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_prefill_helper.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_placement_helper.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_preview_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_web_search_result_builder.dart';
@@ -796,14 +798,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Build preview cards for all wines in the current list
   List<Widget> _buildWinePreviewCards(BuildContext context) {
     final cards = <Widget>[];
-    // "Add all" button when multiple complete wines
-    final completeWines = _currentWineDataList
-        .where((w) => w.isComplete)
-        .toList();
-    final allAdded = _addedWineIndices.length >= completeWines.length;
-    if (_currentWineDataList.length > 1 &&
-        completeWines.isNotEmpty &&
-        !allAdded) {
+    final previewPlan = ChatPreviewPlanner.build(
+      wines: _currentWineDataList,
+      addedIndices: _addedWineIndices,
+    );
+
+    if (previewPlan.showAddAllButton) {
       cards.add(
         Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -811,27 +811,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onPressed: () => _addAllWinesToCellar(context),
             icon: const Icon(Icons.playlist_add, size: 20),
             label: Text(
-              'Ajouter les ${completeWines.length - _addedWineIndices.length} vin(s) à la cave',
+              'Ajouter les ${previewPlan.remainingCompleteCount} vin(s) à la cave',
             ),
           ),
         ),
       );
     }
     for (var i = 0; i < _currentWineDataList.length; i++) {
-      final alreadyAdded = _addedWineIndices.contains(i);
       final wineData = _currentWineDataList[i];
+      final cardPlan = previewPlan.cardPlans[i];
       cards.add(
         WinePreviewCard(
           wineData: wineData,
-          onConfirm: alreadyAdded ? null : () => _addWineToCellar(context, i),
-          onEdit: alreadyAdded ? null : () => _editWineDataDialog(i),
-          onForceAdd: (alreadyAdded || wineData.isComplete)
-              ? null
-              : () => _forceAddIncompleteWine(context, i),
+          onConfirm: cardPlan.canConfirm ? () => _addWineToCellar(context, i) : null,
+          onEdit: cardPlan.canEdit ? () => _editWineDataDialog(i) : null,
+          onForceAdd: cardPlan.canForceAdd
+              ? () => _forceAddIncompleteWine(context, i)
+              : null,
         ),
       );
-
-
     }
     return cards;
   }
@@ -1324,9 +1322,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
 
-    if (!mounted ||
-        choice == null ||
-        choice == _PlacementChoice.none) {
+    if (!mounted) return;
+
+    final nextStep = ChatPlacementHelper.resolveSinglePlacement(
+      _toPlacementChoiceResolution(choice),
+    );
+    if (nextStep.type == ChatSinglePlacementNextStepType.stop) {
       return;
     }
 
@@ -1338,11 +1339,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     await _updateWineLocation(wineId, selectedCellar.name);
     if (!mounted) return;
 
-    if (choice == _PlacementChoice.associateOnly) {
+    if (nextStep.type == ChatSinglePlacementNextStepType.chooseCellarOnly) {
       return;
     }
 
-    context.go('/cellars/${selectedCellar.id}?wineId=$wineId');
+    context.go(
+      ChatPlacementHelper.buildSinglePlacementRoute(
+        cellarId: selectedCellar.id!,
+        wineId: wineId,
+      ),
+    );
   }
 
   /// Grouped placement dialog shown after adding multiple wines at once.
@@ -1351,7 +1357,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   ) async {
     if (!mounted || wines.isEmpty) return;
 
-    final wineNames = wines.map((w) => '• ${w.name}').join('\n');
+    final wineNames = ChatPlacementHelper.buildGroupedWineNames(wines);
 
     final choice = await showDialog<_PlacementChoice>(
       context: context,
@@ -1380,7 +1386,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
 
-    if (!mounted || choice == null || choice == _PlacementChoice.none) return;
+    if (!mounted ||
+        !ChatPlacementHelper.shouldContinueGroupedPlacement(
+          _toPlacementChoiceResolution(choice),
+        )) {
+      return;
+    }
 
     final selectedCellar = await _selectOrCreateCellar();
     if (!mounted || selectedCellar == null) return;
@@ -1394,12 +1405,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${wines.length} vins associés à « ${selectedCellar.name} ».',
+            ChatPlacementHelper.buildGroupedPlacementSuccessMessage(
+              wineCount: wines.length,
+              cellarName: selectedCellar.name,
+            ),
           ),
           showCloseIcon: true,
           action: SnackBarAction(
             label: 'Voir la cave',
-            onPressed: () => context.go('/cellars/${selectedCellar.id}'),
+            onPressed: () => context.go(
+              ChatPlacementHelper.buildGroupedPlacementRoute(
+                cellarId: selectedCellar.id!,
+              ),
+            ),
           ),
         ),
       );
@@ -1489,6 +1507,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ChatDuplicateResolution.incrementExisting,
       _DuplicateChoice.createNew => ChatDuplicateResolution.createNew,
       null => ChatDuplicateResolution.cancel,
+    };
+  }
+
+  ChatPlacementChoiceResolution _toPlacementChoiceResolution(
+    _PlacementChoice? choice,
+  ) {
+    return switch (choice) {
+      _PlacementChoice.associateOnly => ChatPlacementChoiceResolution.associateOnly,
+      _PlacementChoice.placeInSlot => ChatPlacementChoiceResolution.placeInSlot,
+      _PlacementChoice.none => ChatPlacementChoiceResolution.none,
+      null => ChatPlacementChoiceResolution.cancel,
     };
   }
 

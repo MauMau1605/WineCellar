@@ -479,6 +479,8 @@ Helpers purs ou quasi purs extraits du chat pour sécuriser les refactors par te
 - `chat_web_search_result_builder.dart` — mapping d'un résultat de recherche web vers un `ChatMessage` assistant enrichi de sources
 - `chat_image_analysis_helper.dart` — décisions OCR/vision et préparation des paramètres d'analyse d'image
 - `chat_missing_fields_helper.dart` — validation et complétion des champs obligatoires manquants avant ajout
+- `chat_preview_planner.dart` — décisions d'affichage et d'actions des cartes preview du chat
+- `chat_placement_helper.dart` — décisions de placement, routes et messages post-ajout vers les caves
 
 ### presentation/widgets/
 
