@@ -25,8 +25,10 @@ import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_assi
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_cellar_naming_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_context_summary_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_duplicate_matcher.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_image_analysis_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_media_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_json_recovery.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_missing_fields_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode_transition_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_prefill_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
@@ -289,14 +291,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _captureWinePhotoAndAnalyze() async {
-    if (_isLoading) return;
-
     final useOcr = ref.read(useOcrForImagesProvider);
 
-    // En mode vision IA, on vérifie qu'un service est configuré.
-    if (!useOcr) {
-      final analyzeImageUseCase = ref.read(analyzeWineFromImageUseCaseProvider);
-      if (analyzeImageUseCase == null) {
+    final capturePlan = ChatImageAnalysisHelper.planCapture(
+      isLoading: _isLoading,
+      useOcr: useOcr,
+      hasVisionUseCase: ref.read(analyzeWineFromImageUseCaseProvider) != null,
+    );
+
+    switch (capturePlan.type) {
+      case ChatImageCapturePlanType.noop:
+        return;
+      case ChatImageCapturePlanType.requireVisionConfiguration:
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -306,7 +312,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         );
         return;
-      }
+      case ChatImageCapturePlanType.proceedWithOcr:
+      case ChatImageCapturePlanType.proceedWithVision:
+        break;
     }
 
     final source = await _showImageSourceDialog();
@@ -336,7 +344,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _scrollToBottom();
 
-    if (useOcr) {
+    if (capturePlan.type == ChatImageCapturePlanType.proceedWithOcr) {
       await _analyzeWithOcr(image.path);
     } else {
       await _analyzeWithVision(image.path);
@@ -379,24 +387,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     final imageBytes = await File(imagePath).readAsBytes();
-    final mimeType = _guessMimeTypeFromPath(imagePath);
-    final history = _messages
-        .where((m) => m.role != ChatRole.system)
-        .map(
-          (m) => {
-            'role': m.role == ChatRole.user ? 'user' : 'assistant',
-            'content': m.content,
-          },
-        )
-        .toList();
+    final params = ChatImageAnalysisHelper.buildVisionParams(
+      imageBytes: imageBytes,
+      mimeType: _guessMimeTypeFromPath(imagePath),
+      userMessage: _buildImagePromptForCurrentMode(),
+      messages: _messages,
+    );
 
     final either = await analyzeImageUseCase(
-      AnalyzeWineFromImageParams(
-        imageBytes: imageBytes,
-        mimeType: mimeType,
-        userMessage: _buildImagePromptForCurrentMode(),
-        conversationHistory: history,
-      ),
+      params,
     );
 
     if (!mounted) return;
@@ -1039,19 +1038,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WineAiResponse wineData,
   ) async {
     final nameController = TextEditingController(text: wineData.name ?? '');
-    WineColor? selectedColor = wineData.color != null
-        ? WineColor.values.where((c) => c.name == wineData.color).firstOrNull
-        : null;
+    WineColor? selectedColor = ChatMissingFieldsHelper.resolveInitialSelectedColor(
+      wineData.color,
+    );
 
     final result = await showDialog<WineAiResponse>(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final nameEmpty =
-              wineData.name == null && nameController.text.trim().isEmpty;
-          final colorMissing = wineData.color == null && selectedColor == null;
-          final canConfirm = !nameEmpty && !colorMissing;
+          final canConfirm = ChatMissingFieldsHelper.canConfirm(
+            wineData: wineData,
+            enteredName: nameController.text,
+            selectedColor: selectedColor,
+          );
 
           return AlertDialog(
             title: const Row(
@@ -1115,26 +1115,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               FilledButton(
                 onPressed: canConfirm
                     ? () => Navigator.of(context).pop(
-                          WineAiResponse(
-                            name: wineData.name ?? nameController.text.trim(),
-                            color: wineData.color ?? selectedColor!.name,
-                            appellation: wineData.appellation,
-                            producer: wineData.producer,
-                            region: wineData.region,
-                            country: wineData.country,
-                            vintage: wineData.vintage,
-                            grapeVarieties: wineData.grapeVarieties,
-                            quantity: wineData.quantity,
-                            purchasePrice: wineData.purchasePrice,
-                            drinkFromYear: wineData.drinkFromYear,
-                            drinkUntilYear: wineData.drinkUntilYear,
-                            tastingNotes: wineData.tastingNotes,
-                            suggestedFoodPairings: wineData.suggestedFoodPairings,
-                            description: wineData.description,
-                            needsMoreInfo: wineData.needsMoreInfo,
-                            followUpQuestion: wineData.followUpQuestion,
-                            estimatedFields: wineData.estimatedFields,
-                            confidenceNotes: wineData.confidenceNotes,
+                          ChatMissingFieldsHelper.completeWineData(
+                            wineData: wineData,
+                            enteredName: nameController.text,
+                            selectedColor: selectedColor,
                           ),
                         )
                     : null,

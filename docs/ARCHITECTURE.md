@@ -477,6 +477,8 @@ Helpers purs ou quasi purs extraits du chat pour sécuriser les refactors par te
 - `chat_add_intent_helper.dart` — décision “intention résolue” vs “clarification nécessaire” pour l'ajout de vin
 - `chat_prefill_helper.dart` — planification du prefill du chat selon le mode courant et la disponibilité de l'IA
 - `chat_web_search_result_builder.dart` — mapping d'un résultat de recherche web vers un `ChatMessage` assistant enrichi de sources
+- `chat_image_analysis_helper.dart` — décisions OCR/vision et préparation des paramètres d'analyse d'image
+- `chat_missing_fields_helper.dart` — validation et complétion des champs obligatoires manquants avant ajout
 
 ### presentation/widgets/
 
