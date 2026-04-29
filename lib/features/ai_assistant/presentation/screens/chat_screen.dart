@@ -31,6 +31,7 @@ import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_mode
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_prefill_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_request_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_response_enricher.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_web_search_result_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_wine_draft_builder.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_web_completion_result.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/widgets/chat_bubble.dart';
@@ -673,20 +674,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Handle a web search result (used by fallback Gemini path).
   void _handleWebSearchResult(AiChatResult result) {
     _chatLogger.logAiResponse(result.textResponse);
-    final assistantText = result.textResponse;
-    final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
-      result.webSources,
-    );
     setState(() {
       _isLoading = false;
       _messages.add(
-        ChatMessage(
-          id: _uuid.v4(),
-          content: assistantText,
-          role: ChatRole.assistant,
+        ChatWebSearchResultBuilder.buildAssistantMessage(
+          messageId: _uuid.v4(),
           timestamp: DateTime.now(),
-          webSources: chatSources,
-          collapseSourcesByDefault: chatSources.isNotEmpty,
+          result: result,
         ),
       );
     });

@@ -476,6 +476,7 @@ Helpers purs ou quasi purs extraits du chat pour sécuriser les refactors par te
 - `chat_assistant_link_resolver.dart` — classification des liens assistant en navigation interne ou ouverture externe
 - `chat_add_intent_helper.dart` — décision “intention résolue” vs “clarification nécessaire” pour l'ajout de vin
 - `chat_prefill_helper.dart` — planification du prefill du chat selon le mode courant et la disponibilité de l'IA
+- `chat_web_search_result_builder.dart` — mapping d'un résultat de recherche web vers un `ChatMessage` assistant enrichi de sources
 
 ### presentation/widgets/
 
