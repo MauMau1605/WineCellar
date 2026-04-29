@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:wine_cellar/features/statistics/domain/entities/cellar_statistics.dart';
+import 'package:wine_cellar/features/statistics/presentation/helpers/overview_section_helper.dart';
 
 /// Overview section displaying key KPI cards.
 class OverviewSection extends StatelessWidget {
@@ -11,52 +12,16 @@ class OverviewSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cards = <_KpiData>[
-      _KpiData(
-        icon: Icons.wine_bar,
-        label: 'Références',
-        value: '${stats.totalReferences}',
-        color: theme.colorScheme.primary,
-      ),
-      _KpiData(
-        icon: Icons.inventory_2,
-        label: 'Bouteilles',
-        value: '${stats.totalBottles}',
-        color: theme.colorScheme.secondary,
-      ),
-      if (stats.totalValue != null)
-        _KpiData(
-          icon: Icons.euro,
-          label: 'Valeur estimée',
-          value: '${stats.totalValue!.toStringAsFixed(0)} €',
-          color: const Color(0xFF4CAF50),
-        ),
-      if (stats.averagePrice != null)
-        _KpiData(
-          icon: Icons.price_change_outlined,
-          label: 'Prix moyen',
-          value: '${stats.averagePrice!.toStringAsFixed(1)} €',
-          color: const Color(0xFF2196F3),
-        ),
-      if (stats.averageRating != null)
-        _KpiData(
-          icon: Icons.star,
-          label: 'Note moyenne',
-          value: '${stats.averageRating!.toStringAsFixed(1)} / 5',
-          color: const Color(0xFFFFC107),
-        ),
-      if (stats.oldestVintage != null && stats.newestVintage != null)
-        _KpiData(
-          icon: Icons.date_range,
-          label: 'Millésimes',
-          value: '${stats.oldestVintage} – ${stats.newestVintage}',
-          color: const Color(0xFF9C27B0),
-        ),
-    ];
+    final cards = OverviewSectionHelper.buildCards(
+      stats,
+      theme.colorScheme.primary,
+      theme.colorScheme.secondary,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+        final crossAxisCount =
+            OverviewSectionHelper.crossAxisCountForWidth(constraints.maxWidth);
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -71,22 +36,8 @@ class OverviewSection extends StatelessWidget {
   }
 }
 
-class _KpiData {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  const _KpiData({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-}
-
 class _KpiCard extends StatelessWidget {
-  final _KpiData data;
+  final OverviewKpiData data;
 
   const _KpiCard({required this.data});
 

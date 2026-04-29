@@ -25,6 +25,7 @@ Feature de calcul et de visualisation des statistiques de la cave.
 | `data/repositories/` | `StatisticsRepositoryImpl` |
 | `presentation/providers/` | `statistics_providers.dart` |
 | `presentation/screens/` | `statistics_screen.dart` |
+| `presentation/helpers/` | `statistics_screen_helper.dart`, `overview_section_helper.dart` |
 | `presentation/widgets/` | sections overview, geography, grapes, producers, price, charts donut/bar |
 
 ## Providers locaux importants

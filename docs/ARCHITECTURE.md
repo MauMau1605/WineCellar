@@ -51,7 +51,7 @@ Ces fichiers doivent être considérés comme prioritaires quand une documentati
 | La base locale et les migrations | [technical/database.md](technical/database.md) | `lib/database/app_database.dart` |
 | La feature métier principale | [features/wine_cellar.md](features/wine_cellar.md) | [diagrams/class-diagram-wine-cellar.md](diagrams/class-diagram-wine-cellar.md) |
 | L'assistant IA | [features/ai_assistant.md](features/ai_assistant.md) | [diagrams/class-diagram-ai-assistant.md](diagrams/class-diagram-ai-assistant.md) |
-| Les statistiques | [features/statistics.md](features/statistics.md) | `lib/features/statistics/presentation/providers/statistics_providers.dart` |
+| Les statistiques | [features/statistics.md](features/statistics.md) | `lib/features/statistics/presentation/` |
 | Les réglages | [features/settings.md](features/settings.md) | `lib/features/settings/presentation/` |
 | Les outils développeur | [features/developer.md](features/developer.md) | `lib/features/developer/` |
 | Le manuel utilisateur intégré | [features/user_manual.md](features/user_manual.md) | `lib/features/user_manual/` |
@@ -545,6 +545,10 @@ Tableaux de bord et graphiques d'analyse de la cave.
 - Chaque catégorie affiche des graphiques dédiés : donut charts (couleur, maturité), bar charts (géographie, cépages, producteurs), timeline (millésimes), KPI (vue d'ensemble), hybride (notes & prix)
 - Gère l'état vide (aucun vin) et les erreurs de chargement
 - Données réactives : les statistiques se recalculent automatiquement quand la cave change
+
+#### `presentation/helpers/`
+- `statistics_screen_helper.dart` — métadonnées UI des catégories, titres de section, icônes et règles de toggle pie/bar
+- `overview_section_helper.dart` — construction des cartes KPI de synthèse et choix du nombre de colonnes
 
 ### presentation/widgets/
 

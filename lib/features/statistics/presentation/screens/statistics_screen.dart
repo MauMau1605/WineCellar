@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:wine_cellar/features/statistics/domain/entities/cellar_statistics.dart';
+import 'package:wine_cellar/features/statistics/presentation/helpers/statistics_screen_helper.dart';
 import 'package:wine_cellar/features/statistics/presentation/providers/statistics_providers.dart';
 import 'package:wine_cellar/features/statistics/presentation/widgets/color_distribution_chart.dart';
 import 'package:wine_cellar/features/statistics/presentation/widgets/geography_section.dart';
@@ -36,7 +37,7 @@ class StatisticsScreen extends ConsumerWidget {
                 const Icon(Icons.error_outline, size: 48, color: Colors.red),
                 const SizedBox(height: 16),
                 Text(
-                  'Impossible de charger les statistiques',
+                  StatisticsScreenHelper.errorTitle,
                   style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -68,12 +69,12 @@ class StatisticsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Aucun vin dans la cave',
+                      StatisticsScreenHelper.emptyTitle,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ajoutez des vins pour voir les statistiques de votre cave.',
+                      StatisticsScreenHelper.emptyDescription,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -116,20 +117,20 @@ class StatisticsScreen extends ConsumerWidget {
       WidgetRef ref) {
     final theme = Theme.of(context);
     final isPie = ref.watch(chartModePieProvider(category));
-    final hasToggle = category != StatCategory.overview &&
-        category != StatCategory.ratingsPrice;
+    final config = StatisticsScreenHelper.configFor(category);
+    final hasToggle = StatisticsScreenHelper.shouldShowChartToggle(category);
 
-    Widget wrapWithTitle(String title, IconData icon, Widget child) {
+    Widget wrapWithTitle(Widget child) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 22, color: theme.colorScheme.primary),
+              Icon(config.icon, size: 22, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  title,
+                  config.sectionTitle,
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -138,7 +139,7 @@ class StatisticsScreen extends ConsumerWidget {
               if (hasToggle)
                 IconButton(
                   icon: Icon(isPie ? Icons.bar_chart : Icons.pie_chart),
-                  tooltip: isPie ? 'Voir en barres' : 'Voir en camembert',
+                  tooltip: StatisticsScreenHelper.chartToggleTooltip(isPie),
                   onPressed: () => ref
                       .read(chartModePieProvider(category).notifier)
                       .state = !isPie,
@@ -154,22 +155,16 @@ class StatisticsScreen extends ConsumerWidget {
     switch (category) {
       case StatCategory.overview:
         return wrapWithTitle(
-          'Vue d\'ensemble',
-          Icons.dashboard,
           OverviewSection(stats: stats.overview),
         );
       case StatCategory.color:
         return wrapWithTitle(
-          'Répartition par couleur',
-          Icons.palette,
           isPie
               ? ColorDistributionChart(data: stats.colorDistribution)
               : ColorDistributionChart.asBar(data: stats.colorDistribution),
         );
       case StatCategory.maturity:
         return wrapWithTitle(
-          'Stade de maturité',
-          Icons.timelapse,
           isPie
               ? MaturityDistributionChart(data: stats.maturityDistribution)
               : MaturityDistributionChart.asBar(
@@ -177,8 +172,6 @@ class StatisticsScreen extends ConsumerWidget {
         );
       case StatCategory.geography:
         return wrapWithTitle(
-          'Géographie',
-          Icons.public,
           isPie
               ? GeographySection.asPie(
                   countryData: stats.countryDistribution,
@@ -193,24 +186,18 @@ class StatisticsScreen extends ConsumerWidget {
         );
       case StatCategory.vintages:
         return wrapWithTitle(
-          'Distribution des millésimes',
-          Icons.calendar_today,
           isPie
               ? VintageDistributionChart.asPie(data: stats.vintageDistribution)
               : VintageDistributionChart(data: stats.vintageDistribution),
         );
       case StatCategory.grapes:
         return wrapWithTitle(
-          'Cépages',
-          Icons.grass,
           isPie
               ? GrapeDistributionChart.asPie(data: stats.grapeDistribution)
               : GrapeDistributionChart(data: stats.grapeDistribution),
         );
       case StatCategory.ratingsPrice:
         return wrapWithTitle(
-          'Notes & Prix',
-          Icons.star,
           RatingsPriceSection(
             ratingData: stats.ratingDistribution,
             priceStats: stats.priceStats,
@@ -218,8 +205,6 @@ class StatisticsScreen extends ConsumerWidget {
         );
       case StatCategory.producers:
         return wrapWithTitle(
-          'Producteurs',
-          Icons.business,
           isPie
               ? ProducerDistributionChart.asPie(
                   data: stats.producerDistribution)
@@ -239,17 +224,6 @@ class _CategorySelector extends StatelessWidget {
     required this.onSelected,
   });
 
-  static const _icons = {
-    StatCategory.overview: Icons.dashboard,
-    StatCategory.color: Icons.palette,
-    StatCategory.maturity: Icons.timelapse,
-    StatCategory.geography: Icons.public,
-    StatCategory.vintages: Icons.calendar_today,
-    StatCategory.grapes: Icons.grass,
-    StatCategory.ratingsPrice: Icons.star,
-    StatCategory.producers: Icons.business,
-  };
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -262,7 +236,7 @@ class _CategorySelector extends StatelessWidget {
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
               avatar: Icon(
-                _icons[cat],
+                StatisticsScreenHelper.chipIconFor(cat),
                 size: 18,
                 color: isSelected
                     ? Theme.of(context).colorScheme.onPrimaryContainer
