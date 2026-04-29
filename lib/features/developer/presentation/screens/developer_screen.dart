@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/usecases/usecase.dart';
+import 'package:wine_cellar/features/developer/presentation/helpers/developer_screen_helper.dart';
 
 /// Landing screen for developer tools.
 /// Shows all available developer-only features.
@@ -19,16 +20,13 @@ class DeveloperScreen extends ConsumerWidget {
         children: [
           MaterialBanner(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            content: const Text(
-              'Mode développeur actif — ces fonctionnalités sont réservées '
-              'aux tests et ne doivent pas être utilisées en production.',
-            ),
+            content: const Text(DeveloperScreenHelper.bannerText),
             leading: const Icon(Icons.warning_amber, color: Colors.orange),
             actions: const [SizedBox.shrink()],
           ),
           const SizedBox(height: 20),
           Text(
-            'Outils disponibles',
+            DeveloperScreenHelper.toolsTitle,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
               color: theme.colorScheme.primary,
@@ -37,14 +35,13 @@ class DeveloperScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.auto_fix_high),
-              title: const Text('Réévaluation IA des vins'),
-              subtitle: const Text(
-                'Mettre à jour fenêtres de dégustation et accords mets-vins '
-                'pour une sélection de vins en cave.',
-              ),
+              leading: const Icon(DeveloperScreenHelper.reevaluationTool.icon),
+              title: const Text(DeveloperScreenHelper.reevaluationTool.title),
+              subtitle:
+                  const Text(DeveloperScreenHelper.reevaluationTool.subtitle),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/developer/reevaluate'),
+              onTap: () =>
+                  context.push(DeveloperScreenHelper.reevaluationTool.route!),
             ),
           ),
           const SizedBox(height: 8),
@@ -52,16 +49,15 @@ class DeveloperScreen extends ConsumerWidget {
             color: theme.colorScheme.errorContainer,
             child: ListTile(
               leading: Icon(
-                Icons.delete_forever,
+                DeveloperScreenHelper.deleteAllWinesTool.icon,
                 color: theme.colorScheme.onErrorContainer,
               ),
               title: Text(
-                'Supprimer tous les vins',
+                DeveloperScreenHelper.deleteAllWinesTool.title,
                 style: TextStyle(color: theme.colorScheme.onErrorContainer),
               ),
               subtitle: Text(
-                'Vider complètement la cave pour repartir sur une base '
-                'de données propre.',
+                DeveloperScreenHelper.deleteAllWinesTool.subtitle,
                 style: TextStyle(
                   color: theme.colorScheme.onErrorContainer.withAlpha(180),
                 ),
@@ -90,13 +86,12 @@ class DeveloperScreen extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.warning, color: Colors.red, size: 48),
-        title: const Text('Supprimer tous les vins ?'),
+        title: const Text(DeveloperScreenHelper.deleteDialogTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Cette action supprimera définitivement les $wineCount vin(s) '
-              'de la cave, ainsi que tous les placements de bouteilles associés.',
+              DeveloperScreenHelper.deleteDialogContent(wineCount),
             ),
             const SizedBox(height: 16),
             Container(
@@ -112,7 +107,7 @@ class DeveloperScreen extends ConsumerWidget {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Cette opération est irréversible.',
+                      DeveloperScreenHelper.deleteDialogWarning,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.red,
@@ -127,14 +122,14 @@ class DeveloperScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler'),
+            child: const Text(DeveloperScreenHelper.cancelLabel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Colors.red,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Tout supprimer'),
+            child: const Text(DeveloperScreenHelper.confirmDeleteLabel),
           ),
         ],
       ),
@@ -150,15 +145,17 @@ class DeveloperScreen extends ConsumerWidget {
     result.fold(
       (failure) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : ${failure.message}')),
+          SnackBar(
+            content: Text(
+              DeveloperScreenHelper.deleteErrorMessage(failure.message),
+            ),
+          ),
         );
       },
       (_) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '$wineCount vin(s) supprimé(s) avec succès.',
-            ),
+            content: Text(DeveloperScreenHelper.deleteSuccessMessage(wineCount)),
           ),
         );
       },

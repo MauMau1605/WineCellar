@@ -40,7 +40,7 @@ Ces fichiers doivent être considérés comme prioritaires quand une documentati
 | Injection et état transverse | `lib/core/providers.dart` | Déclare repositories, use cases et préférences globales |
 | Schéma et migrations | `lib/database/app_database.dart` | Source de vérité Drift |
 | Statistiques | `lib/features/statistics/presentation/providers/statistics_providers.dart` | Déclare l'état et le mode de graphe |
-| Outils développeur | `lib/features/developer/presentation/screens/developer_screen.dart` | Utilise les outils globaux exposés par les providers |
+| Outils développeur | `lib/features/developer/presentation/` | Utilise les outils globaux exposés par les providers |
 
 ## Carte rapide du projet
 
@@ -277,6 +277,9 @@ Providers Riverpod déclaratifs :
 - Surbrillance visuelle (option A) des vins en dernière année théorique de consommation et des vins au-delà de la fenêtre optimale (bordure + badge distincts)
 - Surbrillance pilotée par 2 réglages séparés dans `display_settings_screen.dart`, activés par défaut
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
+
+#### `presentation/helpers/`
+- `wine_list_screen_helper.dart` — décisions de layout liste/master-detail, évolution du filtre de recherche, filtrage/sort client, libellés de chips et état vide
 
 #### `wine_add_screen.dart` — `WineAddScreen`
 - Fiche d'ajout complète avec saisie manuelle de tous les champs métier (infos principales, cave, garde, notes)

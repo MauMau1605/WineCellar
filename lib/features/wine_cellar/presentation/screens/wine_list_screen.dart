@@ -25,6 +25,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_qua
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/helpers/wine_list_screen_helper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_card.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/wine_detail_panel.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/providers/wine_list_provider.dart';
@@ -58,8 +59,6 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   List<String> _availableLocations = const [];
   int? _selectedWineId;
 
-  static const double _autoBreakpoint = 900;
-
   MultiSplitViewController? _hSplitController;
   MultiSplitViewController? _vSplitController;
 
@@ -89,13 +88,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   }
 
   bool _computeIsMasterDetail(WineListLayout layout) {
-    return switch (layout) {
-      WineListLayout.list => false,
-      WineListLayout.masterDetail => true,
-      WineListLayout.masterDetailVertical => true,
-      WineListLayout.auto =>
-          MediaQuery.of(context).size.width >= _autoBreakpoint,
-    };
+    return WineListScreenHelper.computeIsMasterDetail(
+      layout,
+      MediaQuery.of(context).size.width,
+    );
   }
 
   @override
@@ -181,6 +177,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Rechercher...',
+                hintText: WineListScreenHelper.searchHint,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -196,15 +193,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
               ),
               onChanged: (value) {
                 setState(() {
-                  if (value.isEmpty) {
-                    _filter = _filter.copyWith(clearSearch: true);
-                  } else {
-                    _filter = _filter.copyWith(
-                      searchQuery: value,
-                      clearColor: true,
-                      clearMaturity: true,
-                    );
-                  }
+                  _filter = WineListScreenHelper.updateSearchFilter(
+                    _filter,
+                    value,
+                  );
                 });
               },
             ),
@@ -218,26 +210,12 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           Expanded(
             child: winesAsync.when(
               data: (wines) {
-                // Apply maturity filter in-memory if needed
-                var filtered = _filter.maturity != null
-                    ? wines
-                          .where((w) => w.maturity == _filter.maturity)
-                          .toList()
-                    : wines;
-
-                // Apply location filter in-memory
-                if (_filter.locations.isNotEmpty) {
-                  filtered = filtered
-                      .where((w) =>
-                          w.location != null &&
-                          _filter.locations.contains(w.location))
-                      .toList();
-                }
-
-                // Apply sort
-                if (_sort != null) {
-                  filtered = _sort!.apply(filtered);
-                }
+                final filtered =
+                    WineListScreenHelper.applyClientSideFiltersAndSort(
+                  wines,
+                  _filter,
+                  _sort,
+                );
 
                 if (filtered.isEmpty) {
                   return _buildEmptyState();
@@ -360,7 +338,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             (color) => Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
-                label: Text('${color.emoji} ${color.label}'),
+                label: Text(WineListScreenHelper.colorFilterLabel(color)),
                 selected: _filter.color == color,
                 onSelected: (selected) {
                   setState(() {
@@ -385,7 +363,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                 (maturity) => Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
-                    label: Text('${maturity.emoji} ${maturity.label}'),
+                    label: Text(
+                      WineListScreenHelper.maturityFilterLabel(maturity),
+                    ),
                     selected: _filter.maturity == maturity,
                     onSelected: (selected) {
                       setState(() {
@@ -441,7 +421,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
               ),
             ),
           ),
-          if (_filter.locations.isNotEmpty)
+          if (WineListScreenHelper.shouldShowLocationClearAction(
+            _filter.locations,
+          ))
             Padding(
               padding: const EdgeInsets.only(left: 4),
               child: ActionChip(
@@ -490,7 +472,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Aucun vin dans votre cave',
+            WineListScreenHelper.emptyTitle,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               color: Theme.of(
                 context,
@@ -499,7 +481,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Utilisez l\'assistant IA pour ajouter votre premier vin',
+            WineListScreenHelper.emptySubtitle,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(
                 context,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/developer/domain/entities/reevaluation_options.dart';
+import 'package:wine_cellar/features/developer/presentation/helpers/wine_reevaluation_helper.dart';
 import 'package:wine_cellar/features/developer/presentation/providers/reevaluation_provider.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 
@@ -61,32 +62,17 @@ class _WineReevaluationScreenState
               const SizedBox(height: 8),
               Card(
                 child: Column(
-                  children: [
-                    CheckboxListTile(
-                      title: const Text('Fenêtres de dégustation'),
-                      subtitle: const Text(
-                        'Mettre à jour drinkFromYear / drinkUntilYear',
-                      ),
-                      value: _selectedTypes
-                          .contains(ReevaluationType.drinkingWindow),
-                      onChanged: (v) => _toggleType(
-                        ReevaluationType.drinkingWindow,
-                        v ?? false,
-                      ),
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Accords mets et vins'),
-                      subtitle: const Text(
-                        'Mettre à jour les catégories alimentaires',
-                      ),
-                      value: _selectedTypes
-                          .contains(ReevaluationType.foodPairings),
-                      onChanged: (v) => _toggleType(
-                        ReevaluationType.foodPairings,
-                        v ?? false,
-                      ),
-                    ),
-                  ],
+                  children: WineReevaluationHelper.options
+                      .map(
+                        (option) => CheckboxListTile(
+                          title: Text(option.title),
+                          subtitle: Text(option.subtitle),
+                          value: _selectedTypes.contains(option.type),
+                          onChanged: (value) =>
+                              _toggleType(option.type, value ?? false),
+                        ),
+                      )
+                      .toList(growable: false),
                 ),
               ),
               const SizedBox(height: 24),
@@ -154,27 +140,34 @@ class _WineReevaluationScreenState
               winesAsync.when(
                 data: (allWines) {
                   final visible = _applySearch(allWines);
-                  final visibleIds = visible.map((w) => w.id!).toSet();
-                  final allSelected = visibleIds.isNotEmpty &&
-                      visibleIds.every(_selectedWineIds.contains);
+                  final selectionState =
+                      WineReevaluationHelper.buildVisibleSelectionState(
+                    visible,
+                    _selectedWineIds,
+                  );
 
                   return Row(
                     children: [
                       Text(
-                        '${_selectedWineIds.length} vin(s) sélectionné(s)',
+                        '${selectionState.selectedCount} vin(s) sélectionné(s)',
                         style: theme.textTheme.bodySmall,
                       ),
                       const Spacer(),
                       TextButton(
                         onPressed: () => setState(() {
-                          if (allSelected) {
-                            _selectedWineIds.removeAll(visibleIds);
+                          if (selectionState.allSelected) {
+                            _selectedWineIds
+                                .removeAll(selectionState.visibleIds);
                           } else {
-                            _selectedWineIds.addAll(visibleIds);
+                            _selectedWineIds
+                                .addAll(selectionState.visibleIds);
                           }
                         }),
-                        child:
-                            Text(allSelected ? 'Tout désélectionner' : 'Tout sélectionner'),
+                        child: Text(
+                          selectionState.allSelected
+                              ? 'Tout désélectionner'
+                              : 'Tout sélectionner',
+                        ),
                       ),
                     ],
                   );
@@ -240,9 +233,9 @@ class _WineReevaluationScreenState
                 child: FilledButton.icon(
                   icon: const Icon(Icons.auto_fix_high),
                   label: Text(
-                    _selectedWineIds.isEmpty
-                        ? 'Sélectionnez des vins'
-                        : 'Lancer la réévaluation (${_selectedWineIds.length} vin(s))',
+                    WineReevaluationHelper.launchButtonLabel(
+                      _selectedWineIds.length,
+                    ),
                   ),
                   onPressed: _canLaunch(reevalState)
                       ? _launchReevaluation
@@ -264,18 +257,10 @@ class _WineReevaluationScreenState
   }
 
   bool _canLaunch(ReevaluationState state) =>
-      _selectedWineIds.isNotEmpty &&
-      _selectedTypes.isNotEmpty &&
-      state is ReevaluationIdle;
+      WineReevaluationHelper.canLaunch(_selectedWineIds, _selectedTypes, state);
 
   List<WineEntity> _applySearch(List<WineEntity> wines) {
-    if (_searchQuery.isEmpty) return wines;
-    final q = _searchQuery.toLowerCase();
-    return wines.where((w) {
-      return w.name.toLowerCase().contains(q) ||
-          (w.producer?.toLowerCase().contains(q) ?? false) ||
-          (w.appellation?.toLowerCase().contains(q) ?? false);
-    }).toList();
+    return WineReevaluationHelper.applySearch(wines, _searchQuery);
   }
 
   void _toggleType(ReevaluationType type, bool value) {
@@ -374,11 +359,7 @@ class _WineColorDot extends StatelessWidget {
   }
 
   Color _dotColor(WineColor c) => switch (c) {
-        WineColor.red => const Color(0xFF8B0000),
-        WineColor.white => const Color(0xFFE8D87A),
-        WineColor.rose => const Color(0xFFFFB6C1),
-        WineColor.sparkling => const Color(0xFFDAA520),
-        WineColor.sweet => const Color(0xFFD4A017),
+        _ => WineReevaluationHelper.wineColorDotColor(c),
       };
 }
 
@@ -409,16 +390,13 @@ class _ProcessingOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Lot ${state.currentBatch} / ${state.totalBatches}  '
-                  '— ${state.processedWines} / ${state.totalWines} vins traités',
+                  WineReevaluationHelper.processingStatusText(state),
                   style: theme.textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 4),
                 LinearProgressIndicator(
-                  value: state.totalWines > 0
-                      ? state.processedWines / state.totalWines
-                      : 0,
+                  value: WineReevaluationHelper.processingProgressValue(state),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton(

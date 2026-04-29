@@ -25,6 +25,7 @@ Feature interne réservée aux outils développeur et aux workflows de test avan
 | `domain/entities/` | `ReevaluationOptions`, `WineReevaluationChange` |
 | `domain/usecases/` | `ReevaluateBatchUseCase` |
 | `presentation/providers/` | `reevaluation_provider.dart` |
+| `presentation/helpers/` | `wine_reevaluation_helper.dart`, `developer_screen_helper.dart` |
 | `presentation/screens/` | `developer_screen.dart`, `wine_reevaluation_screen.dart`, `reevaluation_preview_screen.dart` |
 
 ## Responsabilités
