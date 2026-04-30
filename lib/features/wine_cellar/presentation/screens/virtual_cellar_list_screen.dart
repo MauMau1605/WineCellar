@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/helpers/virtual_cellar_list_helper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/screens/expert_cellar_editor_screen.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
 
@@ -19,7 +20,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
         .watch();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mes Celliers')),
+      appBar: AppBar(title: const Text(VirtualCellarListHelper.screenTitle)),
       body: StreamBuilder<List<VirtualCellarEntity>>(
         stream: cellarsStream,
         builder: (context, snapshot) {
@@ -64,7 +65,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
         icon: const Icon(Icons.add),
-        label: const Text('Nouveau cellier'),
+        label: const Text(VirtualCellarListHelper.newCellarLabel),
       ),
     );
   }
@@ -74,8 +75,8 @@ class VirtualCellarListScreen extends ConsumerWidget {
     if (!context.mounted) return;
     await _showCellarFormDialog(
       context: context,
-      title: 'Nouveau cellier',
-      confirmLabel: 'Créer',
+      title: VirtualCellarListHelper.createDialogTitle,
+      confirmLabel: VirtualCellarListHelper.createConfirmLabel,
       enableModeSelection: true,
       existingCellarNames: existingCellars,
       onConfirm: (name, rows, cols, theme) async {
@@ -108,12 +109,12 @@ class VirtualCellarListScreen extends ConsumerWidget {
     final oldName = cellar.name;
     await _showCellarFormDialog(
       context: context,
-      title: 'Modifier le cellier',
+      title: VirtualCellarListHelper.editDialogTitle,
       initialName: cellar.name,
       initialRows: cellar.rows,
       initialColumns: cellar.columns,
       initialTheme: cellar.theme,
-      confirmLabel: 'Enregistrer',
+      confirmLabel: VirtualCellarListHelper.saveConfirmLabel,
       onConfirm: (name, rows, cols, theme) async {
         final result = await ref
             .read(updateVirtualCellarUseCaseProvider)
@@ -158,25 +159,32 @@ class VirtualCellarListScreen extends ConsumerWidget {
         .where((w) => w.location == oldName)
         .toList();
 
-    if (affectedWines.isEmpty || !context.mounted) return;
+    if (!VirtualCellarListHelper.shouldAskToRenameLocations(
+          affectedWines.length,
+        ) ||
+        !context.mounted) {
+      return;
+    }
 
     final shouldUpdate = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Mettre à jour la localisation ?'),
+        title: const Text(VirtualCellarListHelper.renameLocationDialogTitle),
         content: Text(
-          '${affectedWines.length} bouteille(s) ont la localisation '
-          '"$oldName".\n\n'
-          'Souhaitez-vous mettre à jour leur localisation en "$newName" ?',
+          VirtualCellarListHelper.renameLocationDialogContent(
+            affectedWines.length,
+            oldName,
+            newName,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Non, garder l\'ancienne'),
+            child: const Text(VirtualCellarListHelper.keepOldLocationLabel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Oui, mettre à jour'),
+            child: const Text(VirtualCellarListHelper.updateLocationLabel),
           ),
         ],
       ),
@@ -193,7 +201,9 @@ class VirtualCellarListScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${affectedWines.length} bouteille(s) mise(s) à jour.',
+            VirtualCellarListHelper.renameLocationSuccessMessage(
+              affectedWines.length,
+            ),
           ),
         ),
       );
@@ -208,22 +218,21 @@ class VirtualCellarListScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer le cellier ?'),
+        title: const Text(VirtualCellarListHelper.deleteDialogTitle),
         content: Text(
-          'Le cellier "${cellar.name}" sera supprimé. '
-          'Les bouteilles qu\'il contient seront déplacées (non supprimées).',
+          VirtualCellarListHelper.deleteDialogContent(cellar.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annuler'),
+            child: const Text(VirtualCellarListHelper.deleteCancelLabel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Supprimer'),
+            child: const Text(VirtualCellarListHelper.deleteConfirmLabel),
           ),
         ],
       ),
@@ -249,14 +258,6 @@ class VirtualCellarListScreen extends ConsumerWidget {
         .getOrElse((_) => const [])
         .map((c) => c.name)
         .toList();
-  }
-
-  static String _generateDefaultCellarName(List<String> existingNames) {
-    final lowerNames = existingNames.map((n) => n.toLowerCase()).toSet();
-    for (var i = 1;; i++) {
-      final candidate = 'Cave $i';
-      if (!lowerNames.contains(candidate.toLowerCase())) return candidate;
-    }
   }
 
   Future<void> _showCellarFormDialog({
@@ -297,7 +298,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Mode de creation',
+                        VirtualCellarListHelper.modeLabel,
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                     ),
@@ -308,8 +309,13 @@ class VirtualCellarListScreen extends ConsumerWidget {
                         setDialogState(() {
                           mode = newMode;
                           if (mode == _CellarCreationMode.simplified) {
-                            rows = rows.clamp(1, 12);
-                            cols = cols.clamp(1, 16);
+                            rows = VirtualCellarListHelper.clampSimplifiedRows(
+                              rows,
+                            );
+                            cols =
+                                VirtualCellarListHelper.clampSimplifiedColumns(
+                              cols,
+                            );
                           }
                         });
                       },
@@ -320,9 +326,10 @@ class VirtualCellarListScreen extends ConsumerWidget {
                     controller: nameCtrl,
                     decoration: InputDecoration(
                       labelText: 'Nom du cellier',
-                      hintText: existingCellarNames.isEmpty
-                          ? 'Ex : Cave principale'
-                          : 'Par défaut : ${_generateDefaultCellarName(existingCellarNames)}',
+                      hintText:
+                          VirtualCellarListHelper.cellarNameHint(
+                        existingCellarNames,
+                      ),
                     ),
                     textCapitalization: TextCapitalization.sentences,
                   ),
@@ -394,12 +401,14 @@ class VirtualCellarListScreen extends ConsumerWidget {
               ),
               FilledButton(
                 onPressed: () async {
-                  var name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    name = _generateDefaultCellarName(existingCellarNames);
-                  }
+                  final name = VirtualCellarListHelper.normalizeCellarName(
+                    nameCtrl.text,
+                    existingCellarNames,
+                  );
 
-                  if (mode == _CellarCreationMode.advanced) {
+                  if (VirtualCellarListHelper.shouldOpenExpertEditor(
+                    mode == _CellarCreationMode.advanced,
+                  )) {
                     Navigator.of(ctx).pop();
                     await _openExpertEditor(
                       context,
@@ -412,7 +421,11 @@ class VirtualCellarListScreen extends ConsumerWidget {
                   }
 
                   Navigator.of(ctx).pop();
-                  await onConfirm(name, rows, cols, theme);
+            return Center(
+              child: Text(
+                '${VirtualCellarListHelper.cellarsNotFoundErrorPrefix}${snapshot.error}',
+              ),
+            );
                 },
                 child: Text(confirmLabel),
               ),
@@ -488,9 +501,7 @@ class _CellarCard extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '${cellar.rows} rangée${cellar.rows > 1 ? 's' : ''} × '
-          '${cellar.columns} colonne${cellar.columns > 1 ? 's' : ''} '
-          '(${cellar.totalSlots} emplacements) • ${cellar.theme.label}',
+          VirtualCellarListHelper.cellarCardSubtitle(cellar),
           style: theme.textTheme.bodySmall,
         ),
         onTap: onTap,
@@ -531,10 +542,13 @@ class _EmptyState extends StatelessWidget {
             color: theme.colorScheme.outline,
           ),
           const SizedBox(height: 16),
-          Text('Aucun cellier créé', style: theme.textTheme.titleMedium),
+          Text(
+            VirtualCellarListHelper.emptyTitle,
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Text(
-            'Créez votre premier cellier virtuel pour placer\nvos bouteilles et les retrouver facilement.',
+            VirtualCellarListHelper.emptyDescription,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.outline,
@@ -544,7 +558,7 @@ class _EmptyState extends StatelessWidget {
           FilledButton.icon(
             onPressed: onCreateTap,
             icon: const Icon(Icons.add),
-            label: const Text('Créer un cellier'),
+            label: const Text(VirtualCellarListHelper.createCellarActionLabel),
           ),
         ],
       ),

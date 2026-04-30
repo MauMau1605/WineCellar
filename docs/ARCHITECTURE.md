@@ -280,6 +280,7 @@ Providers Riverpod déclaratifs :
 
 #### `presentation/helpers/`
 - `wine_list_screen_helper.dart` — décisions de layout liste/master-detail, évolution du filtre de recherche, filtrage/sort client, libellés de chips et état vide
+- `virtual_cellar_list_helper.dart` — génération des noms par défaut, libellés du formulaire de création/édition, textes de renommage/suppression et résumé des cartes de celliers
 - `virtual_cellar_detail_helper.dart` — thème immersif, filtre de maturité et messages du parcours de placement dans un cellier virtuel
 - Le même helper centralise aussi le calcul des bouteilles encore plaçables et les textes du dialogue de quantité
 - Il centralise enfin l'état des contrôles de déplacement, les options du menu de thème et les décisions visuelles de fond par thème

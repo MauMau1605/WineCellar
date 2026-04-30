@@ -1038,7 +1038,7 @@ class _VirtualCellarDetailScreenState
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Modifier le cellier'),
+          title: const Text(VirtualCellarDetailHelper.editDialogTitle),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1119,7 +1119,10 @@ class _VirtualCellarDetailScreenState
                     builder: (c2) => AlertDialog(
                       title: const Text('Attention'),
                       content: Text(
-                        '${displaced.length} bouteille(s) seront retirée(s) car hors des nouvelles dimensions.',
+                        VirtualCellarDetailHelper
+                            .displacedBottlesWarningContent(
+                          displaced.length,
+                        ),
                       ),
                       actions: [
                         TextButton(
@@ -1150,8 +1153,8 @@ class _VirtualCellarDetailScreenState
                   await _reindexPlacementsAfterInsertion(
                     rowInsertPosition,
                     colInsertPosition,
-                    cellar.rows,
-                    cellar.columns,
+                    rows - cellar.rows,
+                    cols - cellar.columns,
                   );
                 }
 
@@ -1183,7 +1186,7 @@ class _VirtualCellarDetailScreenState
                   ),
                 );
               },
-              child: const Text('Enregistrer'),
+              child: const Text(VirtualCellarDetailHelper.saveCellarLabel),
             ),
           ],
         ),
@@ -1205,40 +1208,37 @@ class _VirtualCellarDetailScreenState
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text('Où ajouter $addCount $type?'),
+          title: Text(
+            VirtualCellarDetailHelper.insertPositionDialogTitle(
+              type,
+              addCount,
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Sélectionnez la position d\'insertion pour les $addCount nouvelles $type:',
+                VirtualCellarDetailHelper.insertPositionDialogContent(
+                  type,
+                  addCount,
+                ),
               ),
               const SizedBox(height: 16),
               SingleChildScrollView(
                 child: Column(
-                  children: [
-                    _InsertPositionTile(
-                      title: 'Au début',
-                      selected: selectedPosition == 0,
-                      onTap: () => setState(() => selectedPosition = 0),
-                    ),
-                    if (currentCount > 0)
-                      ...List.generate(
-                        currentCount,
-                        (idx) => _InsertPositionTile(
-                          title:
-                              'Entre ${type.toLowerCase()} ${idx + 1} et ${idx + 2}',
-                          selected: selectedPosition == idx + 1,
+                  children: VirtualCellarDetailHelper.buildInsertPositionOptions(
+                    type,
+                    currentCount,
+                  )
+                      .map(
+                        (option) => _InsertPositionTile(
+                          title: option.title,
+                          selected: selectedPosition == option.position,
                           onTap: () =>
-                              setState(() => selectedPosition = idx + 1),
+                              setState(() => selectedPosition = option.position),
                         ),
-                      ),
-                    _InsertPositionTile(
-                      title: 'À la fin',
-                      selected: selectedPosition == currentCount,
-                      onTap: () =>
-                          setState(() => selectedPosition = currentCount),
-                    ),
-                  ],
+                      )
+                      .toList(growable: false),
                 ),
               ),
             ],
@@ -1246,11 +1246,15 @@ class _VirtualCellarDetailScreenState
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Annuler'),
+              child: const Text(
+                VirtualCellarDetailHelper.insertPositionCancelLabel,
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(selectedPosition),
-              child: const Text('Confirmer'),
+              child: const Text(
+                VirtualCellarDetailHelper.insertPositionConfirmLabel,
+              ),
             ),
           ],
         ),
@@ -1265,43 +1269,36 @@ class _VirtualCellarDetailScreenState
   Future<void> _reindexPlacementsAfterInsertion(
     int? rowInsertPos,
     int? colInsertPos,
-    int oldRows,
-    int oldCols,
+    int addedRows,
+    int addedCols,
   ) async {
-    for (final placement in _placedBottles) {
-      int newY = placement.positionY;
-      int newX = placement.positionX;
+    final reindexedPlacements =
+        VirtualCellarDetailHelper.buildReindexedPlacements(
+      placements: _placedBottles,
+      rowInsertPos: rowInsertPos,
+      colInsertPos: colInsertPos,
+      addedRows: addedRows,
+      addedCols: addedCols,
+    );
 
-      // Shift Y if rows were inserted before this placement
-      if (rowInsertPos != null && rowInsertPos <= placement.positionY) {
-        newY = placement.positionY;
-      }
+    for (final reindexed in reindexedPlacements) {
+      final result = await ref
+          .read(virtualCellarRepositoryProvider)
+          .moveBottleInCellar(
+            placementId: reindexed.placementId,
+            newPositionX: reindexed.newPositionX,
+            newPositionY: reindexed.newPositionY,
+          );
 
-      // Shift X if columns were inserted before this placement
-      if (colInsertPos != null && colInsertPos <= placement.positionX) {
-        newX = placement.positionX;
-      }
-
-      // Only update if position changed
-      if (newY != placement.positionY || newX != placement.positionX) {
-        final result = await ref
-            .read(virtualCellarRepositoryProvider)
-            .moveBottleInCellar(
-              placementId: placement.id,
-              newPositionX: newX,
-              newPositionY: newY,
-            );
-
-        result.fold((failure) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Erreur reindexation: ${failure.message}'),
-              ),
-            );
-          }
-        }, (_) {});
-      }
+      result.fold((failure) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur reindexation: ${failure.message}'),
+            ),
+          );
+        }
+      }, (_) {});
     }
   }
 

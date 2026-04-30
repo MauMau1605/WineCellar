@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:wine_cellar/core/enums.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placement_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_move_state_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
@@ -26,6 +27,26 @@ const _wineWithoutId = WineEntity(
   name: 'Gamma',
   color: WineColor.rose,
   quantity: 2,
+);
+
+final _placementA = BottlePlacementEntity(
+  id: 11,
+  wineId: 1,
+  cellarId: 9,
+  positionX: 0,
+  positionY: 0,
+  createdAt: DateTime(2024),
+  wine: _wineA,
+);
+
+final _placementB = BottlePlacementEntity(
+  id: 12,
+  wineId: 2,
+  cellarId: 9,
+  positionX: 2,
+  positionY: 3,
+  createdAt: DateTime(2024),
+  wine: _wineB,
 );
 
 void main() {
@@ -260,6 +281,53 @@ void main() {
         VirtualCellarDetailHelper.askBottleCountTitle(_wineA.displayName),
         'Combien placer pour ${_wineA.displayName} ?',
       );
+    });
+
+    test('construit les options du dialogue d insertion', () {
+      expect(
+        VirtualCellarDetailHelper.insertPositionDialogTitle('Rangées', 2),
+        'Où ajouter 2 Rangées?',
+      );
+      expect(
+        VirtualCellarDetailHelper.insertPositionDialogContent('Colonnes', 1),
+        'Sélectionnez la position d\'insertion pour les 1 nouvelles Colonnes:',
+      );
+
+      final options = VirtualCellarDetailHelper.buildInsertPositionOptions(
+        'Rangées',
+        2,
+      );
+      expect(options.map((option) => option.position), [0, 1, 2, 2]);
+      expect(options.first.title, 'Au début');
+      expect(options[1].title, 'Entre rangées 1 et 2');
+      expect(options.last.title, 'À la fin');
+    });
+
+    test('réindexe réellement les placements après insertion', () {
+      final reindexed = VirtualCellarDetailHelper.buildReindexedPlacements(
+        placements: [_placementA, _placementB],
+        rowInsertPos: 1,
+        colInsertPos: 2,
+        addedRows: 2,
+        addedCols: 1,
+      );
+
+      expect(reindexed, hasLength(1));
+      expect(reindexed.single.placementId, 12);
+      expect(reindexed.single.newPositionX, 3);
+      expect(reindexed.single.newPositionY, 5);
+    });
+
+    test('n ajoute aucune réindexation si aucune insertion ne touche le placement', () {
+      final reindexed = VirtualCellarDetailHelper.buildReindexedPlacements(
+        placements: [_placementA],
+        rowInsertPos: 2,
+        colInsertPos: 1,
+        addedRows: 1,
+        addedCols: 1,
+      );
+
+      expect(reindexed, isEmpty);
     });
   });
 }

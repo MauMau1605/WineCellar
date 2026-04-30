@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wine_cellar/core/cellar_theme_data.dart';
 import 'package:wine_cellar/core/enums.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_placement_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/bottle_move_state_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
@@ -46,6 +47,28 @@ class MovementControlsConfig {
   });
 }
 
+class InsertPositionOption {
+  final int position;
+  final String title;
+
+  const InsertPositionOption({
+    required this.position,
+    required this.title,
+  });
+}
+
+class ReindexedPlacementPosition {
+  final int placementId;
+  final int newPositionX;
+  final int newPositionY;
+
+  const ReindexedPlacementPosition({
+    required this.placementId,
+    required this.newPositionX,
+    required this.newPositionY,
+  });
+}
+
 class VirtualCellarDetailHelper {
   VirtualCellarDetailHelper._();
 
@@ -71,6 +94,11 @@ class VirtualCellarDetailHelper {
   static const String occupiedSlotSnackBar = 'Emplacement occupé.';
   static const String missingAnchorSnackBar =
       'Bouteille d ancrage introuvable.';
+  static const String editDialogTitle = 'Modifier le cellier';
+  static const String insertPositionCancelLabel = 'Annuler';
+  static const String insertPositionConfirmLabel = 'Confirmer';
+  static const String saveCellarLabel = 'Enregistrer';
+  static const String displacedBottlesWarningTitle = 'Attention';
 
   static VirtualCellarTheme? immersiveThemeFor(VirtualCellarTheme theme) {
     return CellarThemeData.overridesAppTheme(theme) ? theme : null;
@@ -210,5 +238,70 @@ class VirtualCellarDetailHelper {
 
   static String askBottleCountTitle(String wineDisplayName) {
     return 'Combien placer pour $wineDisplayName ?';
+  }
+
+  static String insertPositionDialogTitle(String type, int addCount) {
+    return 'Où ajouter $addCount $type?';
+  }
+
+  static String insertPositionDialogContent(String type, int addCount) {
+    return 'Sélectionnez la position d\'insertion pour les '
+        '$addCount nouvelles $type:';
+  }
+
+  static List<InsertPositionOption> buildInsertPositionOptions(
+    String type,
+    int currentCount,
+  ) {
+    final loweredType = type.toLowerCase();
+    return [
+      const InsertPositionOption(position: 0, title: 'Au début'),
+      ...List.generate(
+        currentCount,
+        (idx) => InsertPositionOption(
+          position: idx + 1,
+          title: 'Entre $loweredType ${idx + 1} et ${idx + 2}',
+        ),
+      ),
+      InsertPositionOption(position: currentCount, title: 'À la fin'),
+    ];
+  }
+
+  static String displacedBottlesWarningContent(int displacedCount) {
+    return '$displacedCount bouteille(s) seront retirée(s) car hors des '
+        'nouvelles dimensions.';
+  }
+
+  static List<ReindexedPlacementPosition> buildReindexedPlacements({
+    required List<BottlePlacementEntity> placements,
+    required int? rowInsertPos,
+    required int? colInsertPos,
+    required int addedRows,
+    required int addedCols,
+  }) {
+    return placements
+        .map((placement) {
+          var newY = placement.positionY;
+          var newX = placement.positionX;
+
+          if (rowInsertPos != null && rowInsertPos <= placement.positionY) {
+            newY = placement.positionY + addedRows;
+          }
+          if (colInsertPos != null && colInsertPos <= placement.positionX) {
+            newX = placement.positionX + addedCols;
+          }
+
+          if (newY == placement.positionY && newX == placement.positionX) {
+            return null;
+          }
+
+          return ReindexedPlacementPosition(
+            placementId: placement.id,
+            newPositionX: newX,
+            newPositionY: newY,
+          );
+        })
+        .whereType<ReindexedPlacementPosition>()
+        .toList(growable: false);
   }
 }
