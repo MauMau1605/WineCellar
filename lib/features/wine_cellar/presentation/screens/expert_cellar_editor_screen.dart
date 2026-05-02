@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,9 +7,8 @@ import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/cellar_cell_position.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/helpers/expert_cellar_editor_helper.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/widgets/virtual_cellar_theme_selector.dart';
-
-enum _SelectionType { none, cells, row, column }
 
 class ExpertCellarEditorScreen extends ConsumerStatefulWidget {
   final String initialName;
@@ -46,17 +43,14 @@ class _ExpertCellarEditorScreenState
   late VirtualCellarTheme _theme;
 
   List<List<bool>> _grid = <List<bool>>[];
-  _SelectionType _selectionType = _SelectionType.none;
-  final Set<(int, int)> _selectedCells = <(int, int)>{};
-  int? _selectedRow;
-  int? _selectedCol;
+  ExpertSelectionState _selectionState = ExpertSelectionState.empty();
 
   (int, int)? _dragAnchor;
 
   final List<List<List<bool>>> _undoStack = <List<List<bool>>>[];
   final List<List<List<bool>>> _redoStack = <List<List<bool>>>[];
 
-  _DraftPayload? _pendingDraft;
+  ExpertCellarDraftPayload? _pendingDraft;
   Timer? _saveDebounce;
   Timer? _periodicSave;
   bool _dirtySinceLastSave = false;
@@ -93,26 +87,11 @@ class _ExpertCellarEditorScreenState
   }
 
   List<List<bool>> _buildInitialGrid() {
-    final src = widget.sourceCellar;
-    final rows = src?.rows ?? widget.initialRows;
-    final cols = src?.columns ?? widget.initialColumns;
-    final grid = List<List<bool>>.generate(
-      rows,
-      (_) => List<bool>.filled(cols, true),
-      growable: true,
+    return ExpertCellarEditorHelper.buildInitialGrid(
+      initialRows: widget.initialRows,
+      initialColumns: widget.initialColumns,
+      sourceCellar: widget.sourceCellar,
     );
-
-    if (src != null) {
-      for (final cell in src.emptyCells) {
-        final row = cell.row - 1;
-        final col = cell.col - 1;
-        if (row >= 0 && row < rows && col >= 0 && col < cols) {
-          grid[row][col] = false;
-        }
-      }
-    }
-
-    return grid;
   }
 
   Future<void> _loadDraftIfAny() async {
@@ -120,7 +99,7 @@ class _ExpertCellarEditorScreenState
     final raw = await storage.read(key: AppConstants.keyExpertCellarDraft);
     if (!mounted || raw == null || raw.trim().isEmpty) return;
 
-    final draft = _DraftPayload.tryParse(raw);
+    final draft = ExpertCellarDraftPayload.tryParse(raw);
     if (draft == null) return;
 
     setState(() {
@@ -129,11 +108,11 @@ class _ExpertCellarEditorScreenState
   }
 
   Future<void> _saveDraft() async {
-    final payload = _DraftPayload(
+    final payload = ExpertCellarDraftPayload(
       name: _nameCtrl.text.trim(),
       rows: _grid.length,
       cols: _grid.isEmpty ? 0 : _grid.first.length,
-      emptyCells: _extractEmptyCells(_grid),
+      emptyCells: ExpertCellarEditorHelper.extractEmptyCells(_grid),
     );
 
     final storage = ref.read(secureStorageProvider);
@@ -149,12 +128,8 @@ class _ExpertCellarEditorScreenState
     final result = await ref.read(virtualCellarRepositoryProvider).getAll();
     final names = result
         .getOrElse((_) => const [])
-        .map((c) => c.name.toLowerCase())
-        .toSet();
-    for (var i = 1;; i++) {
-      final candidate = 'Cave $i';
-      if (!names.contains(candidate.toLowerCase())) return candidate;
-    }
+        .map((c) => c.name);
+    return ExpertCellarEditorHelper.generateDefaultCellarName(names);
   }
 
   Future<void> _clearDraft() async {
@@ -171,15 +146,22 @@ class _ExpertCellarEditorScreenState
   }
 
   List<List<bool>> _cloneGrid(List<List<bool>> source) {
-    return source.map((row) => List<bool>.from(row)).toList(growable: true);
+    return ExpertCellarEditorHelper.cloneGrid(source);
   }
 
   void _pushUndoSnapshot() {
-    _undoStack.add(_cloneGrid(_grid));
-    if (_undoStack.length > _maxHistory) {
-      _undoStack.removeAt(0);
-    }
-    _redoStack.clear();
+    final history = ExpertCellarEditorHelper.pushUndoSnapshot(
+      grid: _grid,
+      undoStack: _undoStack,
+      redoStack: _redoStack,
+      maxHistory: _maxHistory,
+    );
+    _undoStack
+      ..clear()
+      ..addAll(history.undoStack);
+    _redoStack
+      ..clear()
+      ..addAll(history.redoStack);
   }
 
   void _applyMutation(VoidCallback mutation) {
@@ -189,58 +171,35 @@ class _ExpertCellarEditorScreenState
   }
 
   void _clearSelection() {
-    _selectionType = _SelectionType.none;
-    _selectedCells.clear();
-    _selectedRow = null;
-    _selectedCol = null;
+    _selectionState = ExpertSelectionState.empty();
   }
 
   Set<(int, int)> _currentSelectionCells() {
     final rows = _grid.length;
     final cols = rows == 0 ? 0 : _grid.first.length;
-
-    switch (_selectionType) {
-      case _SelectionType.cells:
-        return Set<(int, int)>.from(_selectedCells);
-      case _SelectionType.row:
-        final row = _selectedRow;
-        if (row == null || row < 0 || row >= rows) return <(int, int)>{};
-        return {for (var col = 0; col < cols; col++) (row, col)};
-      case _SelectionType.column:
-        final col = _selectedCol;
-        if (col == null || col < 0 || col >= cols) return <(int, int)>{};
-        return {for (var row = 0; row < rows; row++) (row, col)};
-      case _SelectionType.none:
-        return <(int, int)>{};
-    }
+    return ExpertCellarEditorHelper.currentSelectionCells(
+      selectionState: _selectionState,
+      rowCount: rows,
+      colCount: cols,
+    );
   }
 
   void _toggleCellSelection(int row, int col) {
     setState(() {
-      if (_selectionType != _SelectionType.cells) {
-        _clearSelection();
-        _selectionType = _SelectionType.cells;
-      }
-      final cell = (row, col);
-      if (_selectedCells.contains(cell)) {
-        _selectedCells.remove(cell);
-      } else {
-        _selectedCells.add(cell);
-      }
-      if (_selectedCells.isEmpty) {
-        _selectionType = _SelectionType.none;
-      }
+      _selectionState = ExpertCellarEditorHelper.toggleCellSelection(
+        selectionState: _selectionState,
+        row: row,
+        col: col,
+      );
     });
   }
 
   void _startDragSelection(int row, int col) {
     setState(() {
-      _selectionType = _SelectionType.cells;
-      _selectedCells
-        ..clear()
-        ..add((row, col));
-      _selectedRow = null;
-      _selectedCol = null;
+      _selectionState = ExpertCellarEditorHelper.startCellSelection(
+        row: row,
+        col: col,
+      );
       _dragAnchor = (row, col);
     });
   }
@@ -255,21 +214,14 @@ class _ExpertCellarEditorScreenState
     final rowDelta = (details.localPosition.dy / 36).floor();
     final colDelta = (details.localPosition.dx / 36).floor();
 
-    final targetRow = (anchor.$1 + rowDelta).clamp(0, rows - 1);
-    final targetCol = (anchor.$2 + colDelta).clamp(0, cols - 1);
-
-    final minRow = anchor.$1 < targetRow ? anchor.$1 : targetRow;
-    final maxRow = anchor.$1 > targetRow ? anchor.$1 : targetRow;
-    final minCol = anchor.$2 < targetCol ? anchor.$2 : targetCol;
-    final maxCol = anchor.$2 > targetCol ? anchor.$2 : targetCol;
-
     setState(() {
-      _selectedCells.clear();
-      for (var r = minRow; r <= maxRow; r++) {
-        for (var c = minCol; c <= maxCol; c++) {
-          _selectedCells.add((r, c));
-        }
-      }
+      _selectionState = ExpertCellarEditorHelper.dragSelection(
+        anchor: anchor,
+        rowDelta: rowDelta,
+        colDelta: colDelta,
+        rowCount: rows,
+        colCount: cols,
+      );
     });
   }
 
@@ -279,102 +231,131 @@ class _ExpertCellarEditorScreenState
 
     setState(() {
       _applyMutation(() {
-        for (final (row, col) in selected) {
-          _grid[row][col] = active;
-        }
+        _grid = ExpertCellarEditorHelper.applySelectionValue(
+          grid: _grid,
+          selectedCells: selected,
+          active: active,
+        );
       });
     });
   }
 
   void _insertRow({required bool before}) {
-    if (_selectionType != _SelectionType.row || _selectedRow == null) return;
-    if (_grid.length >= _maxSize) return;
-
-    final at = before ? _selectedRow! : _selectedRow! + 1;
-    final cols = _grid.first.length;
+    final result = ExpertCellarEditorHelper.insertRow(
+      grid: _grid,
+      selectionState: _selectionState,
+      before: before,
+      maxGridSize: _maxSize,
+    );
+    if (result == null) return;
 
     setState(() {
       _applyMutation(() {
-        _grid.insert(at, List<bool>.filled(cols, true));
-        _selectedRow = at;
+        _grid = result.grid;
+        _selectionState = result.selectionState;
       });
     });
   }
 
   void _insertColumn({required bool before}) {
-    if (_selectionType != _SelectionType.column || _selectedCol == null) return;
-    if (_grid.first.length >= _maxSize) return;
-
-    final at = before ? _selectedCol! : _selectedCol! + 1;
+    final result = ExpertCellarEditorHelper.insertColumn(
+      grid: _grid,
+      selectionState: _selectionState,
+      before: before,
+      maxGridSize: _maxSize,
+    );
+    if (result == null) return;
 
     setState(() {
       _applyMutation(() {
-        for (final row in _grid) {
-          row.insert(at, true);
-        }
-        _selectedCol = at;
+        _grid = result.grid;
+        _selectionState = result.selectionState;
       });
     });
   }
 
   void _deleteRow() {
-    if (_selectionType != _SelectionType.row || _selectedRow == null) return;
-    if (_grid.length <= 1) return;
+    final result = ExpertCellarEditorHelper.deleteRow(
+      grid: _grid,
+      selectionState: _selectionState,
+    );
+    if (result == null) return;
 
     setState(() {
       _applyMutation(() {
-        _grid.removeAt(_selectedRow!);
-        _selectedRow = _selectedRow!.clamp(0, _grid.length - 1);
+        _grid = result.grid;
+        _selectionState = result.selectionState;
       });
     });
   }
 
   void _deleteColumn() {
-    if (_selectionType != _SelectionType.column || _selectedCol == null) return;
-    if (_grid.first.length <= 1) return;
+    final result = ExpertCellarEditorHelper.deleteColumn(
+      grid: _grid,
+      selectionState: _selectionState,
+    );
+    if (result == null) return;
 
     setState(() {
       _applyMutation(() {
-        for (final row in _grid) {
-          row.removeAt(_selectedCol!);
-        }
-        _selectedCol = _selectedCol!.clamp(0, _grid.first.length - 1);
+        _grid = result.grid;
+        _selectionState = result.selectionState;
       });
     });
   }
 
   void _undo() {
-    if (_undoStack.isEmpty) return;
+    final history = ExpertCellarEditorHelper.applyUndo(
+      grid: _grid,
+      undoStack: _undoStack,
+      redoStack: _redoStack,
+    );
+    if (history == null) return;
+
     setState(() {
-      _redoStack.add(_cloneGrid(_grid));
-      _grid = _undoStack.removeLast();
+      _grid = history.grid;
+      _undoStack
+        ..clear()
+        ..addAll(history.undoStack);
+      _redoStack
+        ..clear()
+        ..addAll(history.redoStack);
       _clearSelection();
       _scheduleDraftSave();
     });
   }
 
   void _redo() {
-    if (_redoStack.isEmpty) return;
+    final history = ExpertCellarEditorHelper.applyRedo(
+      grid: _grid,
+      undoStack: _undoStack,
+      redoStack: _redoStack,
+    );
+    if (history == null) return;
+
     setState(() {
-      _undoStack.add(_cloneGrid(_grid));
-      _grid = _redoStack.removeLast();
+      _grid = history.grid;
+      _undoStack
+        ..clear()
+        ..addAll(history.undoStack);
+      _redoStack
+        ..clear()
+        ..addAll(history.redoStack);
       _clearSelection();
       _scheduleDraftSave();
     });
   }
 
   void _applyDimensionsReset() {
-    final rows = int.tryParse(_rowsCtrl.text.trim());
-    final cols = int.tryParse(_colsCtrl.text.trim());
-    if (rows == null || cols == null) return;
-    if (rows < 1 || cols < 1 || rows > _maxSize || cols > _maxSize) return;
+    final resetGrid = ExpertCellarEditorHelper.buildResetGrid(
+      rowsText: _rowsCtrl.text,
+      colsText: _colsCtrl.text,
+      maxGridSize: _maxSize,
+    );
+    if (resetGrid == null) return;
 
     setState(() {
-      _grid = List<List<bool>>.generate(
-        rows,
-        (_) => List<bool>.filled(cols, true),
-        growable: true,
-      );
+      _grid = resetGrid;
       _undoStack.clear();
       _redoStack.clear();
       _clearSelection();
@@ -383,24 +364,14 @@ class _ExpertCellarEditorScreenState
   }
 
   Set<CellarCellPosition> _extractEmptyCells(List<List<bool>> grid) {
-    final cells = <CellarCellPosition>{};
-    for (var row = 0; row < grid.length; row++) {
-      for (var col = 0; col < grid[row].length; col++) {
-        if (!grid[row][col]) {
-          cells.add(CellarCellPosition(row: row + 1, col: col + 1));
-        }
-      }
-    }
-    return cells;
+    return ExpertCellarEditorHelper.extractEmptyCells(grid);
   }
 
   Future<void> _validateAndSave() async {
     final rows = _grid.length;
     final cols = _grid.first.length;
     final emptyCells = _extractEmptyCells(_grid);
-    final total = rows * cols;
-    final emptyCount = emptyCells.length;
-    final activeCount = total - emptyCount;
+    final summaryLines = ExpertCellarEditorHelper.validationSummaryLines(_grid);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -410,9 +381,7 @@ class _ExpertCellarEditorScreenState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Dimensions: $rows x $cols'),
-            Text('Casiers actifs: $activeCount'),
-            Text('Zones vides: $emptyCount'),
+            for (final line in summaryLines) Text(line),
           ],
         ),
         actions: [
@@ -430,21 +399,20 @@ class _ExpertCellarEditorScreenState
 
     if (confirmed != true) return;
 
-    final name = _nameCtrl.text.trim();
-    final effectiveName = name.isNotEmpty
-        ? name
+    final effectiveName = ExpertCellarEditorHelper.normalizeCellarName(
+          _nameCtrl.text,
+        )
+        .isNotEmpty
+        ? ExpertCellarEditorHelper.normalizeCellarName(_nameCtrl.text)
         : await _generateDefaultCellarName();
 
     final base = widget.sourceCellar;
-    final entity = VirtualCellarEntity(
-      id: base?.id,
-      name: effectiveName,
-      rows: rows,
-      columns: cols,
-      emptyCells: emptyCells,
+    final entity = ExpertCellarEditorHelper.buildValidatedCellarEntity(
+      grid: _grid,
+      effectiveName: effectiveName,
       theme: _theme,
-      createdAt: base?.createdAt,
-      updatedAt: DateTime.now(),
+      now: DateTime.now(),
+      sourceCellar: base,
     );
 
     final result = base?.id == null
@@ -628,7 +596,11 @@ class _ExpertCellarEditorScreenState
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '$rows x $cols - ${selectedCells.length} selection',
+                  ExpertCellarEditorHelper.selectionSummaryLabel(
+                    rows: rows,
+                    cols: cols,
+                    selectedCount: selectedCells.length,
+                  ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -655,8 +627,10 @@ class _ExpertCellarEditorScreenState
   }
 
   Widget _buildSelectionToolbar() {
-    final rowSelected = _selectionType == _SelectionType.row;
-    final colSelected = _selectionType == _SelectionType.column;
+    final rowSelected =
+      ExpertCellarEditorHelper.shouldShowRowActions(_selectionState);
+    final colSelected =
+      ExpertCellarEditorHelper.shouldShowColumnActions(_selectionState);
 
     return SizedBox(
       height: 48,
@@ -725,9 +699,7 @@ class _ExpertCellarEditorScreenState
               GestureDetector(
                 onTap: () {
                   setState(() {
-                    _clearSelection();
-                    _selectionType = _SelectionType.column;
-                    _selectedCol = col;
+                    _selectionState = ExpertSelectionState.column(col);
                   });
                 },
                 child: Container(
@@ -737,8 +709,8 @@ class _ExpertCellarEditorScreenState
                   margin: const EdgeInsets.all(1),
                   decoration: BoxDecoration(
                     color:
-                        _selectionType == _SelectionType.column &&
-                            _selectedCol == col
+                      _selectionState.type == ExpertSelectionType.column &&
+                        _selectionState.selectedCol == col
                         ? Theme.of(context).colorScheme.primaryContainer
                         : Theme.of(context).colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(6),
@@ -754,9 +726,7 @@ class _ExpertCellarEditorScreenState
               GestureDetector(
                 onTap: () {
                   setState(() {
-                    _clearSelection();
-                    _selectionType = _SelectionType.row;
-                    _selectedRow = row;
+                    _selectionState = ExpertSelectionState.row(row);
                   });
                 },
                 child: Container(
@@ -766,8 +736,8 @@ class _ExpertCellarEditorScreenState
                   margin: const EdgeInsets.all(1),
                   decoration: BoxDecoration(
                     color:
-                        _selectionType == _SelectionType.row &&
-                            _selectedRow == row
+                      _selectionState.type == ExpertSelectionType.row &&
+                        _selectionState.selectedRow == row
                         ? Theme.of(context).colorScheme.primaryContainer
                         : Theme.of(context).colorScheme.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(6),
@@ -820,89 +790,5 @@ class _ExpertCellarEditorScreenState
               ),
       ),
     );
-  }
-}
-
-class _DraftPayload {
-  final String name;
-  final int rows;
-  final int cols;
-  final Set<CellarCellPosition> emptyCells;
-
-  const _DraftPayload({
-    required this.name,
-    required this.rows,
-    required this.cols,
-    required this.emptyCells,
-  });
-
-  List<List<bool>> toGrid() {
-    final grid = List<List<bool>>.generate(
-      rows,
-      (_) => List<bool>.filled(cols, true),
-      growable: true,
-    );
-    for (final cell in emptyCells) {
-      final row = cell.row - 1;
-      final col = cell.col - 1;
-      if (row >= 0 && row < rows && col >= 0 && col < cols) {
-        grid[row][col] = false;
-      }
-    }
-    return grid;
-  }
-
-  String toJsonString() {
-    return jsonEncode({
-      'name': name,
-      'rows': rows,
-      'cols': cols,
-      'emptyCells': emptyCells
-          .map((cell) => {'row': cell.row, 'col': cell.col})
-          .toList(growable: false),
-    });
-  }
-
-  static _DraftPayload? tryParse(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return null;
-      final name = (decoded['name'] ?? '').toString();
-      final rows = decoded['rows'] is int
-          ? decoded['rows'] as int
-          : int.tryParse((decoded['rows'] ?? '').toString());
-      final cols = decoded['cols'] is int
-          ? decoded['cols'] as int
-          : int.tryParse((decoded['cols'] ?? '').toString());
-
-      if (rows == null || cols == null || rows < 1 || cols < 1) {
-        return null;
-      }
-
-      final empty = <CellarCellPosition>{};
-      final list = decoded['emptyCells'];
-      if (list is List) {
-        for (final item in list) {
-          if (item is! Map) continue;
-          final row = item['row'] is int
-              ? item['row'] as int
-              : int.tryParse((item['row'] ?? '').toString());
-          final col = item['col'] is int
-              ? item['col'] as int
-              : int.tryParse((item['col'] ?? '').toString());
-          if (row == null || col == null || row < 1 || col < 1) continue;
-          empty.add(CellarCellPosition(row: row, col: col));
-        }
-      }
-
-      return _DraftPayload(
-        name: name,
-        rows: rows,
-        cols: cols,
-        emptyCells: empty,
-      );
-    } catch (_) {
-      return null;
-    }
   }
 }

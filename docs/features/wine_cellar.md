@@ -31,7 +31,7 @@ Elle porte la gestion des vins, l'import/export et les caves virtuelles.
 | `domain/usecases/` | CRUD vin, import/export, caves virtuelles, placements |
 | `data/repositories/` | implémentations Drift des repositories |
 | `presentation/screens/` | liste, détail, ajout, édition, caves virtuelles, éditeur expert |
-| `presentation/helpers/` | `wine_list_screen_helper.dart`, `wine_detail_screen_helper.dart`, `virtual_cellar_detail_helper.dart`, `virtual_cellar_list_helper.dart` |
+| `presentation/helpers/` | `expert_cellar_editor_helper.dart`, `wine_list_screen_helper.dart`, `wine_detail_screen_helper.dart`, `virtual_cellar_detail_helper.dart`, `virtual_cellar_list_helper.dart` |
 | `presentation/providers/` | `wine_list_provider.dart`, `bottle_move_state_provider.dart` |
 | `presentation/widgets/` | cartes vin, wrappers visuels de cave, UI d'import CSV |
 

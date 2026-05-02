@@ -279,6 +279,7 @@ Providers Riverpod déclaratifs :
 - FAB → navigue vers `/cellar/add` pour choisir IA ou saisie manuelle
 
 #### `presentation/helpers/`
+- `expert_cellar_editor_helper.dart` — construction de grille, brouillon expert, sélection de cellules/lignes/colonnes, insertion/suppression, undo/redo, remise à zéro des dimensions et construction du cellier validé du mode expert
 - `wine_list_screen_helper.dart` — décisions de layout liste/master-detail, évolution du filtre de recherche, filtrage/sort client, libellés de chips et état vide
 - `wine_detail_screen_helper.dart` — formatage des champs, indicateurs IA, résumés de placement en cave, libellés de quantité et décisions des parcours quantité/suppression du détail d'un vin
 - `virtual_cellar_list_helper.dart` — génération des noms par défaut, libellés du formulaire de création/édition, textes de renommage/suppression et résumé des cartes de celliers
