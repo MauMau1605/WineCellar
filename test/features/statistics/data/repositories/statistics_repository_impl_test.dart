@@ -170,6 +170,116 @@ void main() {
     expect(white.percentage, 25.0);
   });
 
+  test('pondère correctement prix, notes et buckets par quantité', () async {
+    final wines = [
+      makeWine(
+        name: 'Entrée',
+        quantity: 2,
+        purchasePrice: 4.0,
+        rating: 5,
+        producer: 'Prod A',
+      ),
+      makeWine(
+        name: 'Milieu',
+        quantity: 1,
+        purchasePrice: 12.0,
+        rating: 2,
+        producer: 'Prod B',
+      ),
+      makeWine(
+        name: 'Haut',
+        quantity: 3,
+        purchasePrice: 40.0,
+        producer: 'Prod C',
+      ),
+    ];
+
+    when(() => wineRepository.getAllWines()).thenAnswer((_) async => wines);
+
+    final stats = await repository.getCellarStatistics();
+
+    expect(stats.overview.totalBottles, 6);
+    expect(stats.overview.totalValue, 140.0);
+    expect(stats.overview.averagePrice, closeTo(140 / 6, 0.0001));
+    expect(stats.overview.averageRating, closeTo(4.0, 0.0001));
+
+    expect(stats.priceStats.hasData, isTrue);
+    expect(stats.priceStats.minPrice, 4.0);
+    expect(stats.priceStats.maxPrice, 40.0);
+    expect(stats.priceStats.averagePrice, closeTo(140 / 6, 0.0001));
+    expect(stats.priceStats.medianPrice, 26.0);
+    expect(stats.priceStats.totalValue, 140.0);
+    expect(
+      stats.priceStats.priceRanges.map((range) => range.label).toList(),
+      ['0 – 5 €', '10 – 15 €', '30 – 50 €'],
+    );
+    expect(
+      stats.priceStats.priceRanges.map((range) => range.bottles).toList(),
+      [2, 1, 3],
+    );
+
+    expect(stats.ratingDistribution[0].bottles, 0);
+    expect(stats.ratingDistribution[1].bottles, 0);
+    expect(stats.ratingDistribution[2].bottles, 1);
+    expect(stats.ratingDistribution[3].bottles, 0);
+    expect(stats.ratingDistribution[4].bottles, 0);
+    expect(stats.ratingDistribution[5].bottles, 2);
+  });
+
+  test('calcule la maturité et nettoie les cépages vides ou espacés', () async {
+    final currentYear = DateTime.now().year;
+    final wines = [
+      makeWine(
+        name: 'Inconnu',
+        quantity: 5,
+        grapeVarieties: const ['  Merlot  ', '', '  '],
+      ),
+      makeWine(
+        name: 'Jeune',
+        quantity: 4,
+        drinkFromYear: currentYear + 1,
+      ),
+      makeWine(
+        name: 'Apogee',
+        quantity: 3,
+        drinkFromYear: currentYear - 10,
+        drinkUntilYear: currentYear + 1,
+        grapeVarieties: const ['Cabernet Franc'],
+      ),
+      makeWine(
+        name: 'Pret',
+        quantity: 2,
+        drinkFromYear: currentYear - 5,
+        drinkUntilYear: currentYear + 5,
+        grapeVarieties: const ['Merlot'],
+      ),
+      makeWine(
+        name: 'Passe',
+        quantity: 1,
+        drinkUntilYear: currentYear - 1,
+      ),
+    ];
+
+    when(() => wineRepository.getAllWines()).thenAnswer((_) async => wines);
+
+    final stats = await repository.getCellarStatistics();
+
+    expect(
+      stats.maturityDistribution.map((stat) => stat.maturityName).toList(),
+      ['Inconnu', 'Trop jeune', 'À son apogée', 'Prêt à boire', 'Passé'],
+    );
+    expect(
+      stats.maturityDistribution.map((stat) => stat.bottles).toList(),
+      [5, 4, 3, 2, 1],
+    );
+
+    expect(stats.grapeDistribution, hasLength(2));
+    expect(stats.grapeDistribution[0].grape, 'Merlot');
+    expect(stats.grapeDistribution[0].bottles, 7);
+    expect(stats.grapeDistribution[1].grape, 'Cabernet Franc');
+    expect(stats.grapeDistribution[1].bottles, 3);
+  });
+
   test('trie les distributions par ordre décroissant', () async {
     final wines = [
       makeWine(
