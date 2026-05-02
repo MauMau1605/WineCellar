@@ -176,7 +176,6 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Rechercher...',
                 hintText: WineListScreenHelper.searchHint,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty

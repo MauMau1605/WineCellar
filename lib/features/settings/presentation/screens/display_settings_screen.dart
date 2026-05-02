@@ -122,10 +122,10 @@ class DisplaySettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 SwitchListTile(
-                  title: const Text(
+                  title: Text(
                     DisplaySettingsOptionsHelper.lastConsumptionYearAlert.title,
                   ),
-                  subtitle: const Text(
+                  subtitle: Text(
                     DisplaySettingsOptionsHelper
                         .lastConsumptionYearAlert.subtitle,
                   ),
@@ -138,11 +138,11 @@ class DisplaySettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 0),
                 SwitchListTile(
-                  title: const Text(
+                  title: Text(
                     DisplaySettingsOptionsHelper
                         .pastOptimalConsumptionAlert.title,
                   ),
-                  subtitle: const Text(
+                  subtitle: Text(
                     DisplaySettingsOptionsHelper
                         .pastOptimalConsumptionAlert.subtitle,
                   ),

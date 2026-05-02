@@ -35,10 +35,9 @@ class DeveloperScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           Card(
             child: ListTile(
-              leading: const Icon(DeveloperScreenHelper.reevaluationTool.icon),
-              title: const Text(DeveloperScreenHelper.reevaluationTool.title),
-              subtitle:
-                  const Text(DeveloperScreenHelper.reevaluationTool.subtitle),
+              leading: Icon(DeveloperScreenHelper.reevaluationTool.icon),
+              title: Text(DeveloperScreenHelper.reevaluationTool.title),
+              subtitle: Text(DeveloperScreenHelper.reevaluationTool.subtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
                   context.push(DeveloperScreenHelper.reevaluationTool.route!),

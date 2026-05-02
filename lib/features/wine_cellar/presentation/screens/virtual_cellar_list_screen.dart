@@ -421,11 +421,7 @@ class VirtualCellarListScreen extends ConsumerWidget {
                   }
 
                   Navigator.of(ctx).pop();
-            return Center(
-              child: Text(
-                '${VirtualCellarListHelper.cellarsNotFoundErrorPrefix}${snapshot.error}',
-              ),
-            );
+                  await onConfirm(name, rows, cols, theme);
                 },
                 child: Text(confirmLabel),
               ),
