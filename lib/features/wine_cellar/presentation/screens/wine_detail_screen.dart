@@ -9,6 +9,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_e
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
+import 'package:wine_cellar/features/wine_cellar/presentation/helpers/wine_detail_screen_helper.dart';
 
 /// Detail screen for a single wine
 class WineDetailScreen extends ConsumerStatefulWidget {
@@ -113,8 +114,12 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     final wine = _wine;
     if (wine == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Vin non trouvé')),
-        body: const Center(child: Text('Ce vin n\'existe pas.')),
+        appBar: AppBar(
+          title: const Text(WineDetailScreenHelper.notFoundTitle),
+        ),
+        body: const Center(
+          child: Text(WineDetailScreenHelper.notFoundMessage),
+        ),
       );
     }
 
@@ -149,15 +154,27 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
 
             // Wine details sections
             _buildSection(context, 'Informations', [
-              _buildInfoRow('Appellation', _displayValue(wine.appellation)),
-              _buildInfoRow('Producteur', _displayValue(wine.producer)),
-              _buildInfoRow('Région', _displayValue(wine.region)),
+              _buildInfoRow(
+                'Appellation',
+                WineDetailScreenHelper.displayValue(wine.appellation),
+              ),
+              _buildInfoRow(
+                'Producteur',
+                WineDetailScreenHelper.displayValue(wine.producer),
+              ),
+              _buildInfoRow(
+                'Région',
+                WineDetailScreenHelper.displayValue(wine.region),
+              ),
               _buildInfoRow('Pays', wine.country),
               _buildInfoRow(
                 'Couleur',
                 '${wine.color.emoji} ${wine.color.label}',
               ),
-              _buildInfoRow('Millésime', _displayInt(wine.vintage)),
+              _buildInfoRow(
+                'Millésime',
+                WineDetailScreenHelper.displayInt(wine.vintage),
+              ),
               _buildInfoRow(
                 'Cépages',
                 wine.grapeVarieties.isEmpty
@@ -169,13 +186,16 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             _buildSection(context, 'Garde', [
               _buildInfoRow(
                 'À boire à partir de',
-                _displayInt(wine.drinkFromYear),
-                aiSuggested: _isAiSuggestedGuardValue(wine, wine.drinkFromYear),
+                WineDetailScreenHelper.displayInt(wine.drinkFromYear),
+                aiSuggested: WineDetailScreenHelper.isAiSuggestedGuardValue(
+                  wine,
+                  wine.drinkFromYear,
+                ),
               ),
               _buildInfoRow(
                 'À boire jusqu\'à',
-                _displayInt(wine.drinkUntilYear),
-                aiSuggested: _isAiSuggestedGuardValue(
+                WineDetailScreenHelper.displayInt(wine.drinkUntilYear),
+                aiSuggested: WineDetailScreenHelper.isAiSuggestedGuardValue(
                   wine,
                   wine.drinkUntilYear,
                 ),
@@ -184,11 +204,11 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 'Statut',
                 '${wine.maturity.emoji} ${wine.maturity.label}',
               ),
-              if (_isAiGuardInfoPresent(wine))
+              if (WineDetailScreenHelper.isAiGuardInfoPresent(wine))
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    '🤖 = information proposée par l\'IA',
+                    WineDetailScreenHelper.aiGuardInfoText,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                       fontStyle: FontStyle.italic,
@@ -211,7 +231,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               if (_pairings.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 4),
-                  child: Text('Aucune proposition disponible.'),
+                  child: Text(WineDetailScreenHelper.noFoodPairingText),
                 )
               else
                 Padding(
@@ -234,7 +254,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    '🤖 = accord proposé par l\'IA',
+                    WineDetailScreenHelper.aiFoodPairingText,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.outline,
                       fontStyle: FontStyle.italic,
@@ -247,7 +267,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
-                  _displayValue(wine.tastingNotes),
+                  WineDetailScreenHelper.displayValue(wine.tastingNotes),
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -257,7 +277,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
-                  _displayValue(wine.aiDescription),
+                  WineDetailScreenHelper.displayValue(wine.aiDescription),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontStyle: FontStyle.italic,
                   ),
@@ -283,7 +303,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             heroTag: 'qty',
             onPressed: null,
             label: Text(
-              '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}',
+              WineDetailScreenHelper.quantityFabLabel(wine.quantity),
             ),
           ),
           const SizedBox(width: 8),
@@ -404,19 +424,13 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     );
   }
 
-  String _displayValue(String? value) {
-    if (value == null) return '';
-    return value.trim();
-  }
-
-  String _displayInt(int? value) {
-    return value?.toString() ?? '';
-  }
-
   Widget _buildCellarSection(BuildContext context, WineEntity wine) {
     final theme = Theme.of(context);
     final placedCount = _placements.length;
-    final unplacedCount = wine.quantity - placedCount;
+    final unplacedCount = WineDetailScreenHelper.unplacedCount(
+      totalQuantity: wine.quantity,
+      placedCount: placedCount,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -432,33 +446,33 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
           const Divider(),
           _buildInfoRow(
             'Quantité',
-            '${wine.quantity} bouteille${wine.quantity > 1 ? 's' : ''}',
+            WineDetailScreenHelper.quantityLabel(wine.quantity),
           ),
           _buildInfoRow(
             'Prix d\'achat',
-            wine.purchasePrice != null
-                ? '${wine.purchasePrice!.toStringAsFixed(2)} €'
-                : '',
+            WineDetailScreenHelper.purchasePriceLabel(wine.purchasePrice),
           ),
           _buildInfoRow(
             'Note',
-            wine.rating != null
-                ? '${'★' * wine.rating!}${'☆' * (5 - wine.rating!)}'
-                : '',
+            WineDetailScreenHelper.ratingLabel(wine.rating),
           ),
-          _buildInfoRow('Localisation', _displayValue(wine.location)),
+          _buildInfoRow(
+            'Localisation',
+            WineDetailScreenHelper.displayValue(wine.location),
+          ),
           _buildInfoRow(
             'Bouteilles placées',
-            '$placedCount / ${wine.quantity}',
+            WineDetailScreenHelper.placedBottlesLabel(
+              placedCount,
+              wine.quantity,
+            ),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  placedCount == 0
-                      ? 'Aucune bouteille placée en cellier.'
-                      : 'Afficher les emplacements en cave',
+                  WineDetailScreenHelper.placementsSummaryText(placedCount),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
                     fontStyle: placedCount == 0
@@ -467,7 +481,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                   ),
                 ),
               ),
-              if (placedCount > 0)
+              if (WineDetailScreenHelper.shouldShowPlacementsButton(
+                placedCount,
+              ))
                 TextButton.icon(
                   onPressed: () => _showPlacementsDialog(context, wine),
                   icon: const Icon(Icons.visibility_outlined, size: 16),
@@ -475,7 +491,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 ),
             ],
           ),
-          if (unplacedCount > 0) ...[
+          if (WineDetailScreenHelper.shouldShowPlaceInCellarButton(
+            totalQuantity: wine.quantity,
+            placedCount: placedCount,
+          )) ...[
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
@@ -483,9 +502,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 onPressed: () => _showPlaceInCellarFlow(wine),
                 icon: const Icon(Icons.grid_view_outlined),
                 label: Text(
-                  unplacedCount == wine.quantity
-                      ? 'Placer en cave'
-                      : 'Placer les $unplacedCount bouteille(s) non placée(s)',
+                  WineDetailScreenHelper.placeInCellarButtonLabel(
+                    totalQuantity: wine.quantity,
+                    placedCount: placedCount,
+                  ),
                 ),
               ),
             ),
@@ -538,7 +558,7 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                 leading: const Icon(Icons.grid_view_outlined),
                 title: Text(cellar.name),
                 subtitle: Text(
-                  '${cellar.rows} × ${cellar.columns} — ${cellar.totalSlots} emplacements',
+                  WineDetailScreenHelper.cellarChoiceSubtitle(cellar),
                 ),
                 onTap: () => Navigator.of(ctx).pop(cellar),
               );
@@ -577,7 +597,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Placements de ${wine.displayName}'),
+        title: Text(
+          WineDetailScreenHelper.placementsDialogTitle(wine.displayName),
+        ),
         content: SizedBox(
           width: 720,
           child: SingleChildScrollView(
@@ -598,7 +620,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '${cellar.name} - ${cellarPlacements.length} bouteille(s)',
+                              WineDetailScreenHelper.cellarPlacementHeader(
+                                cellar.name,
+                                cellarPlacements.length,
+                              ),
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
                           ),
@@ -698,17 +723,6 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
         ),
       ),
     );
-  }
-
-  bool _isAiSuggestedGuardValue(WineEntity wine, int? value) {
-    if (value == null) return false;
-    return (value == wine.drinkFromYear && wine.aiSuggestedDrinkFromYear) ||
-        (value == wine.drinkUntilYear && wine.aiSuggestedDrinkUntilYear);
-  }
-
-  bool _isAiGuardInfoPresent(WineEntity wine) {
-    return (wine.drinkFromYear != null && wine.aiSuggestedDrinkFromYear) ||
-        (wine.drinkUntilYear != null && wine.aiSuggestedDrinkUntilYear);
   }
 
   Future<void> _navigateToEdit(WineEntity wine) async {
@@ -824,55 +838,62 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   Future<void> _updateQuantity(WineEntity wine, int newQty) async {
     if (wine.id == null) return;
 
-    if (newQty >= 0 && _placements.length > newQty && _placements.isNotEmpty) {
-      final mustChoose = _placements.length == wine.quantity;
-      if (mustChoose) {
-        final toRemove = await _askWhichPlacedBottleWasRemoved(context);
-        if (toRemove == null) return;
-        await ref.read(removeBottlePlacementUseCaseProvider).call(toRemove.id);
-      }
+    if (WineDetailScreenHelper.shouldAskWhichPlacedBottleWasRemoved(
+      currentQuantity: wine.quantity,
+      newQuantity: newQty,
+      placedCount: _placements.length,
+    )) {
+      final toRemove = await _askWhichPlacedBottleWasRemoved(context);
+      if (toRemove == null) return;
+      await ref.read(removeBottlePlacementUseCaseProvider).call(toRemove.id);
     }
 
     if (!mounted) return;
 
-    if (newQty <= 0) {
-      // Ask user if they want to delete when quantity reaches 0
+    if (WineDetailScreenHelper.shouldPromptForZeroQuantity(newQty)) {
       final action = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Dernière bouteille !'),
+          title: const Text(WineDetailScreenHelper.zeroQuantityDialogTitle),
           content: Text(
-            'La quantité de "${wine.displayName}" va passer à 0.\n'
-            'Que souhaitez-vous faire ?',
+            WineDetailScreenHelper.zeroQuantityDialogContent(
+              wine.displayName,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop('cancel'),
-              child: const Text('Annuler'),
+              child: const Text(
+                WineDetailScreenHelper.zeroQuantityCancelLabel,
+              ),
             ),
             OutlinedButton(
               onPressed: () => Navigator.of(ctx).pop('zero'),
-              child: const Text('Garder à 0'),
+              child: const Text(WineDetailScreenHelper.zeroQuantityKeepLabel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop('delete'),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Supprimer'),
+              child: const Text(
+                WineDetailScreenHelper.zeroQuantityDeleteLabel,
+              ),
             ),
           ],
         ),
       );
 
-      if (!mounted || action == null || action == 'cancel') return;
+      if (!mounted || WineDetailScreenHelper.shouldAbortQuantityUpdate(action)) {
+        return;
+      }
 
       final useCase = ref.read(updateWineQuantityUseCaseProvider);
       final params = UpdateQuantityParams(
         wineId: wine.id!,
         newQuantity: newQty,
       );
-      final zeroAction = action == 'delete'
-          ? ZeroQuantityAction.delete
-          : ZeroQuantityAction.keep;
+      final zeroAction = WineDetailScreenHelper.zeroQuantityActionFromChoice(
+        action!,
+      );
 
       final result = await useCase.callWithAction(params, zeroAction);
       result.fold(
@@ -884,16 +905,27 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
           }
         },
         (_) {
-          if (mounted && action == 'delete') {
+          if (mounted &&
+              WineDetailScreenHelper.shouldNavigateAfterZeroQuantityChoice(
+                action,
+              )) {
             ScaffoldMessenger.of(
               context,
-            ).showSnackBar(const SnackBar(content: Text('Vin supprimé')));
+            ).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  WineDetailScreenHelper.deleteWineSuccessMessage,
+                ),
+              ),
+            );
             context.go('/cellar');
             return;
           }
         },
       );
-      if (action == 'delete') return;
+      if (WineDetailScreenHelper.shouldNavigateAfterZeroQuantityChoice(action)) {
+        return;
+      }
       // action == 'zero': continue to reload
     } else {
       final useCase = ref.read(updateWineQuantityUseCaseProvider);
@@ -912,7 +944,9 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     return showDialog<BottlePlacementEntity>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Quelle bouteille a été retirée ?'),
+        title: const Text(
+          WineDetailScreenHelper.removePlacedBottleDialogTitle,
+        ),
         content: SizedBox(
           width: 500,
           child: ListView.builder(
@@ -920,14 +954,15 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             itemCount: _placements.length,
             itemBuilder: (context, index) {
               final placement = _placements[index];
-              final cellarName =
-                  _cellarsById[placement.cellarId]?.name ??
-                  'Cellier ${placement.cellarId}';
+              final cellarName = WineDetailScreenHelper.removedBottleCellarName(
+                placement,
+                _cellarsById[placement.cellarId]?.name,
+              );
               return ListTile(
                 leading: const Icon(Icons.place_outlined),
                 title: Text(cellarName),
                 subtitle: Text(
-                  'Rangée ${placement.positionY + 1}, Colonne ${placement.positionX + 1}',
+                  WineDetailScreenHelper.placementPositionText(placement),
                 ),
                 onTap: () => Navigator.of(dialogContext).pop(placement),
               );
@@ -948,8 +983,10 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer ce vin ?'),
-        content: Text('Voulez-vous vraiment supprimer "${wine.displayName}" ?'),
+        title: const Text(WineDetailScreenHelper.deleteWineDialogTitle),
+        content: Text(
+          WineDetailScreenHelper.deleteWineDialogContent(wine.displayName),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -978,7 +1015,11 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
           if (mounted) {
             ScaffoldMessenger.of(
               context,
-            ).showSnackBar(const SnackBar(content: Text('Vin supprimé')));
+            ).showSnackBar(
+              const SnackBar(
+                content: Text(WineDetailScreenHelper.deleteWineSuccessMessage),
+              ),
+            );
             context.go('/cellar');
           }
         },
