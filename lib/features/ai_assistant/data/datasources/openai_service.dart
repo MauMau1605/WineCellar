@@ -7,10 +7,21 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
+typedef OpenAiChatCompletionRunner = Future<String> Function({
+  required String model,
+  required List<OpenAIChatCompletionChoiceMessageModel> messages,
+  required double temperature,
+  required int maxTokens,
+});
+
+typedef OpenAiDioFactory = Dio Function(BaseOptions options);
+
 /// OpenAI implementation of the AI service
 class OpenAiService implements AiService {
   final String apiKey;
   final String model;
+  final OpenAiChatCompletionRunner? _chatCompletionRunner;
+  final OpenAiDioFactory? _dioFactory;
   final Logger _logger = Logger();
   String? _discoveredVisionModel;
 
@@ -27,7 +38,10 @@ class OpenAiService implements AiService {
   OpenAiService({
     required this.apiKey,
     this.model = 'gpt-4o-mini',
-  }) {
+    OpenAiChatCompletionRunner? chatCompletionRunner,
+    OpenAiDioFactory? dioFactory,
+  })  : _chatCompletionRunner = chatCompletionRunner,
+        _dioFactory = dioFactory {
     OpenAI.apiKey = apiKey;
   }
 
@@ -76,18 +90,12 @@ class OpenAiService implements AiService {
         ),
       );
 
-      final response = await OpenAI.instance.chat.create(
+      final textResponse = await _runChatCompletionText(
         model: model,
         messages: messages,
-        temperature: 0.3, // Low temperature for more consistent structured output
+        temperature: 0.3,
         maxTokens: _structuredOutputMaxTokens,
       );
-
-      final textResponse = response.choices.first.message.content
-              ?.map((item) => item.text)
-              .where((text) => text != null)
-              .join('') ??
-          '';
 
       // Extract JSON from response
       final wineDataList = _extractWineData(textResponse);
@@ -205,7 +213,7 @@ class OpenAiService implements AiService {
       ],
     });
 
-    final dio = Dio(
+    final dio = _createDio(
       BaseOptions(
         baseUrl: 'https://api.openai.com',
         connectTimeout: const Duration(seconds: 30),
@@ -243,7 +251,7 @@ class OpenAiService implements AiService {
   Future<String?> _discoverVisionModel() async {
     if (_discoveredVisionModel != null) return _discoveredVisionModel;
 
-    final dio = Dio(
+    final dio = _createDio(
       BaseOptions(
         baseUrl: 'https://api.openai.com',
         connectTimeout: const Duration(seconds: 20),
@@ -325,7 +333,7 @@ class OpenAiService implements AiService {
   @override
   Future<bool> testConnection() async {
     try {
-      final response = await OpenAI.instance.chat.create(
+      await _runChatCompletionText(
         model: model,
         messages: [
           OpenAIChatCompletionChoiceMessageModel(
@@ -335,13 +343,47 @@ class OpenAiService implements AiService {
             ],
           ),
         ],
+        temperature: 0,
         maxTokens: 5,
       );
-      return response.choices.isNotEmpty;
+      return true;
     } catch (e) {
       _logger.e('OpenAI connection test failed', error: e);
       return false;
     }
+  }
+
+  Future<String> _runChatCompletionText({
+    required String model,
+    required List<OpenAIChatCompletionChoiceMessageModel> messages,
+    required double temperature,
+    required int maxTokens,
+  }) async {
+    if (_chatCompletionRunner != null) {
+      return _chatCompletionRunner!(
+        model: model,
+        messages: messages,
+        temperature: temperature,
+        maxTokens: maxTokens,
+      );
+    }
+
+    final response = await OpenAI.instance.chat.create(
+      model: model,
+      messages: messages,
+      temperature: temperature,
+      maxTokens: maxTokens,
+    );
+
+    return response.choices.first.message.content
+            ?.map((item) => item.text)
+            .where((text) => text != null)
+            .join('') ??
+        '';
+  }
+
+  Dio _createDio(BaseOptions options) {
+    return _dioFactory?.call(options) ?? Dio(options);
   }
 
   /// Extract JSON block from AI response text (supports {"wines":[...]} array and single object)

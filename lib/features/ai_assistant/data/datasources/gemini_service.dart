@@ -9,12 +9,15 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
+typedef GeminiDioFactory = Dio Function(BaseOptions options);
+
 /// Google Gemini implementation of the AI service
 class GeminiService implements AiService {
   final String apiKey;
   final String model;
+  final GeminiDioFactory? _dioFactory;
   final Logger _logger = Logger();
-  final ChatLogger _chatLogger = ChatLogger();
+  final ChatLogger? _chatLogger;
   static const String _fallbackModel = 'gemini-2.5-flash-lite';
   static const List<String> _preferredModels = [
     'gemini-2.5-flash-lite',
@@ -38,7 +41,10 @@ class GeminiService implements AiService {
   GeminiService({
     required this.apiKey,
     this.model = _fallbackModel,
-  }) {
+    GeminiDioFactory? dioFactory,
+    bool enableLogging = true,
+  })  : _dioFactory = dioFactory,
+        _chatLogger = enableLogging ? ChatLogger() : null {
     _model = GenerativeModel(
       model: model,
       apiKey: apiKey,
@@ -83,7 +89,7 @@ class GeminiService implements AiService {
     _totalRequests += 1;
     final rpm = _requestsInLastMinute();
 
-    _chatLogger.logApiCall(
+    _chatLogger?.logApiCall(
       provider: 'Gemini',
       model: modelName,
       requestSummary:
@@ -218,7 +224,7 @@ class GeminiService implements AiService {
   Future<String?> _discoverSupportedModel() async {
     if (_discoveredModel != null) return _discoveredModel;
 
-    final dio = Dio(
+    final dio = _createDio(
       BaseOptions(
         baseUrl: 'https://generativelanguage.googleapis.com',
         connectTimeout: const Duration(seconds: 15),
@@ -356,7 +362,7 @@ class GeminiService implements AiService {
     try {
       await _waitForRateLimit();
 
-      final dio = Dio(
+      final dio = _createDio(
         BaseOptions(
           baseUrl: 'https://generativelanguage.googleapis.com',
           connectTimeout: const Duration(seconds: 30),
@@ -533,5 +539,9 @@ class GeminiService implements AiService {
         .replaceAll(RegExp(r'<json>\s*[\s\S]*?\s*</json>'), '')
         .replaceAll(RegExp(r'```json\s*[\s\S]*?\s*```'), '')
         .trim();
+  }
+
+  Dio _createDio(BaseOptions options) {
+    return _dioFactory?.call(options) ?? Dio(options);
   }
 }

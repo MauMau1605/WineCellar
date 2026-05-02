@@ -14,7 +14,7 @@ class MistralService implements AiService {
   final String model;
   final Dio _dio;
   final Logger _logger = Logger();
-  final ChatLogger _chatLogger = ChatLogger();
+  final ChatLogger? _chatLogger;
   String? _discoveredVisionModel;
 
   static final List<DateTime> _requestTimestamps = <DateTime>[];
@@ -31,15 +31,19 @@ class MistralService implements AiService {
   MistralService({
     required this.apiKey,
     this.model = 'mistral-small-latest',
-  }) : _dio = Dio(BaseOptions(
-          baseUrl: 'https://api.mistral.ai',
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 120),
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-            'Content-Type': 'application/json',
-          },
-        ));
+    Dio? dio,
+    bool enableLogging = true,
+  })  : _dio = dio ??
+            Dio(BaseOptions(
+              baseUrl: 'https://api.mistral.ai',
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 120),
+              headers: {
+                'Authorization': 'Bearer $apiKey',
+                'Content-Type': 'application/json',
+              },
+            )),
+        _chatLogger = enableLogging ? ChatLogger() : null;
 
   /// Reset the conversation session
   @override
@@ -60,7 +64,7 @@ class MistralService implements AiService {
     _totalRequests += 1;
     final rpm = _requestsInLastMinute();
 
-    _chatLogger.logApiCall(
+    _chatLogger?.logApiCall(
       provider: 'Mistral',
       model: modelName,
       requestSummary:
