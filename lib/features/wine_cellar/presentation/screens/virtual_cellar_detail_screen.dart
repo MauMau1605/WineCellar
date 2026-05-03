@@ -51,6 +51,7 @@ class _VirtualCellarDetailScreenState
   _PendingPlacement? _pendingPlacement;
   _MoveUndoSnapshot? _lastMoveUndo;
   final Set<WineMaturity> _maturityFilters = <WineMaturity>{};
+  ProviderContainer? _providerContainer;
 
   @override
   void initState() {
@@ -59,11 +60,15 @@ class _VirtualCellarDetailScreenState
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _providerContainer ??= ProviderScope.containerOf(context, listen: false);
+  }
+
+  @override
   void dispose() {
-    // Clear immersive theme when leaving this screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(immersiveCellarThemeProvider.notifier).state = null;
-    });
+    _providerContainer?.read(immersiveCellarThemeProvider.notifier).state =
+        null;
     super.dispose();
   }
 
@@ -127,9 +132,7 @@ class _VirtualCellarDetailScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          VirtualCellarDetailHelper.preselectedPlacementTitle(
-            wine.displayName,
-          ),
+          VirtualCellarDetailHelper.preselectedPlacementTitle(wine.displayName),
         ),
         content: Text(
           VirtualCellarDetailHelper.preselectedPlacementContent(unplaced),
@@ -345,10 +348,12 @@ class _VirtualCellarDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final highlightLastConsumptionYear =
-        ref.watch(highlightLastConsumptionYearProvider);
-    final highlightPastOptimalConsumption =
-        ref.watch(highlightPastOptimalConsumptionProvider);
+    final highlightLastConsumptionYear = ref.watch(
+      highlightLastConsumptionYearProvider,
+    );
+    final highlightPastOptimalConsumption = ref.watch(
+      highlightPastOptimalConsumptionProvider,
+    );
 
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -453,55 +458,56 @@ class _VirtualCellarDetailScreenState
               VirtualCellarBackgroundKind.garage)
             const GarageIndustrialScreenBackground(),
           StreamBuilder<List<BottlePlacementEntity>>(
-        stream: ref
-            .watch(virtualCellarRepositoryProvider)
-            .watchPlacementsByCellarId(widget.cellarId),
-        builder: (context, snapshot) {
-          final placements = snapshot.data ?? const [];
-          final filteredPlacements = placements
-              .where(_matchesMaturityFilter)
-              .toList(growable: false);
-          _placedBottles = placements;
-          return Column(
-            children: [
-              _buildMaturityFilterBar(
-                context,
-                totalCount: placements.length,
-                visibleCount: filteredPlacements.length,
-              ),
-              Expanded(
-                child: _CellarGridView(
-                  cellar: cellar,
-                  visiblePlacements: filteredPlacements,
-                  allPlacements: placements,
-                  pendingPlacement: _pendingPlacement,
-                  onSlotTap: (row, col) =>
-                      _onSlotTap(context, cellar, placements, row, col),
-                  cellarId: widget.cellarId,
-                  highlightWineId: widget.highlightWineId,
-                  onLongPressPlacement: _onLongPressPlacement,
-                  onMovePlacement:
-                      ({
-                        required anchorPlacementId,
-                        required targetRow,
-                        required targetCol,
-                        required allPlacements,
-                      }) => _onMovePlacement(
-                        anchorPlacementId: anchorPlacementId,
-                        targetRow: targetRow,
-                        targetCol: targetCol,
-                        allPlacements: allPlacements,
-                        cellar: cellar,
-                      ),
-                  highlightLastConsumptionYear: highlightLastConsumptionYear,
-                  highlightPastOptimalConsumption:
-                      highlightPastOptimalConsumption,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+            stream: ref
+                .watch(virtualCellarRepositoryProvider)
+                .watchPlacementsByCellarId(widget.cellarId),
+            builder: (context, snapshot) {
+              final placements = snapshot.data ?? const [];
+              final filteredPlacements = placements
+                  .where(_matchesMaturityFilter)
+                  .toList(growable: false);
+              _placedBottles = placements;
+              return Column(
+                children: [
+                  _buildMaturityFilterBar(
+                    context,
+                    totalCount: placements.length,
+                    visibleCount: filteredPlacements.length,
+                  ),
+                  Expanded(
+                    child: _CellarGridView(
+                      cellar: cellar,
+                      visiblePlacements: filteredPlacements,
+                      allPlacements: placements,
+                      pendingPlacement: _pendingPlacement,
+                      onSlotTap: (row, col) =>
+                          _onSlotTap(context, cellar, placements, row, col),
+                      cellarId: widget.cellarId,
+                      highlightWineId: widget.highlightWineId,
+                      onLongPressPlacement: _onLongPressPlacement,
+                      onMovePlacement:
+                          ({
+                            required anchorPlacementId,
+                            required targetRow,
+                            required targetCol,
+                            required allPlacements,
+                          }) => _onMovePlacement(
+                            anchorPlacementId: anchorPlacementId,
+                            targetRow: targetRow,
+                            targetCol: targetCol,
+                            allPlacements: allPlacements,
+                            cellar: cellar,
+                          ),
+                      highlightLastConsumptionYear:
+                          highlightLastConsumptionYear,
+                      highlightPastOptimalConsumption:
+                          highlightPastOptimalConsumption,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -729,11 +735,12 @@ class _VirtualCellarDetailScreenState
     };
     final availableChoices =
         VirtualCellarDetailHelper.buildAvailableWineChoices(
-      allWines,
-      placedCountsByWineId,
-    );
+          allWines,
+          placedCountsByWineId,
+        );
     final availableCountByWineId = <int, int>{
-      for (final choice in availableChoices) choice.wine.id!: choice.unplacedCount,
+      for (final choice in availableChoices)
+        choice.wine.id!: choice.unplacedCount,
     };
     final availableWines = availableChoices
         .map((choice) => choice.wine)
@@ -761,7 +768,7 @@ class _VirtualCellarDetailScreenState
 
     final maxCount = availableCountByWineId[chosen.id!] ?? 1;
     final selectedCount =
-      VirtualCellarDetailHelper.shouldAskHowManyBottles(maxCount)
+        VirtualCellarDetailHelper.shouldAskHowManyBottles(maxCount)
         ? await _askHowManyBottlesToPlace(context, chosen, maxCount)
         : 1;
 
@@ -842,9 +849,7 @@ class _VirtualCellarDetailScreenState
     };
 
     if (occupied.contains((startRow, startCol))) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(VirtualCellarDetailHelper.occupiedSlotSnackBar),
         ),
@@ -948,9 +953,7 @@ class _VirtualCellarDetailScreenState
           context.push('/cellar/wine/${pending.returnToWineId}');
         }
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(VirtualCellarDetailHelper.placementFinishedSnackBar),
           ),
@@ -975,9 +978,7 @@ class _VirtualCellarDetailScreenState
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text(
-                VirtualCellarDetailHelper.placeNextBottleLabel,
-              ),
+              child: const Text(VirtualCellarDetailHelper.placeNextBottleLabel),
             ),
           ],
         ),
@@ -1119,8 +1120,7 @@ class _VirtualCellarDetailScreenState
                     builder: (c2) => AlertDialog(
                       title: const Text('Attention'),
                       content: Text(
-                        VirtualCellarDetailHelper
-                            .displacedBottlesWarningContent(
+                        VirtualCellarDetailHelper.displacedBottlesWarningContent(
                           displaced.length,
                         ),
                       ),
@@ -1209,10 +1209,7 @@ class _VirtualCellarDetailScreenState
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(
-            VirtualCellarDetailHelper.insertPositionDialogTitle(
-              type,
-              addCount,
-            ),
+            VirtualCellarDetailHelper.insertPositionDialogTitle(type, addCount),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1226,19 +1223,21 @@ class _VirtualCellarDetailScreenState
               const SizedBox(height: 16),
               SingleChildScrollView(
                 child: Column(
-                  children: VirtualCellarDetailHelper.buildInsertPositionOptions(
-                    type,
-                    currentCount,
-                  )
-                      .map(
-                        (option) => _InsertPositionTile(
-                          title: option.title,
-                          selected: selectedPosition == option.position,
-                          onTap: () =>
-                              setState(() => selectedPosition = option.position),
-                        ),
-                      )
-                      .toList(growable: false),
+                  children:
+                      VirtualCellarDetailHelper.buildInsertPositionOptions(
+                            type,
+                            currentCount,
+                          )
+                          .map(
+                            (option) => _InsertPositionTile(
+                              title: option.title,
+                              selected: selectedPosition == option.position,
+                              onTap: () => setState(
+                                () => selectedPosition = option.position,
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
                 ),
               ),
             ],
@@ -1274,12 +1273,12 @@ class _VirtualCellarDetailScreenState
   ) async {
     final reindexedPlacements =
         VirtualCellarDetailHelper.buildReindexedPlacements(
-      placements: _placedBottles,
-      rowInsertPos: rowInsertPos,
-      colInsertPos: colInsertPos,
-      addedRows: addedRows,
-      addedCols: addedCols,
-    );
+          placements: _placedBottles,
+          rowInsertPos: rowInsertPos,
+          colInsertPos: colInsertPos,
+          addedRows: addedRows,
+          addedCols: addedCols,
+        );
 
     for (final reindexed in reindexedPlacements) {
       final result = await ref
@@ -1293,9 +1292,7 @@ class _VirtualCellarDetailScreenState
       result.fold((failure) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erreur reindexation: ${failure.message}'),
-            ),
+            SnackBar(content: Text('Erreur reindexation: ${failure.message}')),
           );
         }
       }, (_) {});
@@ -1622,7 +1619,8 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
     final rowNumWidth = _kRowNumWidth * _zoomLevel;
     final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
     final isStoneCave = cellar.theme == VirtualCellarTheme.stoneCave;
-    final isGarageIndustrial = cellar.theme == VirtualCellarTheme.garageIndustrial;
+    final isGarageIndustrial =
+        cellar.theme == VirtualCellarTheme.garageIndustrial;
     final rowGap = 6 * _zoomLevel;
 
     return Column(
@@ -1775,26 +1773,24 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                               ),
                             )
                           : Container(
-                        padding: EdgeInsets.fromLTRB(
-                          10 * _zoomLevel,
-                          10 * _zoomLevel,
-                          12 * _zoomLevel,
-                          12 * _zoomLevel,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(
-                            14,
-                          ),
-                          color: Theme.of(
+                              padding: EdgeInsets.fromLTRB(
+                                10 * _zoomLevel,
+                                10 * _zoomLevel,
+                                12 * _zoomLevel,
+                                12 * _zoomLevel,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                color: Theme.of(
                                   context,
                                 ).colorScheme.surfaceContainerLowest,
-                          border: Border.all(
-                            color: Theme.of(
+                                border: Border.all(
+                                  color: Theme.of(
                                     context,
                                   ).colorScheme.surfaceContainerHigh,
-                          ),
-                        ),
-                        child: _buildGridContent(
+                                ),
+                              ),
+                              child: _buildGridContent(
                                 context,
                                 cellar: cellar,
                                 lookup: lookup,
@@ -1805,7 +1801,7 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                                 onSlotTap: onSlotTap,
                                 moveState: moveState,
                               ),
-                      ),
+                            ),
                     ),
                   ),
                 ),
@@ -1841,7 +1837,8 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   }) {
     final isPremiumCave = cellar.theme == VirtualCellarTheme.premiumCave;
     final isStoneCave = cellar.theme == VirtualCellarTheme.stoneCave;
-    final isGarageIndustrial = cellar.theme == VirtualCellarTheme.garageIndustrial;
+    final isGarageIndustrial =
+        cellar.theme == VirtualCellarTheme.garageIndustrial;
     final labelColor = isPremiumCave
         ? const Color(0xCCA8C8E0)
         : isStoneCave
@@ -1849,9 +1846,9 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
         : isGarageIndustrial
         ? const Color(0xCCD0D4DA)
         : Theme.of(context).colorScheme.outline;
-    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: labelColor,
-        );
+    final labelStyle = Theme.of(
+      context,
+    ).textTheme.labelSmall?.copyWith(color: labelColor);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1862,9 +1859,7 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
             ...List.generate(cellar.columns, (col) {
               return SizedBox(
                 width: cellWidth,
-                child: Center(
-                  child: Text('${col + 1}', style: labelStyle),
-                ),
+                child: Center(child: Text('${col + 1}', style: labelStyle)),
               );
             }),
           ],
@@ -1877,9 +1872,7 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
               children: [
                 SizedBox(
                   width: rowNumWidth,
-                  child: Center(
-                    child: Text(_rowLabel(row), style: labelStyle),
-                  ),
+                  child: Center(child: Text(_rowLabel(row), style: labelStyle)),
                 ),
                 ...List.generate(cellar.columns, (col) {
                   final placement = lookup[(row, col)];
@@ -1887,13 +1880,11 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                     oneBasedRow: row + 1,
                     oneBasedCol: col + 1,
                   );
-                  final isPreviewTarget =
-                      _previewTargets.contains((row, col));
+                  final isPreviewTarget = _previewTargets.contains((row, col));
                   final hideBottleVisual =
                       _dragAnchorPlacementId != null &&
                       placement != null &&
-                      moveState.selectedPlacementIds
-                          .contains(placement.id) &&
+                      moveState.selectedPlacementIds.contains(placement.id) &&
                       !isPreviewTarget;
                   final showDragGhost =
                       _dragAnchorPlacementId != null && isPreviewTarget;
@@ -1916,28 +1907,26 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
                           placement: placement,
                           onTap: () => onSlotTap(row, col),
                           cellarId: widget.cellarId,
-                          onLongPressPlacement:
-                              widget.onLongPressPlacement,
+                          onLongPressPlacement: widget.onLongPressPlacement,
                           row: row,
                           col: col,
                           cellarTheme: cellar.theme,
                           isEmptyCell: isEmptyCell,
                           isPreviewTarget: isPreviewTarget,
                           previewIsValid: _previewValid,
-                          selectedCount:
-                              moveState.selectedPlacementIds.length,
+                          selectedCount: moveState.selectedPlacementIds.length,
                           onDragStarted: _startDrag,
                           onDragEnded: _endDrag,
-                          onDragPointerUpdate:
-                              _handleDragPointerUpdate,
+                          onDragPointerUpdate: _handleDragPointerUpdate,
                           hideBottleVisual: hideBottleVisual,
                           showDragGhost: showDragGhost,
-                          isHighlighted: _highlightActive &&
+                          isHighlighted:
+                              _highlightActive &&
                               placement != null &&
                               placement.wineId == widget.highlightWineId,
-                            highlightLastConsumptionYear:
+                          highlightLastConsumptionYear:
                               widget.highlightLastConsumptionYear,
-                            highlightPastOptimalConsumption:
+                          highlightPastOptimalConsumption:
                               widget.highlightPastOptimalConsumption,
                         );
                       },
@@ -2050,18 +2039,19 @@ class _SlotCellState extends ConsumerState<_SlotCell>
     final visibleWine = hasWine && !widget.hideBottleVisual;
     final wineColor = hasWine ? AppTheme.colorForWine(wine.color.name) : null;
     final consumptionHighlight = hasWine
-      ? computeWineConsumptionHighlight(
-        wine,
-        highlightLastConsumptionYear: widget.highlightLastConsumptionYear,
-        highlightPastOptimalWindow: widget.highlightPastOptimalConsumption,
-        )
-      : WineConsumptionHighlight.none;
+        ? computeWineConsumptionHighlight(
+            wine,
+            highlightLastConsumptionYear: widget.highlightLastConsumptionYear,
+            highlightPastOptimalWindow: widget.highlightPastOptimalConsumption,
+          )
+        : WineConsumptionHighlight.none;
     final hasConsumptionHighlight =
-      consumptionHighlight != WineConsumptionHighlight.none;
+        consumptionHighlight != WineConsumptionHighlight.none;
     final consumptionColor = colorForConsumptionHighlight(consumptionHighlight);
     final isPremiumCave = widget.cellarTheme == VirtualCellarTheme.premiumCave;
     final isStoneCave = widget.cellarTheme == VirtualCellarTheme.stoneCave;
-    final isGarageIndustrial = widget.cellarTheme == VirtualCellarTheme.garageIndustrial;
+    final isGarageIndustrial =
+        widget.cellarTheme == VirtualCellarTheme.garageIndustrial;
     final isImmersive = isPremiumCave || isStoneCave || isGarageIndustrial;
 
     final moveState = ref.watch(bottleMoveStateProvider(widget.cellarId));
@@ -2076,8 +2066,8 @@ class _SlotCellState extends ConsumerState<_SlotCell>
               : theme.colorScheme.error)
         : isSelected
         ? theme.colorScheme.primary
-      : hasConsumptionHighlight
-      ? consumptionColor
+        : hasConsumptionHighlight
+        ? consumptionColor
         : visibleWine
         ? wineColor!.withValues(alpha: 0.75)
         : theme.colorScheme.outlineVariant;
@@ -2113,8 +2103,7 @@ class _SlotCellState extends ConsumerState<_SlotCell>
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           color: slotBackgroundColor,
-          borderRadius: BorderRadius.circular(
-              isImmersive ? 0 : 10),
+          borderRadius: BorderRadius.circular(isImmersive ? 0 : 10),
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -2194,15 +2183,15 @@ class _SlotCellState extends ConsumerState<_SlotCell>
                         painter: _EmptySlotDashedPainter(),
                       )
                     : Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.outlineVariant.withValues(
-                      alpha: 0.55,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                ),
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.outlineVariant.withValues(
+                            alpha: 0.55,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
               ),
             if (widget.showDragGhost)
               Positioned(
@@ -2253,20 +2242,22 @@ class _SlotCellState extends ConsumerState<_SlotCell>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: (hasConsumptionHighlight
-                                  ? consumptionColor
-                                  : theme.colorScheme.tertiary)
-                              .withValues(
-                            alpha: _blinkController!.value * 0.9,
-                          ),
+                          color:
+                              (hasConsumptionHighlight
+                                      ? consumptionColor
+                                      : theme.colorScheme.tertiary)
+                                  .withValues(
+                                    alpha: _blinkController!.value * 0.9,
+                                  ),
                           width: 2.5,
                         ),
-                        color: (hasConsumptionHighlight
-                                ? consumptionColor
-                                : theme.colorScheme.tertiary)
-                            .withValues(
-                          alpha: _blinkController!.value * 0.25,
-                        ),
+                        color:
+                            (hasConsumptionHighlight
+                                    ? consumptionColor
+                                    : theme.colorScheme.tertiary)
+                                .withValues(
+                                  alpha: _blinkController!.value * 0.25,
+                                ),
                       ),
                     );
                   },
@@ -2425,11 +2416,13 @@ class _BottleFacePainter extends CustomPainter {
     canvas.drawCircle(Offset(cx, cy), glowR * 0.38, p);
 
     // Cork
-    p.shader = RadialGradient(
-      center: const Alignment(-0.3, -0.3),
-      colors: const [Color(0xFFE0B850), Color(0xFFA07828)],
-    ).createShader(
-        Rect.fromCircle(center: Offset(cx, cy), radius: glowR * 0.24));
+    p.shader =
+        RadialGradient(
+          center: const Alignment(-0.3, -0.3),
+          colors: const [Color(0xFFE0B850), Color(0xFFA07828)],
+        ).createShader(
+          Rect.fromCircle(center: Offset(cx, cy), radius: glowR * 0.24),
+        );
     canvas.drawCircle(Offset(cx, cy), glowR * 0.24, p);
     p.shader = null;
 
@@ -2447,7 +2440,13 @@ class _BottleFacePainter extends CustomPainter {
     canvas.translate(cx - glowR * 0.35, cy - glowR * 0.35);
     canvas.rotate(-0.6);
     canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: glowR * 0.3, height: glowR * 0.18), p);
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: glowR * 0.3,
+        height: glowR * 0.18,
+      ),
+      p,
+    );
     canvas.restore();
   }
 
