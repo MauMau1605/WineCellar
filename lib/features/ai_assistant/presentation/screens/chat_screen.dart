@@ -12,12 +12,17 @@ import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/cellar_tracker_datasource.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/vivino_datasource.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_request_strategy.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_wine_sources_helper.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_auto_web_completion_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_flow_planner.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_add_intent_helper.dart';
@@ -565,6 +570,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _chatLogger.logUserMessage(trimmed);
 
+    // === REVIEW MODE : Vivino + CellarTracker en parallèle ===
+    // Pour les demandes d'avis, on interroge Vivino et CellarTracker simultanément.
+    // On compare notes et fenêtres de dégustation, puis on affiche le résultat sans IA.
+    // Si ni Vivino ni CellarTracker ne trouvent le vin, on continue vers la recherche web.
+    VivinoSourceStatus? vivinoFallbackStatus;
+    if (_chatMode == _ChatMode.wineReview) {
+      final vivino = ref.read(vivinoDatasourceProvider);
+      final ct = ref.read(cellarTrackerDatasourceProvider);
+      final vivinoQuery = _extractWineQueryForVivino(trimmed);
+
+      // Requêtes parallèles
+      final results = await Future.wait([
+        vivino.searchWineWithReviews(wineName: vivinoQuery),
+        ct.searchWine(wineName: vivinoQuery),
+      ]);
+      final vivinoResult = results[0] as VivinoSearchResult;
+      final ctResult = results[1] as CellarTrackerResult;
+
+      if (!mounted) return;
+
+      final vivinoFound = vivinoResult.status == VivinoSourceStatus.found ||
+          vivinoResult.status == VivinoSourceStatus.foundNoReviews;
+      final ctFound = ctResult.status == CellarTrackerSourceStatus.found;
+
+      if (vivinoFound || ctFound) {
+        final text = ChatWineSourcesHelper.buildCombinedReviewMarkdown(
+          vivinoResult,
+          ctResult,
+        );
+        final webSources = vivinoResult.wineUrl != null
+            ? [
+                WebSource(
+                  uri: vivinoResult.wineUrl!,
+                  title:
+                      'Vivino · ${vivinoResult.wineName ?? 'Fiche Vivino'}',
+                ),
+              ]
+            : <WebSource>[];
+
+        _handleWebSearchResult(
+          AiChatResult(
+            textResponse: text,
+            webSources: webSources,
+            vivinoSourceStatus: vivinoResult.status,
+            cellarTrackerStatus: ctResult.status,
+          ),
+        );
+        _cacheConversationState();
+        _scrollToBottom();
+        return;
+      }
+
+      // Aucune source n'a trouvé le vin → fallback recherche web IA.
+      vivinoFallbackStatus = vivinoResult.status;
+    }
+
     // If review mode with fallback Gemini (main service doesn't support web search),
     // call the Gemini service directly instead of going through the main use case.
     if (plan.useFallbackWebSearchDirectCall && geminiWebSearch != null) {
@@ -574,7 +635,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           conversationHistory: history,
         );
         if (!mounted) return;
-        _handleWebSearchResult(result);
+        _handleWebSearchResult(
+          result,
+          vivinoStatusOverride: vivinoFallbackStatus,
+        );
       } catch (e) {
         if (!mounted) return;
         setState(() {
@@ -652,6 +716,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               timestamp: DateTime.now(),
               webSources: chatSources,
               collapseSourcesByDefault: chatSources.isNotEmpty,
+              vivinoSourceStatus: vivinoFallbackStatus,
             ),
           );
 
@@ -673,7 +738,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Handle a web search result (used by fallback Gemini path).
-  void _handleWebSearchResult(AiChatResult result) {
+  void _handleWebSearchResult(
+    AiChatResult result, {
+    VivinoSourceStatus? vivinoStatusOverride,
+  }) {
     _chatLogger.logAiResponse(result.textResponse);
     setState(() {
       _isLoading = false;
@@ -682,6 +750,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           messageId: _uuid.v4(),
           timestamp: DateTime.now(),
           result: result,
+          vivinoSourceStatusOverride: vivinoStatusOverride,
         ),
       );
     });
@@ -692,6 +761,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return geminiService != null;
   }
 
+  /// Extrait une requête de recherche Vivino à partir du message utilisateur.
+  /// Supprime les formulations interrogatives courantes pour ne garder que le
+  /// nom du vin.
+  static String _extractWineQueryForVivino(String userMessage) {
+    return userMessage
+        .replaceFirst(
+          RegExp(
+            r'^(?:que\s+vaut|parle[- ]moi\s+d[eu]\s+|donne[- ]moi\s+des\s+avis\s+sur\s+'
+            r'|infos\s+sur\s+|des\s+avis\s+sur\s+|avis\s+sur\s+)',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim()
+        .replaceFirst(
+          RegExp(r'^(?:le|la|les|du|de\s+la|des)\s+', caseSensitive: false),
+          '',
+        )
+        .trim();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comparaison Vivino + CellarTracker
+  // ---------------------------------------------------------------------------
+
+  /// Construit le texte Markdown combiné pour l'affichage des avis Vivino + CellarTracker.
   static const int _webCompletionBatchSize = 10;
 
   Future<void> _autoCompleteEstimatedFieldsIfNeeded() async {
@@ -834,7 +929,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return cards;
   }
 
-  /// Complete estimated fields for a wine using Gemini web search.
+  /// Complete estimated fields for a wine using Vivino first, then Gemini web search.
   Future<void> _completeWithWebSearch(
     int wineIndex, {
     bool triggeredAutomatically = false,
@@ -865,6 +960,67 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     try {
+      // === Tentative Vivino pour enrichir region/country/producteur ===
+      final vivino = ref.read(vivinoDatasourceProvider);
+      final vivinoResult = await vivino.searchWineWithReviews(
+        wineName: wine.name!,
+        vintage: wine.vintage,
+        maxReviews: 0,
+      );
+
+      if (!mounted) return;
+
+      if (vivinoResult.status == VivinoSourceStatus.found ||
+          vivinoResult.status == VivinoSourceStatus.foundNoReviews) {
+        final complement = WineAiResponse(
+          region: vivinoResult.region,
+          country: vivinoResult.country,
+          producer: vivinoResult.winery,
+        );
+        final completedFields = wine.estimatedFields
+            .where(
+              (f) => WineAiResponse.fieldWasCompleted(f, complement),
+            )
+            .toList();
+
+        if (completedFields.isNotEmpty) {
+          final mergedWine = wine.mergeWith(complement);
+          final webSources = vivinoResult.wineUrl != null
+              ? [
+                  ChatSource(
+                    uri: vivinoResult.wineUrl!,
+                    title:
+                        'Vivino · ${vivinoResult.wineName ?? 'Fiche Vivino'}',
+                  ),
+                ]
+              : <ChatSource>[];
+
+          setState(() {
+            _currentWineDataList[wineIndex] = mergedWine;
+            _isLoading = false;
+            _messages.add(
+              ChatMessage(
+                id: _uuid.v4(),
+                content: triggeredAutomatically
+                    ? '✅ **${completedFields.length} champ(s) auto-complété(s)** via Vivino :\n'
+                        '${completedFields.map((f) => '• $f').join('\n')}'
+                    : '✅ **${completedFields.length} champ(s) complété(s)** via Vivino :\n'
+                        '${completedFields.map((f) => '• $f').join('\n')}',
+                role: ChatRole.assistant,
+                timestamp: DateTime.now(),
+                webSources: webSources,
+                collapseSourcesByDefault: webSources.isNotEmpty,
+                vivinoSourceStatus: vivinoResult.status,
+              ),
+            );
+          });
+          _cacheConversationState();
+          _scrollToBottom();
+          return;
+        }
+      }
+
+      // Vivino n'a pas permis de compléter les champs → fallback Gemini
       final message = AiPrompts.buildFieldCompletionMessage(
         wineName: wine.name!,
         vintage: wine.vintage,

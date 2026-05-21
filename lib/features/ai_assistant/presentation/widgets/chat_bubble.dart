@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
 
 /// Chat bubble widget for displaying messages
 class ChatBubble extends StatelessWidget {
@@ -114,6 +116,16 @@ class ChatBubble extends StatelessWidget {
                             tableBody: theme.textTheme.bodyMedium?.copyWith(color: textColor),
                           ),
                         ),
+                        if (message.vivinoSourceStatus != null) ...[
+                          const SizedBox(height: 8),
+                          _VivInoBadge(status: message.vivinoSourceStatus!),
+                        ],
+                        if (message.cellarTrackerStatus != null) ...[
+                          const SizedBox(height: 4),
+                          _CellarTrackerBadge(
+                            status: message.cellarTrackerStatus!,
+                          ),
+                        ],
                         if (message.webSources.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           Container(
@@ -202,6 +214,106 @@ class ChatBubble extends StatelessWidget {
           if (isUser) const SizedBox(width: 8),
         ],
       ),
+    );
+  }
+}
+
+/// Petit badge indiquant l'origine des données Vivino dans la bulle de chat.
+class _VivInoBadge extends StatelessWidget {
+  final VivinoSourceStatus status;
+
+  const _VivInoBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final (icon, label, color) = switch (status) {
+      VivinoSourceStatus.found => (
+          Icons.check_circle_outline,
+          'Vivino · données trouvées',
+          Colors.green.shade700,
+        ),
+      VivinoSourceStatus.foundNoReviews => (
+          Icons.info_outline,
+          'Vivino · vin trouvé, pas d\'avis',
+          Colors.orange.shade700,
+        ),
+      VivinoSourceStatus.notFound => (
+          Icons.search_off,
+          'Vivino · vin non trouvé · données via recherche web',
+          Colors.grey.shade600,
+        ),
+      VivinoSourceStatus.unavailable => (
+          Icons.cloud_off,
+          'Vivino indisponible · données via recherche web',
+          Colors.grey.shade600,
+        ),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Petit badge indiquant l'origine des données CellarTracker dans la bulle de chat.
+class _CellarTrackerBadge extends StatelessWidget {
+  final CellarTrackerSourceStatus status;
+
+  const _CellarTrackerBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final (icon, label, color) = switch (status) {
+      CellarTrackerSourceStatus.found => (
+          Icons.check_circle_outline,
+          'CellarTracker · données trouvées',
+          Colors.teal.shade700,
+        ),
+      CellarTrackerSourceStatus.notFound => (
+          Icons.search_off,
+          'CellarTracker · vin non trouvé',
+          Colors.grey.shade600,
+        ),
+      CellarTrackerSourceStatus.unconfigured => (
+          Icons.person_off_outlined,
+          'CellarTracker · non configuré',
+          Colors.grey.shade500,
+        ),
+      CellarTrackerSourceStatus.unavailable => (
+          Icons.cloud_off,
+          'CellarTracker indisponible',
+          Colors.grey.shade600,
+        ),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
     );
   }
 }

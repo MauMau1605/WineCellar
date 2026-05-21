@@ -42,6 +42,10 @@ class AppConstants {
   /// Clé API Gemini dédiée à la recherche web (fallback pour compléter les champs estimés)
   static const String keyGeminiFallbackApiKey = 'gemini_fallback_api_key';
 
+  // CellarTracker
+  static const String keyCellarTrackerUser = 'cellartracker_user';
+  static const String keyCellarTrackerPassword = 'cellartracker_password';
+
   // Expert cellar editor
   static const String keyExpertCellarDraft = 'expert_cellar_draft';
 

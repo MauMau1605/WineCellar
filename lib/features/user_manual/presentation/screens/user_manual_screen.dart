@@ -324,7 +324,7 @@ class _OverviewTab extends StatelessWidget {
         _Bullets([
           'Gestion de cave: ajout, modification, suppression, tri, recherche.',
           'Imports/exports: JSON et CSV pour sauvegarder ou migrer vos donnees.',
-          'Assistant IA: analyse de texte et d image pour accelerer la saisie.',
+          'Assistant IA: analyse de texte et d image pour accelerer la saisie, et avis enrichis sur vos vins via Vivino et CellarTracker.',
           'Accords mets-vins: categories d accords modifiables.',
           'Cave virtuelle: placements de bouteilles dans des celliers.',
           'Navigation desktop: panneau lateral repliable pour liberer de l espace de travail.',
@@ -732,7 +732,19 @@ class _AiTokensTab extends StatelessWidget {
         _Bullets([
           'Ajouter un vin : decrivez un vin et l IA extrait les informations structurees pour l ajouter a votre cave.',
           'Accord mets-vin : demandez des suggestions d accords avec les vins de votre cave.',
-          'Avis sur un vin : obtenez un avis detaille sur un vin avec recherche internet (necessite Gemini).',
+          'Avis sur un vin : obtenez un avis detaille sur un vin enrichi par Vivino et CellarTracker. Si ces sources ne donnent pas de resultat, Gemini prend le relais avec une recherche internet.',
+        ]),
+        _BlockTitle('Vivino et CellarTracker'),
+        _Paragraph(
+          'En mode "Avis sur un vin", l application interroge automatiquement '
+          'Vivino et CellarTracker en parallele pour enrichir la reponse.',
+        ),
+        _Bullets([
+          'Vivino : automatique, aucune configuration requise. Fournit la note moyenne, les avis des utilisateurs et la fenetre de degustation.',
+          'CellarTracker : optionnel. Pour l activer, renseignez votre identifiant et mot de passe dans Parametres > IA > section CellarTracker (optionnel).',
+          'Si CellarTracker n est pas configure, il est ignore silencieusement (badge gris discret sous le message).',
+          'La reponse affiche un en-tete avec les notes moyennes des deux sources (ex : Vivino 4,2/5 - CellarTracker 91/100) avant les avis detailles.',
+          'Si les fenetres de degustation des deux sources different de plus de 3 ans, un avertissement est affiche avec les deux fenetres et la fenetre commune si elle est suffisante.',
         ]),
         _BlockTitle('Recherche web et Gemini'),
         _Paragraph(
@@ -780,6 +792,8 @@ class _BestPracticesTab extends StatelessWidget {
           'Erreur IA: verifier cle API, quota ou modele.',
           'Import CSV incomplet: revoir mapping et presence de la colonne Nom.',
           'Image non exploitable: reprendre une photo plus nette ou passer en OCR.',
+          'Avis sur un vin vide ou incomplet: verifiez que le nom du vin est suffisamment precis pour etre reconnu par Vivino et CellarTracker.',
+          'CellarTracker non pris en compte: verifiez vos identifiants dans Parametres > IA > section CellarTracker.',
         ]),
       ],
     );

@@ -25,10 +25,13 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   final _visionModelController = TextEditingController();
   final _visionApiKeyController = TextEditingController();
   final _geminiFallbackKeyController = TextEditingController();
+  final _ctUserController = TextEditingController();
+  final _ctPasswordController = TextEditingController();
   AiProvider? _visionProviderOverride;
   bool _obscureApiKey = true;
   bool _obscureVisionApiKey = true;
   bool _obscureFallbackKey = true;
+  bool _obscureCtPassword = true;
   bool _testingConnection = false;
 
   @override
@@ -53,6 +56,9 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       geminiFallbackKey: ref.read(geminiFallbackApiKeyProvider),
     );
 
+    final ctUser = ref.read(cellarTrackerUserProvider) ?? '';
+    final ctPassword = ref.read(cellarTrackerPasswordProvider) ?? '';
+
     setState(() {
       _apiKeyController.text = formState.openAiApiKey;
       _geminiApiKeyController.text = formState.geminiApiKey;
@@ -63,6 +69,8 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       _visionModelController.text = formState.visionModel;
       _visionApiKeyController.text = formState.visionApiKey;
       _geminiFallbackKeyController.text = formState.geminiFallbackKey;
+      _ctUserController.text = ctUser;
+      _ctPasswordController.text = ctPassword;
     });
   }
 
@@ -76,6 +84,8 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     _visionModelController.dispose();
     _visionApiKeyController.dispose();
     _geminiFallbackKeyController.dispose();
+    _ctUserController.dispose();
+    _ctPasswordController.dispose();
     super.dispose();
   }
 
@@ -328,6 +338,68 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
 
           const SizedBox(height: 32),
 
+          // -------- CellarTracker (optionnel) --------
+          _SectionHeader(
+            icon: Icons.wine_bar_outlined,
+            title: 'CellarTracker (optionnel)',
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CellarTracker fournit des notes communautaires et des '
+                    'fenêtres de dégustation que l\'assistant compare avec '
+                    'Vivino. Laissez vide pour désactiver.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _ctUserController,
+                    decoration: const InputDecoration(
+                      labelText: 'Identifiant CellarTracker',
+                      hintText: 'votre_pseudo',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _ctPasswordController,
+                    decoration: InputDecoration(
+                      labelText: 'Mot de passe CellarTracker',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureCtPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureCtPassword = !_obscureCtPassword,
+                        ),
+                      ),
+                    ),
+                    obscureText: _obscureCtPassword,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Compte gratuit — cellartracker.com/register.asp',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
           // -------- Save & Test --------
           Row(
             children: [
@@ -547,6 +619,13 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
     await ref
         .read(geminiFallbackApiKeyProvider.notifier)
         .setValue(saveData.geminiFallbackKey);
+
+    await ref
+        .read(cellarTrackerUserProvider.notifier)
+        .setValue(_ctUserController.text.trim());
+    await ref
+        .read(cellarTrackerPasswordProvider.notifier)
+        .setValue(_ctPasswordController.text);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

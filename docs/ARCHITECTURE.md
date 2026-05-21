@@ -3,7 +3,7 @@
 Vue d'ensemble maintenue pour orienter rapidement l'exploration du dépôt.
 Cette page ne remplace pas les docs détaillées ; elle indique où regarder en premier.
 
-Dernière mise à jour : 27 avril 2026.
+Dernière mise à jour : 21 mai 2026.
 
 ## Démarrer ici
 
@@ -141,6 +141,9 @@ Les providers suivants existent déjà et méritent une lecture rapide avant tou
 | `developerModeProvider` | Activation persistée du mode développeur |
 | `deleteAllWinesUseCaseProvider` | Use case global de suppression totale, utilisé par l'écran développeur |
 | `chartModePieProvider` | Mode donut/bar par catégorie statistique |
+| `cellarTrackerUserProvider` | Identifiant CellarTracker persisté (SecureStringNotifier) |
+| `cellarTrackerPasswordProvider` | Mot de passe CellarTracker persisté (SecureStringNotifier) |
+| `cellarTrackerDatasourceProvider` | Datasource CellarTracker (accès TSV via Dio) |
 
 ## Persistance locale
 
@@ -176,6 +179,8 @@ flowchart LR
     RImpl --> DB[(Drift / SQLite)]
     RImpl --> AI[AI services]
     UI --> Core[core/providers.dart<br>core/router.dart]
+    UI --> Vivino[Vivino datasource]
+    UI --> CT[CellarTracker datasource]
 ```
 
 ## Documentation associée

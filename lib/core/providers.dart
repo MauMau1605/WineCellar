@@ -39,6 +39,8 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/gemini_servic
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mistral_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/ollama_service.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/mlkit_image_text_extractor.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/cellar_tracker_datasource.dart';
+import 'package:wine_cellar/features/ai_assistant/data/datasources/vivino_datasource.dart';
 import 'package:wine_cellar/features/statistics/data/repositories/statistics_repository_impl.dart';
 import 'package:wine_cellar/features/statistics/domain/repositories/statistics_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
@@ -364,6 +366,24 @@ final geminiFallbackApiKeyProvider =
   );
 });
 
+/// Identifiant CellarTracker (compte gratuit requis).
+final cellarTrackerUserProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyCellarTrackerUser,
+  );
+});
+
+/// Mot de passe CellarTracker.
+final cellarTrackerPasswordProvider =
+    StateNotifierProvider<SecureStringNotifier, String?>((ref) {
+  return SecureStringNotifier(
+    ref.watch(secureStorageProvider),
+    AppConstants.keyCellarTrackerPassword,
+  );
+});
+
 /// Reusable notifier for secure string storage
 class SecureStringNotifier extends StateNotifier<String?> {
   final FlutterSecureStorage _storage;
@@ -583,6 +603,16 @@ final geminiWebSearchServiceProvider = Provider<GeminiService?>((ref) {
     apiKey: fallbackKey,
     model: AppConstants.defaultGeminiModel,
   );
+});
+
+/// Datasource Vivino (POC évaluation — endpoints non-officiels).
+final vivinoDatasourceProvider = Provider<VivinoDatasource>((ref) {
+  return VivinoDatasource();
+});
+
+/// Datasource CellarTracker (données communautaires — nécessite un compte gratuit).
+final cellarTrackerDatasourceProvider = Provider<CellarTrackerDatasource>((ref) {
+  return CellarTrackerDatasource(ref.read(secureStorageProvider));
 });
 
 final getWineByIdUseCaseProvider = Provider<GetWineByIdUseCase>((ref) {

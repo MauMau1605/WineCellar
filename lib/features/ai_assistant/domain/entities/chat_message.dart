@@ -1,3 +1,6 @@
+import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
+
 /// Represents a message in the AI chat conversation
 class ChatMessage {
   final String id;
@@ -8,6 +11,12 @@ class ChatMessage {
   final List<ChatSource> webSources;
   final bool collapseSourcesByDefault;
 
+  /// Statut de la tentative Vivino associée à ce message (null si non applicable).
+  final VivinoSourceStatus? vivinoSourceStatus;
+
+  /// Statut de la tentative CellarTracker associée à ce message (null si non applicable).
+  final CellarTrackerSourceStatus? cellarTrackerStatus;
+
   const ChatMessage({
     required this.id,
     required this.content,
@@ -16,6 +25,8 @@ class ChatMessage {
     this.winePreview,
     this.webSources = const [],
     this.collapseSourcesByDefault = true,
+    this.vivinoSourceStatus,
+    this.cellarTrackerStatus,
   });
 }
 

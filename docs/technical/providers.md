@@ -66,6 +66,8 @@ flowchart TD
 | `visionApiKeyOverrideProvider` | clé API spécifique à la vision |
 | `useOcrForImagesProvider` | bascule OCR local vs vision IA |
 | `geminiFallbackApiKeyProvider` | clé fallback pour recherche web Gemini |
+| `cellarTrackerUserProvider` | identifiant CellarTracker persisté via `SecureStringNotifier` |
+| `cellarTrackerPasswordProvider` | mot de passe CellarTracker persisté via `SecureStringNotifier` |
 
 ### Services et use cases IA
 
@@ -80,6 +82,7 @@ flowchart TD
 | `analyzeWineFromImageUseCaseProvider` | analyse image |
 | `testAiConnectionUseCaseProvider` | test de connexion |
 | `visionModelProvider` | découverte du modèle vision disponible |
+| `cellarTrackerDatasourceProvider` | datasource CellarTracker instancié à partir du `secureStorageProvider` |
 
 ### Use cases vin et caves virtuelles
 

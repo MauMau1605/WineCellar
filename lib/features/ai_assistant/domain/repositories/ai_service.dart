@@ -1,3 +1,5 @@
+import '../entities/cellar_tracker_result.dart';
+import '../entities/vivino_result.dart';
 import '../entities/wine_ai_response.dart';
 
 /// Abstract AI service interface - implementations for OpenAI, Ollama, etc.
@@ -67,12 +69,20 @@ class AiChatResult {
   /// Web sources used for grounded responses (URLs + titles).
   final List<WebSource> webSources;
 
+  /// Statut de la tentative de récupération Vivino (null si non applicable).
+  final VivinoSourceStatus? vivinoSourceStatus;
+
+  /// Statut de la tentative CellarTracker (null si non applicable).
+  final CellarTrackerSourceStatus? cellarTrackerStatus;
+
   const AiChatResult({
     required this.textResponse,
     this.wineDataList = const [],
     this.isError = false,
     this.errorMessage,
     this.webSources = const [],
+    this.vivinoSourceStatus,
+    this.cellarTrackerStatus,
   });
 
   factory AiChatResult.error(String message) {
