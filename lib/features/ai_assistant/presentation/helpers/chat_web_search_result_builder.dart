@@ -1,3 +1,4 @@
+import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
@@ -11,6 +12,8 @@ class ChatWebSearchResultBuilder {
     required DateTime timestamp,
     required AiChatResult result,
     VivinoSourceStatus? vivinoSourceStatusOverride,
+    VivinoSearchResult? vivinoResult,
+    CellarTrackerResult? cellarTrackerResult,
   }) {
     final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
       result.webSources,
@@ -26,6 +29,8 @@ class ChatWebSearchResultBuilder {
       vivinoSourceStatus:
           vivinoSourceStatusOverride ?? result.vivinoSourceStatus,
       cellarTrackerStatus: result.cellarTrackerStatus,
+      vivinoResult: vivinoResult,
+      cellarTrackerResult: cellarTrackerResult,
     );
   }
 }

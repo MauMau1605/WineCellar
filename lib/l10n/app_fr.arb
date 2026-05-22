@@ -106,5 +106,13 @@
   "statsNoGrapes": "Aucun cépage renseigné",
   "statsNoProducers": "Aucun producteur renseigné",
   "statsLoadError": "Impossible de charger les statistiques",
-  "statsOthers": "Autres"
+  "statsOthers": "Autres",
+  "reevaluate": "Réévaluer",
+  "reevaluating": "Réévaluation en cours…",
+  "fieldLocked": "Champ verrouillé",
+  "fieldUnlocked": "Champ déverrouillé",
+  "seeDetailedReviews": "Voir les avis détaillés",
+  "reviewsDetailTitle": "Avis détaillés",
+  "webSources": "Sources web",
+  "lockedFieldsCount": "{count} champ(s) verrouillé(s)"
 }

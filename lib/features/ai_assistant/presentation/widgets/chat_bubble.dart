@@ -4,6 +4,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/chat_message.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
+import 'package:wine_cellar/features/ai_assistant/presentation/widgets/wine_reviews_detail_sheet.dart';
 
 /// Chat bubble widget for displaying messages
 class ChatBubble extends StatelessWidget {
@@ -120,10 +121,35 @@ class ChatBubble extends StatelessWidget {
                           const SizedBox(height: 8),
                           _VivInoBadge(status: message.vivinoSourceStatus!),
                         ],
-                        if (message.cellarTrackerStatus != null) ...[
+                        if (message.cellarTrackerStatus != null) ...[                          
                           const SizedBox(height: 4),
                           _CellarTrackerBadge(
                             status: message.cellarTrackerStatus!,
+                          ),
+                        ],
+                        if (message.vivinoResult != null ||
+                            message.cellarTrackerResult != null) ...[                          
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => WineReviewsDetailSheet.show(
+                                context,
+                                vivinoResult: message.vivinoResult,
+                                cellarTrackerResult: message.cellarTrackerResult,
+                                webSources: message.webSources
+                                    .map((s) => s.uri)
+                                    .toList(),
+                              ),
+                              icon: const Icon(Icons.rate_review_outlined,
+                                  size: 16),
+                              label: const Text('Voir les avis détaillés'),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                              ),
+                            ),
                           ),
                         ],
                         if (message.webSources.isNotEmpty) ...[

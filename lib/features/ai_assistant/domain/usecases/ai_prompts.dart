@@ -555,6 +555,52 @@ ${rowDescriptions.join('\n')}
     return '- ligne $lineNumber: $parts';
   }
 
+  // ============================================================
+  //  Form re-evaluation with locked fields
+  // ============================================================
+
+  /// Build a prompt to re-evaluate a wine whose fields have been partially
+  /// corrected by the user.
+  ///
+  /// [lockedFields] are the field names that the user has validated and that
+  /// the AI must NOT change.  [wineFields] contains ALL current field values
+  /// (including locked ones so the AI has full context).
+  static String buildReevaluationWithLocksPrompt({
+    required Map<String, String?> wineFields,
+    required Set<String> lockedFields,
+  }) {
+    final lockedPart = lockedFields.isEmpty
+        ? 'Aucun champ n\'est verrouillé.'
+        : 'Champs VERROUILLÉS par l\'utilisateur (NE PAS MODIFIER) :\n'
+            '${lockedFields.map((f) => '  - $f').join('\n')}';
+
+    final description = wineFields.entries
+        .where((e) => e.value != null && e.value!.isNotEmpty)
+        .map((e) => '${e.key}: ${e.value}')
+        .join('\n  ');
+
+    return '''
+[MODE RÉÉVALUATION AVEC CHAMPS VERROUILLÉS]
+L\'utilisateur a corrigé certains champs de cette fiche de vin.
+Réévalue et complète la fiche en respectant STRICTEMENT les contraintes ci-dessous.
+
+$lockedPart
+
+Vin actuel (tous les champs) :
+  $description
+
+RÈGLES IMPÉRATIVES :
+- Les champs verrouillés DOIVENT conserver leur valeur exacte dans ta réponse.
+- Si un champ verrouillé est null ou vide, tu PEUX le compléter.
+- Pour les autres champs, complète/améliore en t\'appuyant sur les informations verrouillées.
+- Réponds UNIQUEMENT avec un bloc JSON {"wines": [...]}.
+- estimatedFields : liste les champs que tu as complétés ou corrigés (hors champs verrouillés).
+- N\'ajoute aucun texte hors JSON.
+
+Liste des accords autorisés : $_authorizedPairings
+''';
+  }
+
   /// Build a prompt to re-evaluate a single wine after user modification.
   static String buildSingleWineReevaluationPrompt({
     required Map<String, String?> wineFields,

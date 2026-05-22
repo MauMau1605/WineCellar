@@ -616,6 +616,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             vivinoSourceStatus: vivinoResult.status,
             cellarTrackerStatus: ctResult.status,
           ),
+          vivinoResultFull: vivinoResult,
+          cellarTrackerResultFull: ctResult,
         );
         _cacheConversationState();
         _scrollToBottom();
@@ -741,6 +743,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _handleWebSearchResult(
     AiChatResult result, {
     VivinoSourceStatus? vivinoStatusOverride,
+    VivinoSearchResult? vivinoResultFull,
+    CellarTrackerResult? cellarTrackerResultFull,
   }) {
     _chatLogger.logAiResponse(result.textResponse);
     setState(() {
@@ -751,6 +755,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           timestamp: DateTime.now(),
           result: result,
           vivinoSourceStatusOverride: vivinoStatusOverride,
+          vivinoResult: vivinoResultFull,
+          cellarTrackerResult: cellarTrackerResultFull,
         ),
       );
     });
@@ -923,6 +929,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           onForceAdd: cardPlan.canForceAdd
               ? () => _forceAddIncompleteWine(context, i)
               : null,
+          onReevaluated: (newData) {
+            setState(() => _currentWineDataList[i] = newData);
+          },
         ),
       );
     }
@@ -984,7 +993,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             .toList();
 
         if (completedFields.isNotEmpty) {
-          final mergedWine = wine.mergeWith(complement);
+          // Update fieldSources to mark which fields were completed via Vivino.
+          final updatedSources = Map<String, List<String>>.from(wine.fieldSources);
+          for (final f in completedFields) {
+            updatedSources[f] = [...(updatedSources[f] ?? []), 'Vivino'];
+          }
+          final mergedWine = wine.mergeWith(complement).withFieldSources(updatedSources);
           final webSources = vivinoResult.wineUrl != null
               ? [
                   ChatSource(
@@ -1078,8 +1092,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final chatSources = ChatResponseEnricher.chatSourcesFromWebSources(
         result.webSources,
       );
+      // Mark Gemini Web-completed fields in fieldSources.
+      final geminiCompletedFields = completionResult.completedFields ?? [];
+      final mergedWine = completionResult.mergedWine!;
+      final wineWithSources = geminiCompletedFields.isNotEmpty
+          ? () {
+              final updatedSources =
+                  Map<String, List<String>>.from(mergedWine.fieldSources);
+              for (final f in geminiCompletedFields) {
+                updatedSources[f] = [...(updatedSources[f] ?? []), 'Gemini Web'];
+              }
+              return mergedWine.withFieldSources(updatedSources);
+            }()
+          : mergedWine;
       setState(() {
-        _currentWineDataList[wineIndex] = completionResult.mergedWine!;
+        _currentWineDataList[wineIndex] = wineWithSources;
         _isLoading = false;
 
         _messages.add(

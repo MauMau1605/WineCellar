@@ -112,6 +112,36 @@ void main() {
         expect(restored.estimatedFields, original.estimatedFields);
         expect(restored.confidenceNotes, original.confidenceNotes);
       });
+
+      test('n inclut pas fieldSources dans le JSON car elles viennent de l orchestration', () {
+        final json = const WineAiResponse(
+          name: 'Test',
+          fieldSources: {
+            'drinkFromYear': ['Vivino'],
+          },
+        ).toJson();
+
+        expect(json.containsKey('fieldSources'), isFalse);
+      });
+    });
+
+    group('withFieldSources', () {
+      test('retourne une copie avec les sources remplacées et les autres champs inchangés', () {
+        const original = WineAiResponse(
+          name: 'Test',
+          color: 'white',
+          drinkFromYear: 2028,
+        );
+
+        final updated = original.withFieldSources({
+          'drinkFromYear': ['Vivino', 'CellarTracker'],
+        });
+
+        expect(updated.name, 'Test');
+        expect(updated.color, 'white');
+        expect(updated.drinkFromYear, 2028);
+        expect(updated.fieldSources['drinkFromYear'], ['Vivino', 'CellarTracker']);
+      });
     });
 
     group('mergeWith', () {
@@ -196,6 +226,24 @@ void main() {
         final merged = base.mergeWith(completion);
 
         expect(merged.estimatedFields, ['appellation']);
+      });
+
+      test('préserve fieldSources de la base après fusion', () {
+        const base = WineAiResponse(
+          name: 'Test',
+          estimatedFields: ['drinkFromYear'],
+          fieldSources: {
+            'drinkFromYear': ['Vivino'],
+          },
+        );
+        const completion = WineAiResponse(drinkFromYear: 2032);
+
+        final merged = base.mergeWith(completion);
+
+        expect(merged.drinkFromYear, 2032);
+        expect(merged.fieldSources, {
+          'drinkFromYear': ['Vivino'],
+        });
       });
     });
 

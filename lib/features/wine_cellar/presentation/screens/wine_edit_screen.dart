@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_response.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/reevaluate_wine_from_form_usecase.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/food_category_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_entity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_entity.dart';
@@ -23,6 +25,7 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = true;
   bool _saving = false;
+  bool _isReevaluating = false;
   WineEntity? _wine;
 
   // Controllers
@@ -164,6 +167,18 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
       appBar: AppBar(
         title: const Text('Modifier le vin'),
         actions: [
+          if (ref.watch(reevaluateWineFromFormUseCaseProvider) != null)
+            IconButton(
+              icon: _isReevaluating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              onPressed: (_isReevaluating || _saving) ? null : _reevaluate,
+              tooltip: 'Réévaluer avec l\'IA',
+            ),
           IconButton(
             icon: _saving
                 ? const SizedBox(
@@ -506,6 +521,114 @@ class _WineEditScreenState extends ConsumerState<WineEditScreen> {
     await ref.read(createVirtualCellarUseCaseProvider).call(newCellar);
     await _loadExistingLocations();
   }
+
+  // ---------------------------------------------------------------------------
+  // Re-evaluation
+  // ---------------------------------------------------------------------------
+
+  /// Builds a locked-field set from the wine entity:
+  /// fields NOT flagged as AI-suggested are considered user-owned → locked.
+  Set<String> _defaultLockedFields() {
+    final wine = _wine;
+    if (wine == null) return {};
+    final locked = <String>{
+      'name', 'appellation', 'producer', 'region', 'country',
+      'color', 'vintage', 'grapeVarieties', 'quantity', 'purchasePrice',
+    };
+    if (!wine.aiSuggestedDrinkFromYear) locked.add('drinkFromYear');
+    if (!wine.aiSuggestedDrinkUntilYear) locked.add('drinkUntilYear');
+    if (!wine.aiSuggestedFoodPairings) locked.add('suggestedFoodPairings');
+    return locked;
+  }
+
+  WineAiResponse _buildWineAiResponseFromForm() {
+    final grapes = _grapesCtrl.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return WineAiResponse(
+      name: _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : null,
+      appellation: _appellationCtrl.text.trim().isNotEmpty
+          ? _appellationCtrl.text.trim()
+          : null,
+      producer: _producerCtrl.text.trim().isNotEmpty
+          ? _producerCtrl.text.trim()
+          : null,
+      region:
+          _regionCtrl.text.trim().isNotEmpty ? _regionCtrl.text.trim() : null,
+      country: _countryCtrl.text.trim().isNotEmpty
+          ? _countryCtrl.text.trim()
+          : 'France',
+      color: _selectedColor.name,
+      vintage: int.tryParse(_vintageCtrl.text.trim()),
+      grapeVarieties: grapes,
+      quantity: int.tryParse(_quantityCtrl.text.trim()),
+      purchasePrice: double.tryParse(
+          _priceCtrl.text.trim().replaceAll(',', '.')),
+      drinkFromYear: int.tryParse(_drinkFromCtrl.text.trim()),
+      drinkUntilYear: int.tryParse(_drinkUntilCtrl.text.trim()),
+      tastingNotes: _tastingNotesCtrl.text.trim().isNotEmpty
+          ? _tastingNotesCtrl.text.trim()
+          : null,
+      estimatedFields: const [],
+    );
+  }
+
+  void _applyReevalResult(WineAiResponse result) {
+    if (result.drinkFromYear != null) {
+      _drinkFromCtrl.text = result.drinkFromYear.toString();
+    }
+    if (result.drinkUntilYear != null) {
+      _drinkUntilCtrl.text = result.drinkUntilYear.toString();
+    }
+    if (result.grapeVarieties.isNotEmpty) {
+      _grapesCtrl.text = result.grapeVarieties.join(', ');
+    }
+    if (result.tastingNotes != null && result.tastingNotes!.isNotEmpty) {
+      _tastingNotesCtrl.text = result.tastingNotes!;
+    }
+    // Update aiSuggested flags on the wine entity in memory
+    if (_wine != null) {
+      setState(() {
+        _wine = _wine!.copyWith(
+          drinkFromYear: result.drinkFromYear ?? _wine!.drinkFromYear,
+          drinkUntilYear: result.drinkUntilYear ?? _wine!.drinkUntilYear,
+          aiSuggestedDrinkFromYear: result.drinkFromYear != null,
+          aiSuggestedDrinkUntilYear: result.drinkUntilYear != null,
+        );
+      });
+    }
+  }
+
+  Future<void> _reevaluate() async {
+    final useCase = ref.read(reevaluateWineFromFormUseCaseProvider);
+    if (useCase == null || !mounted) return;
+    setState(() => _isReevaluating = true);
+    final current = _buildWineAiResponseFromForm();
+    final locked = _defaultLockedFields();
+    final result = await useCase(
+      ReevaluateWineFromFormParams(
+        currentData: current,
+        lockedFields: locked,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _isReevaluating = false);
+    result.fold(
+      (failure) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Réévaluation échouée : ${failure.message}')),
+      ),
+      (newData) {
+        _applyReevalResult(newData);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Champs IA mis à jour.')),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;

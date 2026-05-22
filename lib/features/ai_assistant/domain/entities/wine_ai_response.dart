@@ -24,6 +24,11 @@ class WineAiResponse {
   /// AI's reasoning for estimated fields (especially drinking window).
   final String? confidenceNotes;
 
+  /// Per-field source attribution (populated by orchestration, not from AI JSON).
+  /// Key: field name (e.g. 'drinkFromYear'), value: list of source names
+  /// (e.g. ['Vivino', 'CellarTracker']).
+  final Map<String, List<String>> fieldSources;
+
   const WineAiResponse({
     this.name,
     this.appellation,
@@ -44,6 +49,7 @@ class WineAiResponse {
     this.followUpQuestion,
     this.estimatedFields = const [],
     this.confidenceNotes,
+    this.fieldSources = const {},
   });
 
   factory WineAiResponse.fromJson(Map<String, dynamic> json) {
@@ -76,6 +82,8 @@ class WineAiResponse {
               .toList() ??
           [],
       confidenceNotes: json['confidenceNotes'] as String?,
+      // fieldSources is NOT populated from AI JSON — it is set by the
+      // orchestration layer after Vivino / CellarTracker / Gemini Web lookups.
     );
   }
 
@@ -101,6 +109,32 @@ class WineAiResponse {
       'estimatedFields': estimatedFields,
       'confidenceNotes': confidenceNotes,
     };
+  }
+
+  /// Returns a copy of this response with [fieldSources] replaced or merged.
+  WineAiResponse withFieldSources(Map<String, List<String>> sources) {
+    return WineAiResponse(
+      name: name,
+      appellation: appellation,
+      producer: producer,
+      region: region,
+      country: country,
+      color: color,
+      vintage: vintage,
+      grapeVarieties: grapeVarieties,
+      quantity: quantity,
+      purchasePrice: purchasePrice,
+      drinkFromYear: drinkFromYear,
+      drinkUntilYear: drinkUntilYear,
+      tastingNotes: tastingNotes,
+      suggestedFoodPairings: suggestedFoodPairings,
+      description: description,
+      needsMoreInfo: needsMoreInfo,
+      followUpQuestion: followUpQuestion,
+      estimatedFields: estimatedFields,
+      confidenceNotes: confidenceNotes,
+      fieldSources: sources,
+    );
   }
 
   /// Check if we have enough info to create a wine entry
@@ -142,6 +176,7 @@ class WineAiResponse {
           .where((f) => !_fieldWasCompleted(f, other))
           .toList(),
       confidenceNotes: confidenceNotes,
+      fieldSources: fieldSources,
     );
   }
 

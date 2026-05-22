@@ -59,6 +59,15 @@ flowchart LR
 - le rafraîchissement est piloté par le flux `watchAllWines()` du repository des vins
 - `chartModePieProvider` est un provider familial, un état distinct par catégorie statistique
 
+## Couverture des tests
+
+Cette feature bénéficie d'une couverture de tests complète :
+
+| Couche | Fichiers de test |
+| --- | --- |
+| **Data (repositories)** | `test/features/statistics/data/repositories/statistics_repository_impl_test.dart` (étendu) |
+| **Presentation (screens)** | `test/features/statistics/presentation/screens/statistics_screen_test.dart` |
+
 ## Points d'extension
 
 - une nouvelle section statistique implique généralement : extension de `CellarStatistics`, adaptation du repository, du use case, des widgets et éventuellement d'une nouvelle valeur dans `StatCategory`

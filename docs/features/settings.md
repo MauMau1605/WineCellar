@@ -77,6 +77,14 @@ flowchart LR
     CoreProviders --> AiServices[AI services]
 ```
 
+## Couverture des tests
+
+Cette feature bénéficie d'une couverture de tests de présentation :
+
+| Couche | Fichiers de test |
+| --- | --- |
+| **Presentation (screens)** | `test/features/settings/presentation/screens/settings_screen_test.dart`, `ai_settings_screen_test.dart`, `display_settings_screen_test.dart` |
+
 ## Points d'extension
 
 - un nouveau réglage global doit en priorité être ajouté comme provider persistant cohérent avec les notifiers existants

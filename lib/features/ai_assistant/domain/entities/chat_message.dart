@@ -17,6 +17,12 @@ class ChatMessage {
   /// Statut de la tentative CellarTracker associée à ce message (null si non applicable).
   final CellarTrackerSourceStatus? cellarTrackerStatus;
 
+  /// Résultat Vivino complet (pour le panel d'avis détaillés). Null si non applicable.
+  final VivinoSearchResult? vivinoResult;
+
+  /// Résultat CellarTracker complet (pour le panel d'avis détaillés). Null si non applicable.
+  final CellarTrackerResult? cellarTrackerResult;
+
   const ChatMessage({
     required this.id,
     required this.content,
@@ -27,6 +33,8 @@ class ChatMessage {
     this.collapseSourcesByDefault = true,
     this.vivinoSourceStatus,
     this.cellarTrackerStatus,
+    this.vivinoResult,
+    this.cellarTrackerResult,
   });
 }
 

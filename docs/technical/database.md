@@ -61,6 +61,17 @@ Le fichier de base est résolu ainsi :
 - sur desktop, tentative d'utilisation du répertoire d'installation s'il est accessible en écriture
 - si une base existe déjà dans documents et pas encore dans le dossier d'installation, elle est copiée lors de la résolution
 
+## Couverture des tests
+
+Les DAOs bénéficient d'une couverture de tests unitaires :
+
+| DAO testé | Fichier de test |
+| --- | --- |
+| `WineDao` | `test/database/daos/wine_dao_test.dart` |
+| `FoodCategoryDao` | `test/database/daos/food_category_dao_test.dart` |
+| `VirtualCellarDao` | `test/database/daos/virtual_cellar_dao_test.dart` |
+| `BottlePlacementDao` | `test/database/daos/bottle_placement_dao_test.dart` |
+
 ## Implications pour les évolutions
 
 - toute nouvelle table ou colonne doit être gérée sans perte de données

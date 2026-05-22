@@ -583,7 +583,34 @@ Tableaux de bord et graphiques d'analyse de la cave.
 
 ---
 
-## Points d'évolution identifiés
+## Tests et qualité
+
+La couverture de tests s'est étendue et couvre maintenant les domaines critiques :
+
+### Couverture unitaire et de widget
+
+| Domaine | Couverture | Statut |
+|---------|-----------|--------|
+| **Core (providers, router)** | Providers Riverpod globaux, instanciation d'un service Ollama local | ✓ |
+| **Database (DAOs)** | `WineDao`, `FoodCategoryDao`, `VirtualCellarDao`, `BottlePlacementDao` | ✓ |
+| **Domain (use cases)** | Feature wine_cellar : tous les use cases CRUD, import/export, caves virtuelles | ✓ |
+| **Data (repositories)** | `WineRepositoryImpl`, `FoodCategoryRepositoryImpl`, `VirtualCellarRepositoryImpl`, `StatisticsRepositoryImpl` | ✓ |
+| **AI Datasources** | `OpenAiService`, `GeminiService`, `MistralService`, `OllamaService`, `MlKitImageTextExtractor`, `VivinoDatasource`, `CellarTrackerDatasource` | ✓ |
+| **Presentation (screens)** | Wine list/detail/edit, virtual cellars, settings (général, IA, affichage), statistics, AI chat, developer screens | ✓ |
+
+### Framework et conventions
+
+- **Mocker** : `mocktail` pour les mocks sans state machine complexe
+- **Drivers** : les tests ne font pas de assertions directs sur le rendu ; ils utilisent des finders et des drivers pour naviguer et interagir
+- **Patterns** : given/when/then organisent les étapes (setup → action → vérification)
+
+### Points importants
+
+- Tous les tests passent sans modification du code source ; les appels réseau sont mockés ou utilisent des endpoints locaux (e.g. Ollama)
+- Les tests de DAO utilisent `TestDatabaseMixin` pour créer une base Drift en mémoire
+- Les screens passent des `RouteInformation` explicites et mockent les fournisseurs critiques pour tester les workflows sans dépendre de vrais services
+
+### Points d'évolution identifiés
 
 | # | Point | Priorité | Impact |
 |---|-------|----------|--------|

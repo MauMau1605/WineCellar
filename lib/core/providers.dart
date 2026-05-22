@@ -32,6 +32,7 @@ import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/image_text_extractor.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/analyze_wine_from_image.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/usecases/reevaluate_wine_from_form_usecase.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/extract_text_from_wine_image.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/test_ai_connection.dart';
 import 'package:wine_cellar/features/ai_assistant/data/datasources/openai_service.dart';
@@ -44,6 +45,12 @@ import 'package:wine_cellar/features/ai_assistant/data/datasources/vivino_dataso
 import 'package:wine_cellar/features/statistics/data/repositories/statistics_repository_impl.dart';
 import 'package:wine_cellar/features/statistics/domain/repositories/statistics_repository.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/entities/virtual_cellar_theme.dart';
+import 'package:wine_cellar/features/developer/data/datasources/backup_local_datasource.dart';
+import 'package:wine_cellar/features/developer/data/repositories/backup_repository_impl.dart';
+import 'package:wine_cellar/features/developer/domain/repositories/backup_repository.dart';
+import 'package:wine_cellar/features/developer/domain/usecases/export_backup_usecase.dart';
+import 'package:wine_cellar/features/developer/domain/usecases/import_backup_usecase.dart';
+import 'package:wine_cellar/features/developer/presentation/providers/backup_provider.dart';
 
 // ============ Database ============
 
@@ -714,6 +721,16 @@ final analyzeWineUseCaseProvider = Provider<AnalyzeWineUseCase?>((ref) {
   return AnalyzeWineUseCase(aiService);
 });
 
+/// Returns null when no AI service is configured.
+/// Used by [WinePreviewCard] and the wine edit screen to re-evaluate a wine
+/// form while preserving user-corrected fields.
+final reevaluateWineFromFormUseCaseProvider =
+    Provider<ReevaluateWineFromFormUseCase?>((ref) {
+  final aiService = ref.watch(aiServiceProvider);
+  if (aiService == null) return null;
+  return ReevaluateWineFromFormUseCase(aiService);
+});
+
 /// Returns null when no AI service is configured yet.
 /// Utilise [visionAiServiceProvider] pour respecter les overrides
 /// de modèle/clé API dédiés à l'analyse d'images.
@@ -750,5 +767,32 @@ final developerModeProvider =
   return SecureBoolNotifier(
     ref.watch(secureStorageProvider),
     AppConstants.keyDeveloperMode,
+  );
+});
+
+// ============ Backup ============
+
+final backupLocalDatasourceProvider = Provider<BackupLocalDatasource>((ref) {
+  return BackupLocalDatasource();
+});
+
+final backupRepositoryProvider = Provider<BackupRepository>((ref) {
+  return BackupRepositoryImpl(ref.watch(backupLocalDatasourceProvider));
+});
+
+final exportBackupUseCaseProvider = Provider<ExportBackupUseCase>((ref) {
+  return ExportBackupUseCase(ref.watch(backupRepositoryProvider));
+});
+
+final importBackupUseCaseProvider = Provider<ImportBackupUseCase>((ref) {
+  return ImportBackupUseCase(ref.watch(backupRepositoryProvider));
+});
+
+final backupNotifierProvider =
+    StateNotifierProvider<BackupNotifier, BackupState>((ref) {
+  return BackupNotifier(
+    ref.watch(exportBackupUseCaseProvider),
+    ref.watch(importBackupUseCaseProvider),
+    ref,
   );
 });

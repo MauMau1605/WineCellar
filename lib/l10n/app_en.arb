@@ -106,5 +106,13 @@
   "statsNoGrapes": "No grape variety recorded",
   "statsNoProducers": "No producer recorded",
   "statsLoadError": "Unable to load statistics",
-  "statsOthers": "Others"
+  "statsOthers": "Others",
+  "reevaluate": "Re-evaluate",
+  "reevaluating": "Re-evaluating…",
+  "fieldLocked": "Field locked",
+  "fieldUnlocked": "Field unlocked",
+  "seeDetailedReviews": "See detailed reviews",
+  "reviewsDetailTitle": "Detailed reviews",
+  "webSources": "Web sources",
+  "lockedFieldsCount": "{count} field(s) locked"
 }

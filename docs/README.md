@@ -22,6 +22,19 @@ Index central de la documentation technique du projet.
 - [technical/routing.md](technical/routing.md) : arbre GoRouter et conventions de navigation.
 - [technical/database.md](technical/database.md) : Drift, tables, DAOs et migrations.
 
+## Tests
+
+Une couverture de tests complète existe pour les domaines critiques :
+
+- **Core** : providers Riverpod globaux, router, services Ollama local
+- **Database** : tous les DAOs (`WineDao`, `FoodCategoryDao`, `VirtualCellarDao`, `BottlePlacementDao`)
+- **Domain** : tous les use cases des features (wine_cellar, developer, etc.)
+- **Data** : repositories implémentations (wine, food category, virtual cellar, statistics)
+- **AI Datasources** : tous les services IA (OpenAI, Gemini, Mistral, Ollama, MLKit, Vivino, CellarTracker)
+- **Presentation** : tous les écrans critiques (wine list/detail/edit, settings, statistics, chat, developer)
+
+Pour plus de détails : voir [ARCHITECTURE.md#tests-et-qualité](ARCHITECTURE.md#tests-et-qualité) et chaque doc feature (section « Couverture des tests »).
+
 ## Diagrammes
 
 - [diagrams/architecture-globale.md](diagrams/architecture-globale.md) : vue système Mermaid.

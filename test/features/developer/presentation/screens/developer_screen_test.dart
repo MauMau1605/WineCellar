@@ -38,6 +38,14 @@ void main() {
 
       await _pumpScreen(tester, repository);
 
+      // Les 2 nouvelles cartes backup poussent la carte de suppression en-dessous
+      // du viewport de test (800×600) — on défile jusqu'à la rendre visible.
+      await tester.dragUntilVisible(
+        find.text('Supprimer tous les vins'),
+        find.byType(ListView),
+        const Offset(0, -200),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Supprimer tous les vins'));
       await tester.pumpAndSettle();
 

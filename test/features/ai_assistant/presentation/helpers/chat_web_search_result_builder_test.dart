@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:wine_cellar/features/ai_assistant/domain/entities/cellar_tracker_result.dart';
+import 'package:wine_cellar/features/ai_assistant/domain/entities/vivino_result.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_web_search_result_builder.dart';
 
@@ -36,6 +38,34 @@ void main() {
       expect(message.webSources.first.title, 'A1');
       expect(message.webSources.first.uri, 'https://a.test');
       expect(message.collapseSourcesByDefault, isTrue);
+    });
+
+    test('attache les resultats complets Vivino et CellarTracker au message', () {
+      const vivinoResult = VivinoSearchResult(
+        status: VivinoSourceStatus.found,
+        reviews: [VivinoReview(rating: 4.2, note: 'Tres bon')],
+      );
+      const cellarTrackerResult = CellarTrackerResult(
+        status: CellarTrackerSourceStatus.found,
+        notes: [CellarTrackerNote(rating: 93, note: 'Garde prometteuse')],
+      );
+
+      final message = ChatWebSearchResultBuilder.buildAssistantMessage(
+        messageId: 'msg-3',
+        timestamp: DateTime(2026),
+        result: const AiChatResult(
+          textResponse: 'Reponse reviewee',
+          vivinoSourceStatus: VivinoSourceStatus.found,
+          cellarTrackerStatus: CellarTrackerSourceStatus.found,
+        ),
+        vivinoResult: vivinoResult,
+        cellarTrackerResult: cellarTrackerResult,
+      );
+
+      expect(message.vivinoResult, same(vivinoResult));
+      expect(message.cellarTrackerResult, same(cellarTrackerResult));
+      expect(message.vivinoSourceStatus, VivinoSourceStatus.found);
+      expect(message.cellarTrackerStatus, CellarTrackerSourceStatus.found);
     });
   });
 }

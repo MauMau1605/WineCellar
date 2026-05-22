@@ -79,6 +79,17 @@ flowchart LR
 - les statistiques consomment cette feature via `wineRepositoryProvider`
 - la feature développeur réutilise `deleteAllWinesUseCaseProvider`
 
+## Couverture des tests
+
+Cette feature bénéficie d'une couverture de tests complète :
+
+| Couche | Fichiers de test |
+| --- | --- |
+| **Domain (use cases)** | `test/features/wine_cellar/domain/usecases/*_test.dart` — tous les use cases CRUD, import/export, caves virtuelles et placements |
+| **Data (repositories)** | `test/features/wine_cellar/data/repositories/food_category_repository_impl_test.dart`, `virtual_cellar_repository_impl_test.dart` |
+| **Presentation (screens)** | `test/features/wine_cellar/presentation/screens/wine_list_screen_test.dart`, `wine_detail_screen_test.dart`, `wine_edit_screen_test.dart`, `virtual_cellar_list_screen_test.dart`, `virtual_cellar_detail_screen_test.dart`, `expert_cellar_editor_screen_test.dart` |
+| **Database (DAOs)** | `test/database/daos/wine_dao_test.dart`, `food_category_dao_test.dart`, `virtual_cellar_dao_test.dart`, `bottle_placement_dao_test.dart` |
+
 ## Points d'extension
 
 - ajouter un nouveau champ métier d'un vin implique généralement : entité, table Drift, DAO, repository impl, use cases et écrans

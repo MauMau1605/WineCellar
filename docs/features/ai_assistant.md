@@ -113,6 +113,15 @@ Logique de comparaison des fenêtres de dégustation (dans `ChatWineSourcesHelpe
 - les notes moyennes Vivino et CellarTracker sont affichées en en-tête avant les avis détaillés
 - `VivinoSearchResult` embarque `beginConsume`/`endConsume` récupérés en best-effort depuis l'endpoint `/api/wines/{id}/vintages`
 
+## Couverture des tests
+
+Cette feature bénéficie d'une couverture de tests étendue :
+
+| Couche | Fichiers de test |
+| --- | --- |
+| **Data (datasources)** | `test/features/ai_assistant/data/datasources/openai_service_test.dart`, `gemini_service_test.dart`, `mistral_service_test.dart`, `ollama_service_test.dart`, `mlkit_image_text_extractor_test.dart`, `vivino_datasource_test.dart`, `cellar_tracker_datasource_test.dart` |
+| **Presentation (screens)** | `test/features/ai_assistant/presentation/screens/chat_screen_test.dart`, `chat_screen_window_comparison_test.dart` |
+
 ## Points d'extension
 
 - ajouter un nouveau fournisseur IA implique d'implémenter `AiService` puis de l'intégrer dans `aiServiceProvider` et `visionAiServiceProvider`
