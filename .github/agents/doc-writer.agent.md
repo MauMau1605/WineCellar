@@ -1,7 +1,6 @@
 ---
 name: "Doc Writer"
 description: "Use when updating technical documentation and architecture docs after a feature is implemented — updates docs/features/, docs/technical/, docs/ARCHITECTURE.md and the user manual for Wine Cellar"
-model: "Claude Haiku 4.5 (copilot)"
 tools: [read, search, edit]
 argument-hint: "Nom de la fonctionnalité qui vient d'être implémentée"
 ---

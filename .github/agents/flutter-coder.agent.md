@@ -1,7 +1,6 @@
 ---
 name: "Flutter Coder"
 description: "Use when implementing a Flutter feature following a plan — writes Clean Architecture code for Wine Cellar: entities, use cases, repositories, providers Riverpod, screens and widgets"
-model: "GPT-5.3-Codex (copilot)"
 tools: [read, search, edit, execute]
 argument-hint: "Plan d'implémentation ou description de la fonctionnalité à coder"
 handoffs:

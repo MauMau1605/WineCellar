@@ -1,7 +1,6 @@
 ---
 name: "Feature Planner"
 description: "Use when starting a new feature, planning an implementation, or designing a new screen — asks clarifying questions, reads architecture, produces a detailed implementation sketch for Wine Cellar"
-model: "Claude Sonnet 4.6 (copilot)"
 tools: [read, search, todo]
 argument-hint: "Nom et description de la fonctionnalité (ex: 'filtrage des vins par appellation et millésime')"
 handoffs:

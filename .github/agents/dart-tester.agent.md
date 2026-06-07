@@ -1,7 +1,6 @@
 ---
 name: "Dart Tester"
 description: "Use when writing unit tests for Dart/Flutter code — creates behavior-focused tests for use cases, repositories, providers and pure helpers in Wine Cellar"
-model: "GPT-5.4 mini (copilot)"
 tools: [read, search, edit]
 argument-hint: "Fichiers ou zone à tester (ex: 'use cases de la feature wine_search')"
 handoffs:

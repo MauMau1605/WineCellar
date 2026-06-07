@@ -1,7 +1,6 @@
 ---
 name: "Security Auditor"
 description: "Use when auditing code for security vulnerabilities — OWASP Top 10 review and Flutter/Dart-specific security checks, read-only analysis for Wine Cellar"
-model: "Gemini 3.5 Flash (copilot)"
 tools: [read, search]
 argument-hint: "Fichiers, feature ou PR à auditer (ex: 'feature ai_assistant — nouveaux endpoints et stockage clé API')"
 handoffs:

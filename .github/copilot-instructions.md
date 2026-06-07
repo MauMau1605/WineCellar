@@ -1,5 +1,11 @@
 # Wine Cellar — Copilot Instructions
 
+> **Portabilité multi-outils :**
+> - [`AGENTS.md`](../AGENTS.md) — source de vérité portable (OpenAI Codex, Claude CLI, Gemini CLI…)
+> - `.github/instructions/*.instructions.md` — modules Copilot activés automatiquement par contexte de fichier
+> - `.github/agents/*.agent.md` — agents spécialisés Copilot
+> - `.github/prompts/*.prompt.md` — prompts réutilisables Copilot (slash commands)
+
 Application Flutter de gestion de cave à vin avec assistant IA intégré.
 Cible principale finale : Android. Linux est utilisé pour les tests locaux.
 
