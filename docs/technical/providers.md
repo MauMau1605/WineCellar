@@ -65,6 +65,7 @@ flowchart TD
 | `visionModelOverrideProvider` | modèle spécifique à la vision |
 | `visionApiKeyOverrideProvider` | clé API spécifique à la vision |
 | `useOcrForImagesProvider` | bascule OCR local vs vision IA |
+| `chatSessionModeProvider` | mode de chat courant persisté (Ajout, Accords, Avis) |
 | `geminiFallbackApiKeyProvider` | clé fallback pour recherche web Gemini |
 | `cellarTrackerUserProvider` | identifiant CellarTracker persisté via `SecureStringNotifier` |
 | `cellarTrackerPasswordProvider` | mot de passe CellarTracker persisté via `SecureStringNotifier` |

@@ -78,10 +78,10 @@ class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
   @override
-  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class ChatScreenState extends ConsumerState<ChatScreen> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
@@ -293,6 +293,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final text = _textController.text.trim();
     await _sendText(text);
   }
+
+  @visibleForTesting
+  Future<void> sendTextInternal(
+    String text, {
+    String? aiMessage,
+    String? searchQueryOverride,
+  }) =>
+      _sendText(text, aiMessage: aiMessage, searchQueryOverride: searchQueryOverride);
 
   Future<void> _captureWinePhotoAndAnalyze() async {
     final useOcr = ref.read(useOcrForImagesProvider);

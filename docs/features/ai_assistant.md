@@ -110,6 +110,7 @@ Logique de comparaison des fenêtres de dégustation (dans `ChatWineSourcesHelpe
 - `WineAiResponse` porte les champs estimés et les notes de confiance, utiles pour expliquer les choix de l'IA
 - une partie de la logique non visuelle de `chat_screen.dart` est désormais déplacée dans `presentation/helpers/` pour réduire la taille de l'écran et stabiliser les tests de comportement
 - CellarTracker est optionnel : si les credentials sont absents, la datasource retourne immédiatement `CellarTrackerResult.unconfigured()` sans appel réseau
+- en mode **Avis**, si une photo est prise, le texte extrait par OCR est utilisé prioritairement comme requête de recherche pour Vivino et CellarTracker afin de garantir des résultats pertinents basés sur l'étiquette
 - les notes moyennes Vivino et CellarTracker sont affichées en en-tête avant les avis détaillés
 - `VivinoSearchResult` embarque `beginConsume`/`endConsume` récupérés en best-effort depuis l'endpoint `/api/wines/{id}/vintages`
 
