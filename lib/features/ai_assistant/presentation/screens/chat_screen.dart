@@ -59,9 +59,6 @@ class _CreateNewCellarChoice {
   const _CreateNewCellarChoice();
 }
 
-/// The three modes available in the AI chat.
-enum _ChatMode { addWine, foodPairing, wineReview }
-
 /// Data passed from the add-wine screen to pre-fill the AI chat.
 class PrefillData {
   /// Text shown in the chat bubble (field list only).
@@ -91,7 +88,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   static List<ChatMessage> _sessionMessages = [];
   static List<WineAiResponse> _sessionWineDataList = [];
-  static _ChatMode _sessionChatMode = _ChatMode.addWine;
 
   final List<ChatMessage> _messages = [];
   List<WineAiResponse> _currentWineDataList = [];
@@ -99,7 +95,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final Set<int> _manuallyEditedWineIndices = {};
   final Set<int> _autoWebCompletionAttemptedIndices = {};
   bool _isLoading = false;
-  _ChatMode _chatMode = _ChatMode.addWine;
+  late ChatAssistantMode _chatMode;
   final _chatLogger = ChatLogger();
   PrefillData? _prefillData;
 
@@ -110,6 +106,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _prefillData = ChatScreen.pendingPrefill;
     ChatScreen.pendingPrefill = null;
 
+    _chatMode = ref.read(chatSessionModeProvider);
+
     if (_sessionMessages.isEmpty) {
       _chatLogger.startSession();
       _messages.add(_buildWelcomeMessage());
@@ -117,7 +115,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } else {
       _messages.addAll(_sessionMessages);
       _currentWineDataList = List<WineAiResponse>.from(_sessionWineDataList);
-      _chatMode = _sessionChatMode;
     }
     _handlePrefillMessage();
   }
@@ -197,9 +194,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          _chatMode == _ChatMode.foodPairing
+                          _chatMode == ChatAssistantMode.foodPairing
                               ? 'L\'IA cherche dans votre cave...'
-                              : _chatMode == _ChatMode.wineReview
+                              : _chatMode == ChatAssistantMode.wineReview
                                   ? 'Recherche d\'avis sur internet...'
                                   : 'L\'IA analyse votre vin...',
                         ),
@@ -255,9 +252,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: TextField(
                       controller: _textController,
                       decoration: InputDecoration(
-                        hintText: _chatMode == _ChatMode.foodPairing
+                        hintText: _chatMode == ChatAssistantMode.foodPairing
                             ? 'Décrivez votre repas...'
-                            : _chatMode == _ChatMode.wineReview
+                            : _chatMode == ChatAssistantMode.wineReview
                                 ? 'Quel vin souhaitez-vous évaluer ?'
                                 : 'Décrivez votre vin...',
                         border: OutlineInputBorder(
@@ -380,7 +377,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final aiPrompt = _buildImagePromptForCurrentMode(
           extractedText: extractedText,
         );
-        await _sendText(displayText, aiMessage: aiPrompt);
+        await _sendText(
+          displayText,
+          aiMessage: aiPrompt,
+          searchQueryOverride:
+              _chatMode == ChatAssistantMode.wineReview ? extractedText : null,
+        );
       },
     );
   }
@@ -426,7 +428,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               timestamp: DateTime.now(),
             ),
           );
-          _currentWineDataList = _chatMode == _ChatMode.addWine
+          _currentWineDataList = _chatMode == ChatAssistantMode.addWine
               ? result.wineDataList
               : const [];
           _addedWineIndices.clear();
@@ -484,7 +486,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// [text] is displayed in the chat bubble.
   /// If [aiMessage] is provided it is sent to the AI instead of [text],
   /// allowing the visible message to differ from the actual prompt.
-  Future<void> _sendText(String text, {String? aiMessage}) async {
+  /// [searchQueryOverride] allows forcing a specific query for wine review search
+  /// (e.g. using OCR text instead of the generic "photo sent" message).
+  Future<void> _sendText(
+    String text, {
+    String? aiMessage,
+    String? searchQueryOverride,
+  }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || _isLoading) return;
 
@@ -492,7 +500,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (analyzeUseCase == null) return;
 
     AddWineMessageIntent? addWineIntent;
-    if (aiMessage == null && _chatMode == _ChatMode.addWine) {
+    if (aiMessage == null && _chatMode == ChatAssistantMode.addWine) {
       addWineIntent = await _resolveAddWineIntent(trimmed);
       if (addWineIntent == null) return;
     }
@@ -547,7 +555,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     List<WineEntity> cellarWinesForSearch = const [];
     var cellarSummary = '';
-    if (aiMessage == null && _chatMode == _ChatMode.foodPairing) {
+    if (aiMessage == null && _chatMode == ChatAssistantMode.foodPairing) {
       final wines = await ref.read(wineRepositoryProvider).getAllWines();
       cellarWinesForSearch = wines;
       cellarSummary = ChatContextSummaryBuilder.buildCellarSummary(wines);
@@ -575,10 +583,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // On compare notes et fenêtres de dégustation, puis on affiche le résultat sans IA.
     // Si ni Vivino ni CellarTracker ne trouvent le vin, on continue vers la recherche web.
     VivinoSourceStatus? vivinoFallbackStatus;
-    if (_chatMode == _ChatMode.wineReview) {
+    if (_chatMode == ChatAssistantMode.wineReview) {
       final vivino = ref.read(vivinoDatasourceProvider);
       final ct = ref.read(cellarTrackerDatasourceProvider);
-      final vivinoQuery = _extractWineQueryForVivino(trimmed);
+
+      // Use the override (e.g. OCR text) or the visible message.
+      final querySource = searchQueryOverride ?? trimmed;
+      final vivinoQuery = _extractWineQueryForVivino(querySource);
 
       // Requêtes parallèles
       final results = await Future.wait([
@@ -685,7 +696,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
       (result) async {
         _chatLogger.logAiResponse(result.textResponse);
-        final assistantText = _chatMode == _ChatMode.foodPairing
+        final assistantText = _chatMode == ChatAssistantMode.foodPairing
             ? ChatResponseEnricher.appendWineDetailLinksToResponse(
                 result.textResponse,
                 cellarWinesForSearch,
@@ -693,7 +704,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             : result.textResponse;
 
         var recoveredWineDataList = result.wineDataList;
-        if (_chatMode == _ChatMode.addWine && recoveredWineDataList.isEmpty) {
+        if (_chatMode == ChatAssistantMode.addWine && recoveredWineDataList.isEmpty) {
           recoveredWineDataList = await ChatMissingJsonRecovery(
             analyzeUseCase: analyzeUseCase,
             logError: _chatLogger.logError,
@@ -722,7 +733,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           );
 
-          if (_chatMode == _ChatMode.addWine &&
+          if (_chatMode == ChatAssistantMode.addWine &&
               recoveredWineDataList.isNotEmpty) {
             _currentWineDataList = recoveredWineDataList;
             _addedWineIndices.clear();
@@ -730,7 +741,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           }
         });
 
-        if (_chatMode == _ChatMode.addWine && _isAutoWebCompletionEnabled()) {
+        if (_chatMode == ChatAssistantMode.addWine && _isAutoWebCompletionEnabled()) {
           await _autoCompleteEstimatedFieldsIfNeeded();
         }
       },
@@ -796,7 +807,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   static const int _webCompletionBatchSize = 10;
 
   Future<void> _autoCompleteEstimatedFieldsIfNeeded() async {
-    if (_chatMode != _ChatMode.addWine) return;
+    if (_chatMode != ChatAssistantMode.addWine) return;
     if (!_isAutoWebCompletionEnabled()) return;
 
     final plan = ChatAutoWebCompletionPlanner.build(
@@ -876,7 +887,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
       // Ensure we are in add-wine mode, not search or review mode.
       if (prefillPlan.shouldSwitchToAddWineMode) {
-        _onModeChanged(_ChatMode.addWine);
+        _onModeChanged(ChatAssistantMode.addWine);
       }
 
       switch (prefillPlan.actionType) {
@@ -2136,7 +2147,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _cacheConversationState() {
     _sessionMessages = List<ChatMessage>.from(_messages);
     _sessionWineDataList = List<WineAiResponse>.from(_currentWineDataList);
-    _sessionChatMode = _chatMode;
   }
 
   // ---- Mode selector & cellar search helpers ----
@@ -2191,20 +2201,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildModeSelector() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: SegmentedButton<_ChatMode>(
+      child: SegmentedButton<ChatAssistantMode>(
         segments: const [
           ButtonSegment(
-            value: _ChatMode.addWine,
+            value: ChatAssistantMode.addWine,
             label: Text('Ajouter'),
             icon: Icon(Icons.wine_bar, size: 18),
           ),
           ButtonSegment(
-            value: _ChatMode.foodPairing,
+            value: ChatAssistantMode.foodPairing,
             label: Text('Accords'),
             icon: Icon(Icons.restaurant, size: 18),
           ),
           ButtonSegment(
-            value: _ChatMode.wineReview,
+            value: ChatAssistantMode.wineReview,
             label: Text('Avis'),
             icon: Icon(Icons.rate_review, size: 18),
           ),
@@ -2215,7 +2225,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  void _onModeChanged(_ChatMode newMode) async {
+  void _onModeChanged(ChatAssistantMode newMode) async {
     if (_chatMode == newMode) return;
 
     final hasWebSearch =
@@ -2258,6 +2268,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Reset AI session on mode switch for clean context.
     _resetAiServiceChatSession();
 
+    // Persist mode choice.
+    ref.read(chatSessionModeProvider.notifier).setMode(newMode);
+
     setState(() {
       _chatMode = newMode;
       _currentWineDataList = [];
@@ -2281,37 +2294,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(aiServiceProvider)?.resetChat();
   }
 
-  ChatConversationMode _toConversationMode(_ChatMode mode) {
+  ChatConversationMode _toConversationMode(ChatAssistantMode mode) {
     return switch (mode) {
-      _ChatMode.addWine => ChatConversationMode.addWine,
-      _ChatMode.foodPairing => ChatConversationMode.foodPairing,
-      _ChatMode.wineReview => ChatConversationMode.wineReview,
+      ChatAssistantMode.addWine => ChatConversationMode.addWine,
+      ChatAssistantMode.foodPairing => ChatConversationMode.foodPairing,
+      ChatAssistantMode.wineReview => ChatConversationMode.wineReview,
     };
   }
 
-  _ChatMode _fromConversationMode(ChatConversationMode mode) {
+  ChatAssistantMode _fromConversationMode(ChatConversationMode mode) {
     return switch (mode) {
-      ChatConversationMode.addWine => _ChatMode.addWine,
-      ChatConversationMode.foodPairing => _ChatMode.foodPairing,
-      ChatConversationMode.wineReview => _ChatMode.wineReview,
+      ChatConversationMode.addWine => ChatAssistantMode.addWine,
+      ChatConversationMode.foodPairing => ChatAssistantMode.foodPairing,
+      ChatConversationMode.wineReview => ChatAssistantMode.wineReview,
     };
   }
 
-  ChatMediaMode _toChatMediaMode(_ChatMode mode) {
+  ChatMediaMode _toChatMediaMode(ChatAssistantMode mode) {
     return switch (mode) {
-      _ChatMode.addWine => ChatMediaMode.addWine,
-      _ChatMode.foodPairing => ChatMediaMode.foodPairing,
-      _ChatMode.wineReview => ChatMediaMode.wineReview,
+      ChatAssistantMode.addWine => ChatMediaMode.addWine,
+      ChatAssistantMode.foodPairing => ChatMediaMode.foodPairing,
+      ChatAssistantMode.wineReview => ChatMediaMode.wineReview,
     };
   }
 
-  ChatRequestMode _toChatRequestMode(_ChatMode mode) {
+  ChatRequestMode _toChatRequestMode(ChatAssistantMode mode) {
     switch (mode) {
-      case _ChatMode.addWine:
+      case ChatAssistantMode.addWine:
         return ChatRequestMode.addWine;
-      case _ChatMode.foodPairing:
+      case ChatAssistantMode.foodPairing:
         return ChatRequestMode.foodPairing;
-      case _ChatMode.wineReview:
+      case ChatAssistantMode.wineReview:
         return ChatRequestMode.wineReview;
     }
   }

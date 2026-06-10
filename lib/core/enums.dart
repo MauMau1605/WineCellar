@@ -165,6 +165,24 @@ enum WineListLayout {
       this == masterDetail || this == masterDetailVertical;
 }
 
+/// Modes for the AI Assistant Chat
+enum ChatAssistantMode {
+  addWine,
+  foodPairing,
+  wineReview;
+
+  String get label {
+    switch (this) {
+      case ChatAssistantMode.addWine:
+        return 'Ajout';
+      case ChatAssistantMode.foodPairing:
+        return 'Accords';
+      case ChatAssistantMode.wineReview:
+        return 'Avis';
+    }
+  }
+}
+
 /// AI provider enumeration
 enum AiProvider {
   openai,

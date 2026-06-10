@@ -144,6 +144,37 @@ class AppVisualThemeNotifier extends StateNotifier<VirtualCellarTheme?> {
   }
 }
 
+/// Persistent chat session mode (survives process restarts).
+final chatSessionModeProvider =
+    StateNotifierProvider<ChatSessionModeNotifier, ChatAssistantMode>((ref) {
+  return ChatSessionModeNotifier(ref.watch(secureStorageProvider));
+});
+
+class ChatSessionModeNotifier extends StateNotifier<ChatAssistantMode> {
+  final FlutterSecureStorage _storage;
+  static const _key = 'chat_session_mode';
+
+  ChatSessionModeNotifier(this._storage) : super(ChatAssistantMode.addWine) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final value = await _storage.read(key: _key);
+    if (value != null) {
+      final mode = ChatAssistantMode.values.firstWhere(
+        (m) => m.name == value,
+        orElse: () => ChatAssistantMode.addWine,
+      );
+      state = mode;
+    }
+  }
+
+  Future<void> setMode(ChatAssistantMode mode) async {
+    state = mode;
+    await _storage.write(key: _key, value: mode.name);
+  }
+}
+
 /// Persistent wine list layout preference chosen in Settings.
 final wineListLayoutProvider =
     StateNotifierProvider<WineListLayoutNotifier, WineListLayout>((ref) {
