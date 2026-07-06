@@ -859,75 +859,114 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     }
 
     final csvPath = picked.files.single.path!;
-    final csvContent = await File(csvPath).readAsString();
-    final importApproved = await _confirmVirtualCellarImportSafety(
-      formatLabel: 'CSV',
-      importedPlacementsWillBeIgnored: false,
-    );
-    if (!mounted || !importApproved) return;
-
-    final previewRows = _extractCsvPreviewRows(csvContent, maxRows: 20);
-    final allRows = _extractCsvPreviewRows(csvContent, maxRows: 100);
-
-    if (!mounted) return;
-    final mappingResult = await showDialog<CsvMappingDialogResult>(
-      context: context,
-      builder: (_) => CsvColumnMappingDialog(
-        previewRows: previewRows,
-        allRows: allRows,
-        onRequestAiMapping: (rows, {allRows}) =>
-            _requestAiMapping(rows, allRows: allRows),
-      ),
-    );
-
-    if (mappingResult == null || !mounted) {
-      return;
-    }
-
-    final parseUseCase = ref.read(parseCsvImportUseCaseProvider);
-    final parseResult = await parseUseCase(
-      ParseCsvImportParams(
-        csvContent: csvContent,
-        mapping: mappingResult.mapping,
-        headerLine: mappingResult.headerLine,
-      ),
-    );
-
-    if (!mounted) return;
-
-    await parseResult.fold(
-      (failure) async {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(failure.message)));
-      },
-      (rows) async {
-        final previewOk = await _confirmCsvPreview(rows);
-        if (!mounted || !previewOk) return;
-
-        final choice = await _askCsvImportMode();
-        if (!mounted || choice == null) return;
-
-        // Create virtual cellar if location specified and doesn't exist
-        if (choice.locationOverride != null) {
-          await _ensureVirtualCellarForLocation(choice.locationOverride!);
-        }
-
-        if (choice.mode == _CsvImportMode.direct) {
-          final directConfirmed = await _confirmDirectImportRecap(rows);
-          if (!mounted || !directConfirmed) return;
-
-          await _importCsvDirectly(
-            csvContent: csvContent,
-            mappingResult: mappingResult,
-            locationOverride: choice.locationOverride,
+    try {
+      String csvContent;
+      try {
+        csvContent = await File(csvPath).readAsString(encoding: utf8);
+      } catch (e) {
+        try {
+          csvContent = await File(csvPath).readAsString(encoding: latin1);
+        } catch (fallbackError) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Impossible de lire le fichier. Assurez-vous qu\'il s\'agit d\'un fichier texte (CSV) valide. Erreur: $fallbackError',
+              ),
+            ),
           );
           return;
         }
+      }
 
-        await _importCsvWithAi(rows, locationOverride: choice.locationOverride);
-      },
-    );
+      final importApproved = await _confirmVirtualCellarImportSafety(
+        formatLabel: 'CSV',
+        importedPlacementsWillBeIgnored: false,
+      );
+      if (!mounted || !importApproved) return;
+
+      final previewRows = _extractCsvPreviewRows(csvContent, maxRows: 20);
+      final allRows = _extractCsvPreviewRows(csvContent, maxRows: 100);
+
+      if (previewRows.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Le fichier CSV est vide ou son format n\'a pas pu être détecté.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      final mappingResult = await showDialog<CsvMappingDialogResult>(
+        context: context,
+        builder: (_) => CsvColumnMappingDialog(
+          previewRows: previewRows,
+          allRows: allRows,
+          onRequestAiMapping: (rows, {allRows}) =>
+              _requestAiMapping(rows, allRows: allRows),
+        ),
+      );
+
+      if (mappingResult == null || !mounted) {
+        return;
+      }
+
+      final parseUseCase = ref.read(parseCsvImportUseCaseProvider);
+      final parseResult = await parseUseCase(
+        ParseCsvImportParams(
+          csvContent: csvContent,
+          mapping: mappingResult.mapping,
+          headerLine: mappingResult.headerLine,
+        ),
+      );
+
+      if (!mounted) return;
+
+      await parseResult.fold(
+        (failure) async {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(failure.message)));
+        },
+        (rows) async {
+          final previewOk = await _confirmCsvPreview(rows);
+          if (!mounted || !previewOk) return;
+
+          final choice = await _askCsvImportMode();
+          if (!mounted || choice == null) return;
+
+          // Create virtual cellar if location specified and doesn't exist
+          if (choice.locationOverride != null) {
+            await _ensureVirtualCellarForLocation(choice.locationOverride!);
+          }
+
+          if (choice.mode == _CsvImportMode.direct) {
+            final directConfirmed = await _confirmDirectImportRecap(rows);
+            if (!mounted || !directConfirmed) return;
+
+            await _importCsvDirectly(
+              csvContent: csvContent,
+              mappingResult: mappingResult,
+              locationOverride: choice.locationOverride,
+            );
+            return;
+          }
+
+          await _importCsvWithAi(rows, locationOverride: choice.locationOverride);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Une erreur inattendue est survenue lors de l\'importation : $e'),
+        ),
+      );
+    }
   }
 
   /// Ask the AI to detect header line and column mapping.
