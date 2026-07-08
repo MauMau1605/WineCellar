@@ -15,6 +15,15 @@
   "export": "Export",
   "exportJson": "Export as JSON",
   "exportCsv": "Export as CSV",
+  "exportFilteredCsv": "Export selection as CSV",
+  "exportFilteredCsvSuccess": "CSV export completed ({count} wine(s))",
+  "@exportFilteredCsvSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "importJson": "Import from JSON",
   "search": "Search...",
   "filterByColor": "Filter by color",

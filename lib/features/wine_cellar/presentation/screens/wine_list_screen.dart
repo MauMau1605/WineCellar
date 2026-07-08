@@ -23,6 +23,7 @@ import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_filter.dar
 import 'package:wine_cellar/features/wine_cellar/domain/entities/wine_sort.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/update_wine_quantity.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_wines.dart';
+import 'package:wine_cellar/features/wine_cellar/domain/usecases/export_filtered_wines_csv.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/import_wines_from_csv.dart';
 import 'package:wine_cellar/features/wine_cellar/domain/usecases/parse_csv_import.dart';
 import 'package:wine_cellar/features/wine_cellar/presentation/helpers/wine_list_screen_helper.dart';
@@ -58,6 +59,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   WineSort? _sort;
   List<String> _availableLocations = const [];
   int? _selectedWineId;
+  List<WineEntity> _currentFilteredWines = const [];
 
   MultiSplitViewController? _hSplitController;
   MultiSplitViewController? _vSplitController;
@@ -140,11 +142,21 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'export_csv',
                 child: ListTile(
-                  leading: Icon(Icons.table_chart),
-                  title: Text('Exporter CSV'),
+                  leading: const Icon(Icons.table_chart),
+                  title: Text(
+                    !_filter.isEmpty || _sort != null
+                        ? 'Exporter la sélection en CSV'
+                        : 'Exporter CSV',
+                  ),
+                  subtitle: !_filter.isEmpty || _sort != null
+                      ? Text(
+                          '${_currentFilteredWines.length} vin(s) affichés',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : null,
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -215,6 +227,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
                   _filter,
                   _sort,
                 );
+                _currentFilteredWines = filtered;
 
                 if (filtered.isEmpty) {
                   return _buildEmptyState();
@@ -718,11 +731,7 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         );
         return;
       case 'export_csv':
-        await _handleExport(
-          format: ExportFormat.csv,
-          suggestedFileName: 'cave_export.csv',
-          successMessage: 'Export CSV réalisé !',
-        );
+        await _handleFilteredCsvExport();
         return;
       case 'import_json':
         await _importJsonFlow();
@@ -754,6 +763,38 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(successMessage)));
+      },
+    );
+  }
+
+  Future<void> _handleFilteredCsvExport() async {
+    final wines = _currentFilteredWines;
+    if (wines.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun vin à exporter.')),
+      );
+      return;
+    }
+
+    final exportUseCase = ref.read(exportFilteredWinesCsvUseCaseProvider);
+    final result = await exportUseCase(wines);
+
+    await result.fold(
+      (failure) async {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+      (content) async {
+        final saved = await _saveExport(content, 'cave_export.csv');
+        if (!mounted || !saved) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export CSV réalisé (${wines.length} vin(s))'),
+          ),
+        );
       },
     );
   }

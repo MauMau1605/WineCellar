@@ -15,6 +15,15 @@
   "export": "Exporter",
   "exportJson": "Exporter en JSON",
   "exportCsv": "Exporter en CSV",
+  "exportFilteredCsv": "Exporter la sélection en CSV",
+  "exportFilteredCsvSuccess": "Export CSV réalisé ({count} vin(s))",
+  "@exportFilteredCsvSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "importJson": "Importer depuis JSON",
   "search": "Rechercher...",
   "filterByColor": "Filtrer par couleur",
