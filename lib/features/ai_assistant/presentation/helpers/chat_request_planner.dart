@@ -32,7 +32,7 @@ class ChatRequestPlanner {
     final trimmedOverride = aiMessageOverride?.trim();
     final hasAiOverride = trimmedOverride != null && trimmedOverride.isNotEmpty;
 
-    var messageToSend = hasAiOverride ? trimmedOverride! : trimmedUserMessage;
+    var messageToSend = hasAiOverride ? trimmedOverride : trimmedUserMessage;
 
     if (!hasAiOverride) {
       switch (mode) {
@@ -43,8 +43,7 @@ class ChatRequestPlanner {
           );
           break;
         case ChatRequestMode.wineReview:
-          messageToSend =
-              mainServiceSupportsWebSearch || hasFallbackWebSearch
+          messageToSend = mainServiceSupportsWebSearch || hasFallbackWebSearch
               ? AiPrompts.buildGroundedReviewMessage(
                   userQuestion: trimmedUserMessage,
                 )

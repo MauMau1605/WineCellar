@@ -7,12 +7,13 @@ import 'package:wine_cellar/features/ai_assistant/domain/entities/wine_ai_respon
 import 'package:wine_cellar/features/ai_assistant/domain/repositories/ai_service.dart';
 import 'package:wine_cellar/features/ai_assistant/domain/usecases/ai_prompts.dart';
 
-typedef OpenAiChatCompletionRunner = Future<String> Function({
-  required String model,
-  required List<OpenAIChatCompletionChoiceMessageModel> messages,
-  required double temperature,
-  required int maxTokens,
-});
+typedef OpenAiChatCompletionRunner =
+    Future<String> Function({
+      required String model,
+      required List<OpenAIChatCompletionChoiceMessageModel> messages,
+      required double temperature,
+      required int maxTokens,
+    });
 
 typedef OpenAiDioFactory = Dio Function(BaseOptions options);
 
@@ -40,8 +41,8 @@ class OpenAiService implements AiService {
     this.model = 'gpt-4o-mini',
     OpenAiChatCompletionRunner? chatCompletionRunner,
     OpenAiDioFactory? dioFactory,
-  })  : _chatCompletionRunner = chatCompletionRunner,
-        _dioFactory = dioFactory {
+  }) : _chatCompletionRunner = chatCompletionRunner,
+       _dioFactory = dioFactory {
     OpenAI.apiKey = apiKey;
   }
 
@@ -161,8 +162,9 @@ class OpenAiService implements AiService {
         }
         return AiChatResult.error(
           'Le modèle OpenAI "$model" ne supporte peut-être pas la vision. '
-          'Essayez un modèle multimodal (ex: gpt-4o-mini). '
-          '${detail ?? ""}'.trim(),
+                  'Essayez un modèle multimodal (ex: gpt-4o-mini). '
+                  '${detail ?? ""}'
+              .trim(),
         );
       }
 
@@ -188,18 +190,12 @@ class OpenAiService implements AiService {
     final dataUrl = 'data:$mimeType;base64,$base64Image';
 
     final messages = <Map<String, dynamic>>[
-      {
-        'role': 'system',
-        'content': AiPrompts.systemPrompt,
-      },
+      {'role': 'system', 'content': AiPrompts.systemPrompt},
     ];
 
     for (final msg in conversationHistory) {
       final role = msg['role'] == 'user' ? 'user' : 'assistant';
-      messages.add({
-        'role': role,
-        'content': msg['content'] ?? '',
-      });
+      messages.add({'role': role, 'content': msg['content'] ?? ''});
     }
 
     messages.add({
@@ -256,9 +252,7 @@ class OpenAiService implements AiService {
         baseUrl: 'https://api.openai.com',
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 30),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-        },
+        headers: {'Authorization': 'Bearer $apiKey'},
       ),
     );
 
@@ -360,7 +354,7 @@ class OpenAiService implements AiService {
     required int maxTokens,
   }) async {
     if (_chatCompletionRunner != null) {
-      return _chatCompletionRunner!(
+      return _chatCompletionRunner(
         model: model,
         messages: messages,
         temperature: temperature,

@@ -2068,13 +2068,14 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     String csvContent, {
     int maxRows = 5,
   }) {
+    final normalizedCsv = csvContent.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     try {
-      final separator = _detectCsvSeparator(csvContent);
+      final separator = _detectCsvSeparator(normalizedCsv);
       final rawRows = CsvToListConverter(
         shouldParseNumbers: false,
         eol: '\n',
         fieldDelimiter: separator,
-      ).convert(csvContent);
+      ).convert(normalizedCsv);
 
       final preview = <List<String>>[];
       for (final row in rawRows) {

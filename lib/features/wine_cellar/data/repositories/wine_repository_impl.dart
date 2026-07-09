@@ -263,12 +263,13 @@ class WineRepositoryImpl implements WineRepository {
     CsvColumnMapping mapping, {
     int? headerLine,
   }) async {
-    final separator = detectCsvSeparator(csvString);
+    final normalizedCsv = csvString.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final separator = detectCsvSeparator(normalizedCsv);
     final rows = CsvToListConverter(
       shouldParseNumbers: false,
       eol: '\n',
       fieldDelimiter: separator,
-    ).convert(csvString);
+    ).convert(normalizedCsv);
 
     if (rows.isEmpty) {
       return [];
