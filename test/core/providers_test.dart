@@ -206,6 +206,22 @@ void main() {
       expect((service! as GeminiService).model, AppConstants.defaultGeminiModel);
     });
 
+    test('aiServiceProvider sanitize les espaces dans le modèle Gemini', () async {
+      final container = createContainer(
+        provider: AiProvider.gemini,
+        geminiKey: 'gem-key',
+        selectedModel: 'gemini 3.8 flash',
+      );
+      addTearDown(container.dispose);
+
+      await warmProviders(container);
+
+      final service = container.read(aiServiceProvider);
+
+      expect(service, isA<GeminiService>());
+      expect((service! as GeminiService).model, 'gemini-3.8-flash');
+    });
+
     test('aiServiceProvider construit Ollama avec les valeurs par défaut', () async {
       final container = createContainer(provider: AiProvider.ollama);
       addTearDown(container.dispose);

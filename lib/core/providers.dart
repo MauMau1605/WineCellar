@@ -506,7 +506,8 @@ final aiServiceProvider = Provider<AiService?>((ref) {
 });
 
 String _sanitizeGeminiModel(String? storedModel) {
-  final candidate = (storedModel ?? '').trim();
+  final candidate =
+      (storedModel ?? '').trim().replaceAll(RegExp(r'\s+'), '-');
 
   // Legacy model kept from previous versions: invalid in current Gemini API
   if (candidate.isEmpty || candidate == 'gemini-1.5-flash') {

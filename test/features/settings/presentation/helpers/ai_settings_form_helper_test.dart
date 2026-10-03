@@ -102,5 +102,23 @@ void main() {
       expect(saveData.selectedModel, AppConstants.defaultOllamaModel);
       expect(saveData.visionProviderOverrideName, isNull);
     });
+
+    test('remplace les espaces par des tirets pour les modeles Gemini', () {
+      final saveData = AiSettingsFormHelper.buildSaveData(
+        currentProvider: AiProvider.gemini,
+        openAiApiKey: '',
+        geminiApiKey: 'AIza-test',
+        mistralApiKey: '',
+        ollamaUrl: '',
+        model: 'gemini 3.8 flash',
+        visionProviderOverride: AiProvider.gemini,
+        visionModel: 'gemini 3.5 flash lite',
+        visionApiKey: '',
+        geminiFallbackKey: '',
+      );
+
+      expect(saveData.selectedModel, 'gemini-3.8-flash');
+      expect(saveData.visionModel, 'gemini-3.5-flash-lite');
+    });
   });
 }

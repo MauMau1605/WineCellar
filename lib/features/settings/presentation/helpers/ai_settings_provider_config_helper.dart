@@ -48,7 +48,7 @@ class AiSettingsProviderConfigHelper {
         apiKeyHint: 'AIza...',
         usesOllamaUrlField: false,
         modelHint: AppConstants.defaultGeminiModel,
-        modelHelper: 'Recommandé : gemini-2.5-flash-lite',
+        modelHelper: 'Recommandé : gemini-2.5-flash-lite ou gemini-3.8-flash',
         showsVisionModelChip: false,
         providerInfoText: 'Obtenez votre clé gratuite sur aistudio.google.com',
       ),

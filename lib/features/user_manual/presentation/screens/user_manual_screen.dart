@@ -702,7 +702,7 @@ class _AiTokensTab extends StatelessWidget {
           'Creez un compte sur AI Studio Google si ce n est pas deja fait sur https://aistudio.google.com.',
           'Creez une cle sur AI Studio Google en selectionnant "Get API Key" -> "Creer une cle API".',
           'Collez-la dans "Cle API Gemini" et renseignez le nom du modele a utiliser.',
-          'Modele conseille: gemini-2.5-flash-lite, le seul teste pour la vision.',
+          'Modele conseille: gemini-2.5-flash-lite ou gemini-3.8-flash.',
         ]),
         _BlockTitle('Mistral'),
         _Bullets([
@@ -723,7 +723,7 @@ class _AiTokensTab extends StatelessWidget {
           'OCR local: lit le texte de l etiquette sans envoyer l image.',
           'Vision IA: possible avec un fournisseur/modele vision compatible.',
           'Vous pouvez definir un token et un modele dedies a la vision.',
-          'Seul Gemini avec gemini-2.5-flash-lite a pour le moment ete teste en version gratuite.',
+          'Gemini avec gemini-2.5-flash-lite ou gemini-3.8-flash supporte l analyse d image.',
         ]),
         _BlockTitle('Les 3 modes de chat IA'),
         _Paragraph(

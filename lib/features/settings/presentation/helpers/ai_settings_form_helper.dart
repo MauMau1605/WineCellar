@@ -111,7 +111,17 @@ class AiSettingsFormHelper {
     required String visionApiKey,
     required String geminiFallbackKey,
   }) {
-    final trimmedModel = model.trim();
+    var trimmedModel = model.trim();
+    if (currentProvider == AiProvider.gemini && trimmedModel.isNotEmpty) {
+      trimmedModel = trimmedModel.replaceAll(RegExp(r'\s+'), '-');
+    }
+
+    var sanitizedVisionModel = _trimToNull(visionModel);
+    if (visionProviderOverride == AiProvider.gemini &&
+        sanitizedVisionModel != null) {
+      sanitizedVisionModel =
+          sanitizedVisionModel.replaceAll(RegExp(r'\s+'), '-');
+    }
 
     return AiSettingsSaveData(
       openAiApiKey: _trimToNull(openAiApiKey),
@@ -122,7 +132,7 @@ class AiSettingsFormHelper {
           ? defaultModelFor(currentProvider)
           : trimmedModel,
       visionProviderOverrideName: visionProviderOverride?.name,
-      visionModel: _trimToNull(visionModel),
+      visionModel: sanitizedVisionModel,
       visionApiKey: _trimToNull(visionApiKey),
       geminiFallbackKey: _trimToNull(geminiFallbackKey),
     );

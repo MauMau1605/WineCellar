@@ -151,5 +151,78 @@ void main() {
 
       expect(await service.discoverVisionModel(), 'gemini-2.0-flash');
     });
+
+    test('isGemini3Model identifie correctement les modèles Gemini 3', () {
+      expect(GeminiService.isGemini3Model('gemini-3.8-flash'), isTrue);
+      expect(GeminiService.isGemini3Model('gemini-3.5-flash-lite'), isTrue);
+      expect(GeminiService.isGemini3Model('GEMINI-3.8-FLASH'), isTrue);
+      expect(GeminiService.isGemini3Model('gemini-2.5-flash-lite'), isFalse);
+      expect(GeminiService.isGemini3Model('gemini-2.0-flash'), isFalse);
+    });
+
+    test('createGenerationConfig omet la temperature pour Gemini 3', () {
+      final config3 = GeminiService.createGenerationConfig(
+        modelName: 'gemini-3.8-flash',
+        maxOutputTokens: 1000,
+      );
+      expect(config3.temperature, isNull);
+      expect(config3.maxOutputTokens, 1000);
+
+      final config2 = GeminiService.createGenerationConfig(
+        modelName: 'gemini-2.5-flash-lite',
+        maxOutputTokens: 50,
+      );
+      expect(config2.temperature, 0.3);
+      expect(config2.maxOutputTokens, 50);
+    });
+
+    test('analyzeWineWithWebSearch omet la temperature pour les modeles Gemini 3',
+        () async {
+      late HttpServer server;
+      late Map<String, dynamic> capturedPayload;
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final baseUri = Uri.parse('http://${server.address.address}:${server.port}');
+
+      server.listen((request) async {
+        final raw = await utf8.decoder.bind(request).join();
+        capturedPayload = jsonDecode(raw) as Map<String, dynamic>;
+
+        request.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': 'Réponse test 3.8'},
+                    ],
+                  },
+                },
+              ],
+            }),
+          );
+        await request.response.close();
+      });
+
+      addTearDown(() async => server.close(force: true));
+
+      final service = GeminiService(
+        apiKey: 'gem-key',
+        model: 'gemini-3.8-flash',
+        dioFactory: (options) => Dio(BaseOptions(baseUrl: baseUri.toString())),
+        enableLogging: false,
+      );
+
+      final result = await service.analyzeWineWithWebSearch(
+        userMessage: 'Recherche 3.8',
+      );
+
+      expect(result.isError, isFalse);
+      final genConfig = capturedPayload['generationConfig'] as Map<String, dynamic>;
+      expect(genConfig.containsKey('temperature'), isFalse);
+      expect(genConfig['maxOutputTokens'], 8000);
+    });
   });
 }

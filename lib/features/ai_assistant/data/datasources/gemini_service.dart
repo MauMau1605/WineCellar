@@ -20,6 +20,8 @@ class GeminiService implements AiService {
   final ChatLogger? _chatLogger;
   static const String _fallbackModel = 'gemini-2.5-flash-lite';
   static const List<String> _preferredModels = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
     'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
     'gemini-2.0-flash-thinking-exp-01-21',
@@ -29,6 +31,26 @@ class GeminiService implements AiService {
   static int _totalRequests = 0;
 
   late final GenerativeModel _model;
+
+  /// Returns true if the model belongs to the Gemini 3.x family.
+  static bool isGemini3Model(String modelName) {
+    final lower = modelName.toLowerCase();
+    return lower.contains('3.') || lower.contains('gemini-3');
+  }
+
+  /// Builds a [GenerationConfig] compatible with the target model.
+  /// Gemini 3.x models deprecate traditional sampling parameters (like temperature)
+  /// in favor of reasoning/thinking configuration.
+  static GenerationConfig createGenerationConfig({
+    required String modelName,
+    int maxOutputTokens = 8000,
+  }) {
+    final isGemini3 = isGemini3Model(modelName);
+    return GenerationConfig(
+      temperature: isGemini3 ? null : 0.3,
+      maxOutputTokens: maxOutputTokens,
+    );
+  }
 
   /// Reuse a single chat session to avoid recreating it per message
   ChatSession? _chatSession;
@@ -49,8 +71,8 @@ class GeminiService implements AiService {
       model: model,
       apiKey: apiKey,
       systemInstruction: Content.system(AiPrompts.systemPrompt),
-      generationConfig: GenerationConfig(
-        temperature: 0.3,
+      generationConfig: createGenerationConfig(
+        modelName: model,
         maxOutputTokens: 8000,
       ),
     );
@@ -197,8 +219,8 @@ class GeminiService implements AiService {
       model: modelName,
       apiKey: apiKey,
       systemInstruction: Content.system(AiPrompts.systemPrompt),
-      generationConfig: GenerationConfig(
-        temperature: 0.3,
+      generationConfig: createGenerationConfig(
+        modelName: modelName,
         maxOutputTokens: 8000,
       ),
     );
@@ -333,17 +355,23 @@ class GeminiService implements AiService {
   Future<bool> testConnection() async {
     try {
       await _waitForRateLimit();
-      // Use a minimal prompt for the test to consume fewer tokens
+      final isGemini3 = isGemini3Model(model);
       final testModel = GenerativeModel(
         model: model,
         apiKey: apiKey,
-        generationConfig: GenerationConfig(maxOutputTokens: 10),
+        generationConfig: createGenerationConfig(
+          modelName: model,
+          maxOutputTokens: isGemini3 ? 1000 : 50,
+        ),
       );
       _recordApiRequest(endpoint: 'generateContent.testConnection', modelName: model);
       final response = await testModel.generateContent([
         Content.text('ok?'),
       ]);
-      return response.text != null && response.text!.isNotEmpty;
+      final candidate = response.candidates.firstOrNull;
+      final hasText = response.text != null && response.text!.isNotEmpty;
+      final hasParts = candidate != null && candidate.content.parts.isNotEmpty;
+      return hasText || hasParts;
     } catch (e) {
       _logger.e('Gemini connection test failed', error: e);
       return false;
@@ -404,7 +432,7 @@ class GeminiService implements AiService {
             {'google_search': {}},
           ],
           'generationConfig': {
-            'temperature': 0.3,
+            if (!isGemini3Model(model)) 'temperature': 0.3,
             'maxOutputTokens': 8000,
           },
         },

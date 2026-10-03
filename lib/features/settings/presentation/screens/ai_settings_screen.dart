@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
 import 'package:wine_cellar/core/usecases/usecase.dart';
@@ -148,7 +147,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                       AiProvider.openai =>
                         'GPT-4o-mini recommandé. Nécessite une clé API.',
                       AiProvider.gemini =>
-                        'Gemini 2.0 Flash gratuit. Nécessite une clé API Google.',
+                        'Gemini 3.8 Flash ou Flash-Lite. Nécessite une clé API Google.',
                       AiProvider.mistral =>
                         'Mistral Small performant. Nécessite une clé API Mistral.',
                       AiProvider.ollama =>
@@ -289,7 +288,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                       controller: _visionModelController,
                       decoration: const InputDecoration(
                         labelText: 'Modèle dédié à la vision',
-                        hintText: 'ex : gpt-4o, gemini-2.0-flash-exp…',
+                        hintText: 'ex : gpt-4o, gemini-3.8-flash…',
                         prefixIcon: Icon(Icons.camera_alt_outlined),
                         helperText:
                             'Laissez vide pour utiliser le modèle principal.',
@@ -325,7 +324,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
                       const SizedBox(height: 4),
                     ],
                     Text(
-                      'OpenAI : gpt-4o-mini  •  Gemini : gemini-2.0-flash  •  Mistral : pixtral-12b-latest',
+                      'OpenAI : gpt-4o-mini  •  Gemini : gemini-3.8-flash  •  Mistral : pixtral-12b-latest',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.outline,
                       ),
