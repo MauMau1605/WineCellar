@@ -4,11 +4,25 @@ import 'package:wine_cellar/features/ai_assistant/presentation/helpers/chat_assi
 
 void main() {
   group('ChatAssistantLinkResolver.resolve', () {
-    test('pousse directement une route interne absolue', () {
-      final action = ChatAssistantLinkResolver.resolve('/settings');
+    test('pousse une route interne autorisee (fiche vin)', () {
+      final action = ChatAssistantLinkResolver.resolve('/cellar/wine/42');
 
       expect(action.type, ChatAssistantLinkActionType.pushRoute);
-      expect(action.route, '/settings');
+      expect(action.route, '/cellar/wine/42');
+    });
+
+    test('pousse une route cellier avec sa query string', () {
+      final action = ChatAssistantLinkResolver.resolve('/cellars/3?wineId=7');
+
+      expect(action.type, ChatAssistantLinkActionType.pushRoute);
+      expect(action.route, '/cellars/3?wineId=7');
+    });
+
+    test('ignore les routes internes non autorisees', () {
+      for (final href in ['/settings', '/developer', '/cellar/wine/abc']) {
+        final action = ChatAssistantLinkResolver.resolve(href);
+        expect(action.type, ChatAssistantLinkActionType.ignore, reason: href);
+      }
     });
 
     test('reconnait un lien detail vin interne depuis une uri absolue', () {

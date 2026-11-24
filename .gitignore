@@ -57,6 +57,10 @@ app.*.map.json
 /android/app/release
 
 # ===== SECURITY =====
+# Chat logs (contain conversations) and encrypted backups
+wine_cellar_logs/
+wine_cellar_safety_backups/
+*.wce
 # NEVER commit API keys or secrets
 *.env
 .env.*
@@ -65,3 +69,7 @@ api_keys.json
 *.jks
 *.keystore
 **/android/key.properties
+
+# Local platform runner & temporary patch files
+/windows/
+*.patch

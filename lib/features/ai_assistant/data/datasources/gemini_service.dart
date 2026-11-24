@@ -251,13 +251,14 @@ class GeminiService implements AiService {
         baseUrl: 'https://generativelanguage.googleapis.com',
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
+        headers: {'x-goog-api-key': apiKey},
       ),
     );
 
     _recordApiRequest(endpoint: 'models.list', modelName: 'v1beta/models');
     final response = await dio.get(
       '/v1beta/models',
-      queryParameters: {'key': apiKey},
+      options: Options(headers: {'x-goog-api-key': apiKey}),
     );
 
     final data = response.data;
@@ -395,6 +396,7 @@ class GeminiService implements AiService {
           baseUrl: 'https://generativelanguage.googleapis.com',
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 120),
+          headers: {'x-goog-api-key': apiKey},
         ),
       );
 
@@ -422,7 +424,7 @@ class GeminiService implements AiService {
 
       final response = await dio.post(
         '/v1beta/models/$model:generateContent',
-        queryParameters: {'key': apiKey},
+        options: Options(headers: {'x-goog-api-key': apiKey}),
         data: {
           'contents': contents,
           'systemInstruction': {

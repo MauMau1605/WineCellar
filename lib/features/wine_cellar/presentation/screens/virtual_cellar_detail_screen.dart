@@ -50,6 +50,7 @@ class _VirtualCellarDetailScreenState
   bool _loading = true;
   _PendingPlacement? _pendingPlacement;
   _MoveUndoSnapshot? _lastMoveUndo;
+  Stream<List<BottlePlacementEntity>>? _placementsStream;
   final Set<WineMaturity> _maturityFilters = <WineMaturity>{};
   ProviderContainer? _providerContainer;
 
@@ -57,6 +58,14 @@ class _VirtualCellarDetailScreenState
   void initState() {
     super.initState();
     _loadCellar();
+  }
+
+  @override
+  void didUpdateWidget(covariant VirtualCellarDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.cellarId != widget.cellarId) {
+      _placementsStream = null;
+    }
   }
 
   @override
@@ -183,10 +192,70 @@ class _VirtualCellarDetailScreenState
     required List<BottlePlacementEntity> allPlacements,
     required VirtualCellarEntity cellar,
   }) async {
+    await _applyMove(
+      anchorPlacementId: anchorPlacementId,
+      targetRow: targetRow,
+      targetCol: targetCol,
+      allPlacements: allPlacements,
+      cellar: cellar,
+    );
+  }
+
+  /// Tap-to-place: moves the current selection so that its top-left-most
+  /// bottle lands on the tapped empty cell (the rest of the group keeps its
+  /// relative layout). Leaves move mode on success; "Annuler" is offered.
+  Future<void> _moveSelectionToSlot(
+    VirtualCellarEntity cellar,
+    List<BottlePlacementEntity> placements,
+    int row,
+    int col,
+  ) async {
+    final moveState = ref.read(bottleMoveStateProvider(widget.cellarId));
+    final selected = placements
+        .where((p) => moveState.selectedPlacementIds.contains(p.id))
+        .toList()
+      ..sort((a, b) {
+        final byRow = a.positionY.compareTo(b.positionY);
+        return byRow != 0 ? byRow : a.positionX.compareTo(b.positionX);
+      });
+
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Touchez d\'abord la ou les bouteilles à déplacer.'),
+          ),
+        );
+      return;
+    }
+
+    final moved = await _applyMove(
+      anchorPlacementId: selected.first.id,
+      targetRow: row,
+      targetCol: col,
+      allPlacements: placements,
+      cellar: cellar,
+    );
+    if (moved && mounted) {
+      ref
+          .read(bottleMoveStateProvider(widget.cellarId).notifier)
+          .exitMovementMode();
+    }
+  }
+
+  /// Handle dropping selected placements using an anchor bottle translation.
+  Future<bool> _applyMove({
+    required int anchorPlacementId,
+    required int targetRow,
+    required int targetCol,
+    required List<BottlePlacementEntity> allPlacements,
+    required VirtualCellarEntity cellar,
+  }) async {
     final moveState = ref.read(bottleMoveStateProvider(widget.cellarId));
 
     if (moveState.selectedPlacementIds.isEmpty) {
-      return;
+      return false;
     }
 
     final anchor = allPlacements
@@ -200,7 +269,7 @@ class _VirtualCellarDetailScreenState
           ),
         );
       }
-      return;
+      return false;
     }
 
     final undoSnapshot = _MoveUndoSnapshot(
@@ -210,6 +279,7 @@ class _VirtualCellarDetailScreenState
       movedPlacementIds: Set<int>.from(moveState.selectedPlacementIds),
     );
 
+    var moved = false;
     try {
       final result = await ref
           .read(moveBottlesInCellarUseCaseProvider)
@@ -223,7 +293,7 @@ class _VirtualCellarDetailScreenState
             maxRows: cellar.rows,
           );
 
-      if (!mounted) return;
+      if (!mounted) return false;
 
       result.fold(
         (failure) {
@@ -234,6 +304,7 @@ class _VirtualCellarDetailScreenState
           }
         },
         (_) {
+          moved = true;
           _lastMoveUndo = undoSnapshot;
           if (context.mounted) {
             final messenger = ScaffoldMessenger.of(context);
@@ -256,13 +327,14 @@ class _VirtualCellarDetailScreenState
         },
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
       }
     }
+    return moved;
   }
 
   Future<void> _undoLastMove(
@@ -458,8 +530,10 @@ class _VirtualCellarDetailScreenState
               VirtualCellarBackgroundKind.garage)
             const GarageIndustrialScreenBackground(),
           StreamBuilder<List<BottlePlacementEntity>>(
-            stream: ref
-                .watch(virtualCellarRepositoryProvider)
+            // Created once: a new stream on every build made the grid flash
+            // empty while a selection / move was in progress.
+            stream: _placementsStream ??= ref
+                .read(virtualCellarRepositoryProvider)
                 .watchPlacementsByCellarId(widget.cellarId),
             builder: (context, snapshot) {
               final placements = snapshot.data ?? const [];
@@ -469,6 +543,10 @@ class _VirtualCellarDetailScreenState
               _placedBottles = placements;
               return Column(
                 children: [
+                  _MoveModeBar(
+                    cellarId: widget.cellarId,
+                    showDragToggle: true,
+                  ),
                   _buildMaturityFilterBar(
                     context,
                     totalCount: placements.length,
@@ -617,6 +695,22 @@ class _VirtualCellarDetailScreenState
         .where((p) => p.positionX == col && p.positionY == row)
         .firstOrNull;
 
+    final moveState = ref.read(bottleMoveStateProvider(widget.cellarId));
+    if (moveState.isMovementMode && !moveState.isDragModeEnabled) {
+      // Taps on bottles are handled by the cell itself (toggle selection);
+      // only taps on cells without a visible bottle reach this point.
+      if (placementAtSlot != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(VirtualCellarDetailHelper.occupiedSlotSnackBar),
+          ),
+        );
+      } else {
+        await _moveSelectionToSlot(cellar, placements, row, col);
+      }
+      return;
+    }
+
     if (_pendingPlacement != null) {
       if (placementAtSlot != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -645,69 +739,109 @@ class _VirtualCellarDetailScreenState
   ) async {
     final wine = placement.wine;
     final colorValue = AppTheme.colorForWine(wine.color.name);
+    final producer = wine.producer;
+    final appellation = wine.appellation;
 
-    await showDialog<void>(
+    // Bottom sheet instead of a dialog: easier to read and to reach with a
+    // thumb, and the three actions no longer wrap on a narrow screen.
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: colorValue,
-                shape: BoxShape.circle,
-              ),
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: colorValue,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        wine.displayName,
+                        style: theme.textTheme.titleLarge,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _infoRow('Cellier', cellarName),
+                _infoRow(
+                  'Position',
+                  'Rangée ${placement.positionY + 1}, '
+                      'Colonne ${placement.positionX + 1}',
+                ),
+                _infoRow('Couleur', '${wine.color.emoji} ${wine.color.label}'),
+                if (wine.vintage != null)
+                  _infoRow('Millésime', '${wine.vintage}'),
+                if (producer != null && producer.trim().isNotEmpty)
+                  _infoRow('Producteur', producer),
+                if (appellation != null && appellation.trim().isNotEmpty)
+                  _infoRow('Appellation', appellation),
+                _infoRow(
+                  'Statut',
+                  '${wine.maturity.emoji} ${wine.maturity.label}',
+                ),
+                if (wine.drinkFromYear != null || wine.drinkUntilYear != null)
+                  _infoRow(
+                    'Fenêtre de dégustation',
+                    '${wine.drinkFromYear ?? '?'} – ${wine.drinkUntilYear ?? '?'}',
+                  ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    if (wine.id != null) {
+                      context.push('/cellar/wine/${wine.id}');
+                    }
+                  },
+                  icon: const Icon(Icons.description_outlined),
+                  label: const Text('Voir la fiche'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    ref
+                        .read(bottleMoveStateProvider(widget.cellarId).notifier)
+                        .startMoving(placement.id);
+                  },
+                  icon: const Icon(Icons.open_with),
+                  label: const Text('Déplacer cette bouteille'),
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    await ref
+                        .read(removeBottlePlacementUseCaseProvider)
+                        .call(placement.id);
+                  },
+                  icon: const Icon(Icons.eject_outlined),
+                  label: const Text('Retirer du cellier'),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(wine.displayName, overflow: TextOverflow.ellipsis),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _infoRow('Cellier', cellarName),
-            _infoRow(
-              'Position',
-              'Rangée ${placement.positionY + 1}, Colonne ${placement.positionX + 1}',
-            ),
-            _infoRow('Couleur', '${wine.color.emoji} ${wine.color.label}'),
-            if (wine.vintage != null) _infoRow('Millésime', '${wine.vintage}'),
-            if (wine.drinkFromYear != null || wine.drinkUntilYear != null)
-              _infoRow(
-                'Fenêtre de dégustation',
-                '${wine.drinkFromYear ?? '?'} – ${wine.drinkUntilYear ?? '?'}',
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Fermer'),
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await ref
-                  .read(removeBottlePlacementUseCaseProvider)
-                  .call(placement.id);
-            },
-            child: const Text('Retirer cette bouteille'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (wine.id != null) {
-                context.push('/cellar/wine/${wine.id}');
-              }
-            },
-            child: const Text('Voir la fiche'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1323,7 +1457,8 @@ class _VirtualCellarDetailScreenState
 }
 
 const double _kCellWidth = 64;
-const double _kCellHeight = 46;
+// >= 48dp so a bottle is comfortable to hit with a finger.
+const double _kCellHeight = 52;
 const double _kRowNumWidth = 28;
 
 class _GroupDragData {
@@ -1942,6 +2077,89 @@ class _CellarGridViewState extends ConsumerState<_CellarGridView> {
   }
 }
 
+/// Contextual bar shown while moving bottles: explains the current step in
+/// plain words and gives explicit, labelled actions (no ambiguous icons).
+class _MoveModeBar extends ConsumerWidget {
+  final int cellarId;
+  final bool showDragToggle;
+
+  const _MoveModeBar({required this.cellarId, required this.showDragToggle});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(bottleMoveStateProvider(cellarId));
+    if (!state.isMovementMode) return const SizedBox.shrink();
+
+    final notifier = ref.read(bottleMoveStateProvider(cellarId).notifier);
+    final theme = Theme.of(context);
+    final fg = theme.colorScheme.onPrimaryContainer;
+    final count = state.selectedPlacementIds.length;
+
+    final String message;
+    if (state.isDragModeEnabled) {
+      message = 'Maintenez puis glissez la sélection vers sa nouvelle position.';
+    } else if (count == 0) {
+      message = 'Touchez les bouteilles à déplacer.';
+    } else if (count == 1) {
+      message = '1 bouteille sélectionnée. Touchez une case vide pour '
+          'l\'y déplacer.';
+    } else {
+      message = '$count bouteilles sélectionnées. Touchez une case vide : '
+          'la bouteille la plus en haut à gauche ira sur cette case.';
+    }
+
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.open_with, size: 18, color: fg),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: fg),
+                  ),
+                ),
+              ],
+            ),
+            Wrap(
+              alignment: WrapAlignment.end,
+              children: [
+                if (count > 0)
+                  TextButton(
+                    onPressed: notifier.clearSelection,
+                    child: const Text('Tout désélectionner'),
+                  ),
+                if (showDragToggle && count > 0)
+                  TextButton(
+                    onPressed: state.isDragModeEnabled
+                        ? notifier.enableSelectionMode
+                        : notifier.enableDragMode,
+                    child: Text(
+                      state.isDragModeEnabled
+                          ? 'Revenir à la sélection'
+                          : 'Glisser-déposer',
+                    ),
+                  ),
+                FilledButton.tonal(
+                  onPressed: notifier.exitMovementMode,
+                  child: const Text('Terminer'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SlotCell extends ConsumerStatefulWidget {
   final BottlePlacementEntity? placement;
   final VoidCallback onTap;
@@ -2087,7 +2305,9 @@ class _SlotCellState extends ConsumerState<_SlotCell>
           widget.onLongPressPlacement(widget.placement!.id);
           return;
         }
-        if (!isMovementMode) {
+        // Outside move mode: normal tap. In move mode (tap-to-place) a tap on
+        // a cell without a bottle is forwarded so it can act as destination.
+        if (!isMovementMode || (!hasWine && !isDragModeEnabled)) {
           widget.onTap();
         }
       },

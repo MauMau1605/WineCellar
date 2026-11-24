@@ -280,6 +280,35 @@ class DeveloperScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withAlpha(90)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Attention : la restauration REMPLACE toute la cave '
+                        'actuelle (vins, celliers et emplacements). Une copie '
+                        'de sécurité de la cave actuelle est conservée dans '
+                        'les documents de l\'application.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: passwordCtrl,
                 obscureText: true,

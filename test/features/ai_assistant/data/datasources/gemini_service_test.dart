@@ -12,11 +12,13 @@ void main() {
       late HttpServer server;
       late Map<String, dynamic> capturedPayload;
       late Map<String, String> capturedQueryParameters;
+      late String? capturedApiKeyHeader;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final baseUri = Uri.parse('http://${server.address.address}:${server.port}');
 
       server.listen((request) async {
         capturedQueryParameters = request.uri.queryParameters;
+        capturedApiKeyHeader = request.headers.value('x-goog-api-key');
         final raw = await utf8.decoder.bind(request).join();
         capturedPayload = jsonDecode(raw) as Map<String, dynamic>;
 
@@ -77,7 +79,8 @@ void main() {
       expect(result.textResponse, 'Synthèse web validée');
       expect(result.webSources.single.uri, 'https://example.com/source');
       expect(result.webSources.single.title, 'Source test');
-      expect(capturedQueryParameters['key'], 'gem-key');
+      expect(capturedApiKeyHeader, 'gem-key');
+      expect(capturedQueryParameters.containsKey('key'), isFalse);
       expect(capturedPayload['systemInstruction']['parts'][0]['text'], 'Prompt dédié');
       expect(capturedPayload['tools'], [
         {'google_search': {}},

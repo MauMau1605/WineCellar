@@ -123,12 +123,26 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
       );
     }
 
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(wine.displayName),
+        title: Text(
+          wine.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/cellar'),
+          // Go back to where the user came from (cellar grid, chat, list...)
+          // and only fall back to the list when there is no history.
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/cellar');
+            }
+          },
         ),
         actions: [
           IconButton(
@@ -136,15 +150,36 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
             tooltip: 'Modifier',
             onPressed: () => _navigateToEdit(wine),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Supprimer',
-            onPressed: () => _confirmDelete(wine),
-          ),
+          if (isNarrow)
+            // Destructive action tucked away on phones to avoid mis-taps.
+            PopupMenuButton<String>(
+              tooltip: 'Plus d\'actions',
+              onSelected: (value) {
+                if (value == 'delete') _confirmDelete(wine);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('Supprimer'),
+                  ),
+                ),
+              ],
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Supprimer',
+              onPressed: () => _confirmDelete(wine),
+            ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        // Extra bottom space so the floating quantity buttons never hide
+        // the last section.
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -365,6 +400,35 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
                         ),
                       ),
                     ),
+                  if (wine.producer != null &&
+                      wine.producer!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        wine.producer!,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  // At-a-glance summary: status and quantity without scrolling.
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          '${wine.maturity.emoji} ${wine.maturity.label}',
+                        ),
+                      ),
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          WineDetailScreenHelper.quantityLabel(wine.quantity),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -399,27 +463,36 @@ class _WineDetailScreenState extends ConsumerState<WineDetailScreen> {
   }
 
   Widget _buildInfoRow(String label, String value, {bool aiSuggested = false}) {
+    final text = aiSuggested && value.trim().isNotEmpty ? '$value 🤖' : value;
+    const labelStyle = TextStyle(
+      fontWeight: FontWeight.w600,
+      color: Colors.grey,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 160,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              aiSuggested && value.trim().isNotEmpty ? '$value 🤖' : value,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Phone: label above value, so long values get the full width
+          // (a fixed 160px label column left only ~150px on a 360dp screen).
+          if (constraints.maxWidth < 420) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: labelStyle.copyWith(fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(text, style: Theme.of(context).textTheme.bodyLarge),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 160, child: Text(label, style: labelStyle)),
+              Expanded(child: Text(text)),
+            ],
+          );
+        },
       ),
     );
   }

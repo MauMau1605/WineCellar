@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:multi_split_view/multi_split_view.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -61,8 +61,10 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   int? _selectedWineId;
   List<WineEntity> _currentFilteredWines = const [];
 
-  MultiSplitViewController? _hSplitController;
-  MultiSplitViewController? _vSplitController;
+  // Split ratios (share of the list pane). Local while dragging, persisted
+  // when the drag ends. Null = use the saved value.
+  double? _hSplitRatio;
+  double? _vSplitRatio;
 
   @override
   void initState() {
@@ -84,8 +86,6 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
-    _hSplitController?.dispose();
-    _vSplitController?.dispose();
     super.dispose();
   }
 
@@ -505,7 +505,9 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
     );
   }
 
-  /// Master-detail split layout (horizontal or vertical) with resizable divider.
+  /// Master-detail layout (side by side or stacked) with a resizable handle.
+  /// The detail pane only exists while a wine is selected; before that the
+  /// list uses the whole space. A cross closes the pane again.
   Widget _buildMasterDetail(
     BuildContext context,
     List<WineEntity> wines,
@@ -513,107 +515,89 @@ class _WineListScreenState extends ConsumerState<WineListScreen> {
   ) {
     final theme = Theme.of(context);
     final isVertical = layout == WineListLayout.masterDetailVertical;
-    final axis = isVertical ? Axis.vertical : Axis.horizontal;
 
-    // Lazily create and reuse controllers so state survives rebuilds.
-    final controller = isVertical
-        ? (_vSplitController ??= _createSplitController(isVertical: true))
-        : (_hSplitController ??= _createSplitController(isVertical: false));
-
-    final detailWidget = _selectedWineId != null
-        ? WineDetailPanel(
-            key: ValueKey(_selectedWineId),
-            wineId: _selectedWineId!,
-            onWineDeleted: () {
-              setState(() => _selectedWineId = null);
-            },
-          )
-        : _buildDetailPlaceholder(theme);
-
-    final panels = [
-      _buildWineList(
-        context,
-        wines,
-        compact: true,
-        highlightLastConsumptionYear: ref.read(
-          highlightLastConsumptionYearProvider,
-        ),
-        highlightPastOptimalConsumption: ref.read(
-          highlightPastOptimalConsumptionProvider,
-        ),
+    final list = _buildWineList(
+      context,
+      wines,
+      compact: true,
+      highlightLastConsumptionYear: ref.read(
+        highlightLastConsumptionYearProvider,
       ),
-      detailWidget,
-    ];
+      highlightPastOptimalConsumption: ref.read(
+        highlightPastOptimalConsumptionProvider,
+      ),
+    );
 
-    return MultiSplitViewTheme(
-      data: MultiSplitViewThemeData(
-        dividerThickness: 8,
-        dividerPainter: DividerPainters.grooved2(
-          color: theme.colorScheme.outlineVariant,
-          highlightedColor: theme.colorScheme.primary,
-          thickness: 3,
-          size: 32,
-        ),
-      ),
-      child: MultiSplitView(
-        axis: axis,
-        controller: controller,
-        onDividerDragEnd: (_) => _persistSplitRatio(controller, isVertical),
-        builder: (BuildContext context, Area area) {
-          final index = controller.areas.indexOf(area);
-          return panels[index];
-        },
-      ),
+    final selectedId = _selectedWineId;
+    if (selectedId == null) return list;
+
+    final double ratio = isVertical
+        ? (_vSplitRatio ?? ref.watch(splitRatioVerticalProvider))
+        : (_hSplitRatio ?? ref.watch(splitRatioHorizontalProvider));
+
+    return _ResizableSplit(
+      // Axis.vertical = panes stacked (list on top, detail below).
+      axis: isVertical ? Axis.vertical : Axis.horizontal,
+      ratio: ratio,
+      minFirst: isVertical ? 120 : 200,
+      minSecond: isVertical ? 120 : 250,
+      first: list,
+      second: _buildDetailPane(theme, selectedId),
+      onRatioChanged: (r) => setState(() {
+        if (isVertical) {
+          _vSplitRatio = r;
+        } else {
+          _hSplitRatio = r;
+        }
+      }),
+      onDragEnd: () {
+        if (isVertical) {
+          final r = _vSplitRatio;
+          if (r != null) {
+            ref.read(splitRatioVerticalProvider.notifier).setRatio(r);
+          }
+        } else {
+          final r = _hSplitRatio;
+          if (r != null) {
+            ref.read(splitRatioHorizontalProvider.notifier).setRatio(r);
+          }
+        }
+      },
     );
   }
 
-  MultiSplitViewController _createSplitController({required bool isVertical}) {
-    final ratio = isVertical
-        ? ref.read(splitRatioVerticalProvider)
-        : ref.read(splitRatioHorizontalProvider);
-
-    return MultiSplitViewController(
-      areas: [
-        Area(flex: ratio, min: isVertical ? 120 : 200),
-        Area(flex: 1 - ratio, min: isVertical ? 120 : 250),
-      ],
-    );
-  }
-
-  void _persistSplitRatio(
-    MultiSplitViewController controller,
-    bool isVertical,
-  ) {
-    final areas = controller.areas;
-    if (areas.length != 2) return;
-    final flex0 = areas[0].flex ?? 0;
-    final flex1 = areas[1].flex ?? 0;
-    final total = flex0 + flex1;
-    if (total <= 0) return;
-    final ratio = flex0 / total;
-
-    if (isVertical) {
-      ref.read(splitRatioVerticalProvider.notifier).setRatio(ratio);
-    } else {
-      ref.read(splitRatioHorizontalProvider.notifier).setRatio(ratio);
-    }
-  }
-
-  Widget _buildDetailPlaceholder(ThemeData theme) {
-    return Center(
+  /// Detail pane with a slim header holding the close cross.
+  Widget _buildDetailPane(ThemeData theme, int wineId) {
+    return Material(
+      color: theme.colorScheme.surface,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.wine_bar_outlined,
-            size: 64,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+          SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Détail du vin',
+                    style: theme.textTheme.titleSmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Fermer le détail',
+                  onPressed: () => setState(() => _selectedWineId = null),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Sélectionnez un vin',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          const Divider(height: 1),
+          Expanded(
+            child: WineDetailPanel(
+              key: ValueKey(wineId),
+              wineId: wineId,
+              onWineDeleted: () => setState(() => _selectedWineId = null),
             ),
           ),
         ],
@@ -2306,6 +2290,121 @@ class _SummaryRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Text(text)),
       ],
+    );
+  }
+}
+
+/// Two panes separated by a draggable handle. Works the same way in both
+/// orientations and exposes a 28dp touch target (the previous 8px divider was
+/// very hard to grab with a finger).
+class _ResizableSplit extends StatelessWidget {
+  final Axis axis;
+  final double ratio;
+  final double minFirst;
+  final double minSecond;
+  final Widget first;
+  final Widget second;
+  final ValueChanged<double> onRatioChanged;
+  final VoidCallback onDragEnd;
+
+  static const double _handleExtent = 28;
+
+  const _ResizableSplit({
+    required this.axis,
+    required this.ratio,
+    required this.minFirst,
+    required this.minSecond,
+    required this.first,
+    required this.second,
+    required this.onRatioChanged,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isRow = axis == Axis.horizontal;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final total = isRow ? constraints.maxWidth : constraints.maxHeight;
+        final available = math.max(1.0, total - _handleExtent);
+
+        // On small screens the minimums may not both fit: relax them.
+        final fits = available > minFirst + minSecond;
+        final lo = fits ? minFirst / available : 0.15;
+        final hi = fits ? 1 - minSecond / available : 0.85;
+        double clampRatio(double r) => r.clamp(lo, hi).toDouble();
+
+        final current = clampRatio(ratio);
+        final firstSize = available * current;
+
+        return Flex(
+          direction: axis,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: isRow ? firstSize : null,
+              height: isRow ? null : firstSize,
+              child: first,
+            ),
+            _SplitHandle(
+              axis: axis,
+              extent: _handleExtent,
+              onDelta: (delta) =>
+                  onRatioChanged(clampRatio((firstSize + delta) / available)),
+              onDragEnd: onDragEnd,
+            ),
+            Expanded(child: second),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SplitHandle extends StatelessWidget {
+  final Axis axis;
+  final double extent;
+  final ValueChanged<double> onDelta;
+  final VoidCallback onDragEnd;
+
+  const _SplitHandle({
+    required this.axis,
+    required this.extent,
+    required this.onDelta,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isRow = axis == Axis.horizontal;
+    final color = Theme.of(context).colorScheme.outlineVariant;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: isRow ? (d) => onDelta(d.delta.dx) : null,
+      onHorizontalDragEnd: isRow ? (_) => onDragEnd() : null,
+      onVerticalDragUpdate: isRow ? null : (d) => onDelta(d.delta.dy),
+      onVerticalDragEnd: isRow ? null : (_) => onDragEnd(),
+      child: MouseRegion(
+        cursor: isRow
+            ? SystemMouseCursors.resizeColumn
+            : SystemMouseCursors.resizeRow,
+        child: SizedBox(
+          width: isRow ? extent : null,
+          height: isRow ? null : extent,
+          child: Center(
+            child: Container(
+              width: isRow ? 4 : 44,
+              height: isRow ? 44 : 4,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -27,9 +27,21 @@ enum ChatAssistantLinkActionType { ignore, pushRoute, openExternal }
 class ChatAssistantLinkResolver {
   ChatAssistantLinkResolver._();
 
+  /// In-app routes the assistant is allowed to navigate to. Anything else
+  /// (settings, developer tools, ...) is ignored, so that text coming from
+  /// the AI or from web sources cannot steer the app.
+  static final RegExp _allowedInternalPath = RegExp(
+    r'^/(cellar/wine/\d+|cellars/\d+)$',
+  );
+
   static ChatAssistantLinkAction resolve(String href) {
     if (href.startsWith('/')) {
-      return ChatAssistantLinkAction.pushRoute(route: href);
+      final relative = Uri.tryParse(href);
+      if (relative == null || !_allowedInternalPath.hasMatch(relative.path)) {
+        return const ChatAssistantLinkAction.ignore();
+      }
+      // Keep the query string (e.g. /cellars/3?wineId=7).
+      return ChatAssistantLinkAction.pushRoute(route: relative.toString());
     }
 
     final uri = Uri.tryParse(href);
@@ -37,7 +49,8 @@ class ChatAssistantLinkResolver {
       return const ChatAssistantLinkAction.ignore();
     }
 
-    if (uri.path.startsWith('/cellar/wine/')) {
+    if (_allowedInternalPath.hasMatch(uri.path) &&
+        uri.path.startsWith('/cellar/wine/')) {
       return ChatAssistantLinkAction.pushRoute(route: uri.path);
     }
 

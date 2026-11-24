@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:wine_cellar/core/constants.dart';
 import 'package:wine_cellar/core/enums.dart';
 import 'package:wine_cellar/core/providers.dart';
@@ -83,17 +87,31 @@ class BackupNotifier extends StateNotifier<BackupState> {
     await result.fold(
       (failure) async => state = BackupError(failure.message),
       (data) async {
-        await _applyConfig(data.config);
-        if (data.secrets != null) {
-          await _applySecrets(data.secrets!);
-        }
-        await _applyWines(data.winesJson);
+        // 1) Keep a copy of the current cave before it gets replaced.
+        final hasWines = data.winesJson.isNotEmpty && data.winesJson != '[]';
+        final safetyFile = hasWines ? await _writeSafetyBackup() : null;
 
-        final secretsMsg =
-            data.secrets != null ? ' (secrets inclus)' : '';
-        state = BackupSuccess(
-          'Sauvegarde restaurée avec succès$secretsMsg.',
-        );
+        // 2) Restore wines first (atomic): if it fails, nothing else is
+        //    touched and the current settings/secrets stay as they were.
+        final wineError = await _applyWines(data.winesJson);
+        if (wineError != null) {
+          state = BackupError(wineError);
+        } else {
+          await _applyConfig(data.config);
+          if (data.secrets != null) {
+            await _applySecrets(data.secrets!);
+          }
+
+          final secretsMsg =
+              data.secrets != null ? ' (secrets inclus)' : '';
+          final safetyMsg = safetyFile != null
+              ? ' Copie de sécurité de l\'ancienne cave : '
+                  '${p.basename(safetyFile)}.'
+              : '';
+          state = BackupSuccess(
+            'Sauvegarde restaurée avec succès$secretsMsg.$safetyMsg',
+          );
+        }
       },
     );
   }
@@ -263,11 +281,45 @@ class BackupNotifier extends StateNotifier<BackupState> {
         .setValue(secrets[AppConstants.keyCellarTrackerPassword]);
   }
 
-  Future<void> _applyWines(String winesJson) async {
-    if (winesJson == '[]' || winesJson.isEmpty) return;
+  /// Returns an error message, or null when the wines were restored
+  /// (or when there was nothing to restore).
+  Future<String?> _applyWines(String winesJson) async {
+    if (winesJson == '[]' || winesJson.isEmpty) return null;
     final importUseCase = _ref.read(importWinesFromJsonUseCaseProvider);
-    // Errors are silently ignored so the restore doesn't fail if wines are
-    // already present — the screen shows a dedicated message if needed.
-    await importUseCase(winesJson);
+    final result = await importUseCase(winesJson);
+    return result.fold((failure) => failure.message, (_) => null);
+  }
+
+  /// Best-effort JSON copy of the current cave, written to the app documents
+  /// folder before a restore replaces it. Keeps the 5 most recent copies.
+  /// Never throws: a failure here must not block the restore itself.
+  Future<String?> _writeSafetyBackup() async {
+    try {
+      final json = await _ref.read(wineRepositoryProvider).exportToJson();
+      if (json.isEmpty || json == '[]') return null;
+
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory(p.join(docs.path, 'wine_cellar_safety_backups'));
+      await dir.create(recursive: true);
+
+      final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final file = File(p.join(dir.path, 'pre_restore_$stamp.json'));
+      await file.writeAsString(json, flush: true);
+
+      final copies = await dir
+          .list()
+          .where((e) => e is File && e.path.endsWith('.json'))
+          .cast<File>()
+          .toList();
+      copies.sort((a, b) => a.path.compareTo(b.path));
+      if (copies.length > 5) {
+        for (final old in copies.take(copies.length - 5)) {
+          await old.delete();
+        }
+      }
+      return file.path;
+    } catch (_) {
+      return null;
+    }
   }
 }

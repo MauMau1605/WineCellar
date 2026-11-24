@@ -58,9 +58,53 @@ class ChatLogger {
     return docsLogsDir;
   }
 
+  /// Maximum number of log files kept on disk (oldest are deleted first).
+  static const int maxLogFiles = 30;
+
+  static final RegExp _skKeyPattern = RegExp(r'sk-[A-Za-z0-9_\-]{16,}');
+  static final RegExp _googleKeyPattern = RegExp(r'AIza[0-9A-Za-z_\-]{20,}');
+  static final RegExp _bearerPattern = RegExp(
+    r'(Bearer\s+)[A-Za-z0-9._\-]{12,}',
+    caseSensitive: false,
+  );
+  static final RegExp _querySecretPattern = RegExp(
+    r'([?&](?:key|api_key|apikey|password|token)=)[^&\s]+',
+    caseSensitive: false,
+  );
+
+  /// Masks anything that looks like an API key, bearer token or URL secret
+  /// so that it never lands in a log file.
+  static String redactSecrets(String input) {
+    return input
+        .replaceAll(_skKeyPattern, '[REDACTED]')
+        .replaceAll(_googleKeyPattern, '[REDACTED]')
+        .replaceAllMapped(_bearerPattern, (m) => '${m[1]}[REDACTED]')
+        .replaceAllMapped(_querySecretPattern, (m) => '${m[1]}[REDACTED]');
+  }
+
+  /// Deletes the oldest log files so that at most [maxLogFiles] remain.
+  Future<void> _rotateLogs(Directory dir) async {
+    try {
+      final files = await dir
+          .list()
+          .where((e) => e is File && e.path.endsWith('.log'))
+          .cast<File>()
+          .toList();
+      if (files.length <= maxLogFiles) return;
+      // File names embed a sortable timestamp: oldest first.
+      files.sort((a, b) => a.path.compareTo(b.path));
+      for (final old in files.take(files.length - maxLogFiles)) {
+        await old.delete();
+      }
+    } catch (e) {
+      _logger.w('Log rotation failed', error: e);
+    }
+  }
+
   /// Start a new conversation session log file
   Future<void> startSession() async {
     final dir = await _logsDir;
+    await _rotateLogs(dir);
     final timestamp = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
     _currentLogFile = File('${dir.path}/chat_$timestamp.log');
 
@@ -162,7 +206,7 @@ class ChatLogger {
   Future<void> _write(String line) async {
     try {
       await _currentLogFile?.writeAsString(
-        '$line\n',
+        '${redactSecrets(line)}\n',
         mode: FileMode.append,
         flush: true,
       );
