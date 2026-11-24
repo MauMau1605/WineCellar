@@ -27,6 +27,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.44.5'
           cache: true
 
       - name: Get dependencies
@@ -36,9 +37,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .dart_tool/build
-          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          key: ${{ runner.os }}-flutter-3.44.5-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-build-runner-
+            ${{ runner.os }}-flutter-3.44.5-build-runner-
 
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
@@ -67,6 +68,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.44.5'
           cache: true
 
       - name: Get dependencies
@@ -76,9 +78,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .dart_tool/build
-          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          key: ${{ runner.os }}-flutter-3.44.5-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-build-runner-
+            ${{ runner.os }}-flutter-3.44.5-build-runner-
 
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
@@ -105,6 +107,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.44.5'
           cache: true
 
       - name: Enable Windows desktop
@@ -117,9 +120,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .dart_tool/build
-          key: ${{ runner.os }}-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
+          key: ${{ runner.os }}-flutter-3.44.5-build-runner-${{ hashFiles('pubspec.lock', 'lib/**', 'test/**', 'build.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-build-runner-
+            ${{ runner.os }}-flutter-3.44.5-build-runner-
 
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
